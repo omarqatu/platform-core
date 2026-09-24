@@ -1,9 +1,9 @@
 # Platform Core Document — Tenancy Layer
 ## A general-purpose SaaS platform — independent greenfield design
 
-**Version:** 1.14 — **Frozen release**
+**Version:** 1.15 — **Frozen release**
 **Date:** 2026-09-24
-**Review history:** Seven architecture reviews + two model reviews (through 1.6), then a **requirement-driven change** in 1.7, then an **eighth external review** that settled 1.8, then a **ninth review** that settled 1.9, then **the first finding from running code**, which settled 1.10, then **testing two assumptions before T2**, which settled 1.11, then **two conflicts found by the same procedure**, which settled 1.12, then **a policy draft run before T2**, which settled 1.13, then **running the CI checks as written**, which settled 1.14. The full changelog is in the appendices.
+**Review history:** Seven architecture reviews + two model reviews (through 1.6), then a **requirement-driven change** in 1.7, then an **eighth external review** that settled 1.8, then a **ninth review** that settled 1.9, then **the first finding from running code**, which settled 1.10, then **testing two assumptions before T2**, which settled 1.11, then **two conflicts found by the same procedure**, which settled 1.12, then **a policy draft run before T2**, which settled 1.13, then **running the CI checks as written**, which settled 1.14, then **running a claim about the attribution columns**, which settled 1.15. The full changelog is in the appendices.
 **Nature of this document:** Pure technical analysis, not persuasive writing.
 
 **The freeze decision — and the limits of reopening it:** Freezing 1.6 was the right call about the **category** of findings, not about the document: the seventh review found half its findings were about the text's internal consistency — a category that writing the spec and the code exposes faster and more cheaply than an eighth text review. That decision stands: **any consistency defect or implementation-level item is resolved in the spec or the code, not in a new version.**
@@ -11,6 +11,18 @@
 1.7, 1.8, and 1.9 are not of that category. **1.7** was a change to the scope model driven by a product requirement (Section 4.8). **1.8** fixed a **structural flaw in that model's mechanism**, uncovered by an external review: a nested policy chain that disabled the second axis entirely (3.1, 4.8). **1.9** fixed a **contradiction between a model decision and its mechanism** (scope being used as a substitute for permission) and **a gap that voided the axis's guarantee** (the audit log). All of these sit in the transaction layer and the identity layer — i.e., **before** T0, not after. The governing rule after 1.9: **this is the last text-only revision. The document is reopened only for a finding that survives running the tests and is proven by the code** — the justification is in Section 13. And **1.10 is the first version reopened under this rule**: a finding no text review caught, found by running PostgreSQL 18.6.
 
 The remaining implementation items are explicitly carried forward to the first items of the spec (Section 13).
+
+**Change in 1.15 vs. 1.14 — dropping the attribution columns from the scope surface:** on closing T2, a claim about the two attribution columns in the second axis's tables was run, and each turned out to lie in a different way. On PostgreSQL 18.6, in a rolled-back transaction: `provisioner` wrote a `membership_scope` row as acceptance does, then a scope manager changed `scope_mode`:
+
+| Column | After the manager's change |
+|---|---|
+| `scope_mode` | Changed ✅ |
+| `updated_by` | **Still the name of whoever first wrote the row** — the grant is `UPDATE (scope_mode)` alone, so the update cannot write it |
+| `updated_at` | **Still the insertion date** — for the same reason |
+
+So the row says someone else changed it, on another date, and both values look entirely correct — worse than a missing value. And `scope_assignments` has the opposite problem: `granted_by` **can be forged** — a scope manager inserted an assignment attributed to a colleague and it was accepted, because the policy does not bind it to `app.user_id` the way `invited_by` is bound (spec item d).
+
+**The decision: drop all four columns** (`updated_by`, `updated_at`, `granted_by`, `granted_at`). The audit log (7) records the actor and time of every change, in the same transaction, mandatorily — the columns were a second source for the same information, **and it drifted from the first before a single line of application code was written**. The alternative (widening the grant and binding both columns to `app.user_id`) was rejected: four changes to obtain a copy with no consumer — and "design on what you have seen" settles it. A screen needing "who assigned this" reads the audit log, or the column is added then, for a real reason. Proven by running: the 4.8 policies and their grants work unchanged without the four columns.
 
 **Change in 1.14 vs. 1.13 — Check 8 was demanding infinite recursion:** a defect from 1.7, through nine reviews and six versions, found by running the CI checks as written against a full schema before T2. The check requires `client_scope` on every table carrying `scope_ref_id`, and `scope_assignments` carries it — but the template reads it, so satisfying the check is infinite recursion (`42P17`) that fails every read on every scoped table. The fix is one structural exception with a guarding inverse clause (3.6, Check 8). Also proven alongside it: Checks 1, 4, 5, and 10 as written are correct on the full schema, and the 1.13 texts match the executed draft (31 of 32 byte for byte, the last deparse against deparse).
 
@@ -1053,7 +1065,7 @@ auth_attempts(id, username_entered, ip_address, succeeded, created_at)
 -- (New in 1.7 — the second scope axis, 4.8)
 membership_scope(id, tenant_id, membership_id,
                  scope_mode,        -- 'all' | 'assigned'
-                 updated_by, updated_at,
+                 -- (1.15) no updated_by/updated_at — the audit log attributes (7)
                  UNIQUE (tenant_id, membership_id),
   FOREIGN KEY (tenant_id, membership_id) REFERENCES memberships (tenant_id, id))
 -- A separate table, not a column on memberships — the justification
@@ -1065,7 +1077,7 @@ membership_scope(id, tenant_id, membership_id,
 scope_assignments(id, tenant_id, membership_id,
                   scope_ref_id NOT NULL,  -- the scoped entity — no FK yet (3.3)
                   assignment_role,  -- lead | contributor | reviewer
-                  active, granted_by, granted_at, reason,
+                  active, reason,   -- (1.15) no granted_by/granted_at — the audit log (7)
                   UNIQUE (tenant_id, membership_id, scope_ref_id),
   FOREIGN KEY (tenant_id, membership_id) REFERENCES memberships (tenant_id, id))
 -- References the membership, not the user — the justification is in 3.3.
@@ -1684,6 +1696,7 @@ An intermediary registry → (a third option, 1.8) scopable_entities
 
 | Risk | Status |
 |---|---|
+| **Attribution columns on the scope surface: stale after an update, or forged at insert** | **Closed in 1.15** — dropped; the audit log is the sole source of attribution (4.1, 7) |
 | **Check 8 demands `client_scope` on the very table the template reads — infinite recursion failing every scoped table** | **Closed in 1.14** — a structural exception + a guarding inverse clause + Test 16-d (3.6) |
 | **A grant with no policy under FORCE RLS is dead: silent zero rows or rejection** (the login path and step c among them) | **Closed in 1.13** — 32 policies written and run in both directions (3.9) |
 | **Bootstrap cannot create the new tenant's roles** | **Closed in 1.13** — `provisioner` from global templates, conditioned on `is_system`, its inserts critical writes (3.9, 5) |
@@ -1828,7 +1841,18 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix A — Changelog from 1.13 to 1.14
+## Appendix A — Changelog from 1.14 to 1.15
+
+| Item | 1.14 | 1.15 |
+|---|---|---|
+| `membership_scope` | `updated_by`, `updated_at` — the update cannot write them, so they stay stale | **Dropped — the audit log is the sole source of attribution** (4.1) |
+| `scope_assignments` | `granted_by`, `granted_at` — `granted_by` can be forged | **Dropped** (4.1) |
+
+**What did not change:** every policy and every grant. Neither referenced the columns.
+
+---
+
+## Appendix B — Changelog from 1.13 to 1.14
 
 | Item | 1.13 | 1.14 |
 |---|---|---|
@@ -1838,7 +1862,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix B — Changelog from 1.12 to 1.13
+## Appendix C — Changelog from 1.12 to 1.13
 
 | Item | 1.12 | 1.13 |
 |---|---|---|
@@ -1857,7 +1881,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix C — Changelog from 1.11 to 1.12
+## Appendix D — Changelog from 1.11 to 1.12
 
 | Item | 1.11 | 1.12 |
 |---|---|---|
@@ -1871,7 +1895,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix D — Changelog from 1.10 to 1.11
+## Appendix E — Changelog from 1.10 to 1.11
 
 | Item | 1.10 | 1.11 |
 |---|---|---|
@@ -1887,7 +1911,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix E — Changelog from 1.9 to 1.10
+## Appendix F — Changelog from 1.9 to 1.10
 
 | Item | 1.9 | 1.10 |
 |---|---|---|
@@ -1903,7 +1927,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix F — Changelog from 1.8 to 1.9
+## Appendix G — Changelog from 1.8 to 1.9
 
 | Item | 1.8 | 1.9 |
 |---|---|---|
@@ -1922,7 +1946,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix G — Changelog from 1.7 to 1.8
+## Appendix H — Changelog from 1.7 to 1.8
 
 | Item | 1.7 | 1.8 |
 |---|---|---|
@@ -1947,7 +1971,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix H — Changelog from 1.6 to 1.7
+## Appendix I — Changelog from 1.6 to 1.7
 
 | Item | 1.6 | 1.7 |
 |---|---|---|
@@ -1970,7 +1994,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix I — Changelog from 1.5 to 1.6
+## Appendix J — Changelog from 1.5 to 1.6
 
 | Item | 1.5 | 1.6 |
 |---|---|---|

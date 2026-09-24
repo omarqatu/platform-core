@@ -1,8 +1,9 @@
-# PROOF_SPEC v1.1 — Core Proof-of-Concept Specification
-## Codex tasks + implementation-independent acceptance criteria
+# PROOF_SPEC v1.2 — Core Proof-of-Concept Specification
+## Implementation tasks + implementation-independent acceptance criteria
 
-**Governing reference:** `PLATFORM_CORE_v1_10_FROZEN.md` — every section, test, or check number in this spec refers to it.
-**Version:** 1.1 — **Date:** 2026-09-24
+**Governing reference:** `PLATFORM_CORE_v1_15_FROZEN.md` — every section, test, or check number in this spec refers to it.
+**Version:** 1.2 — **Date:** 2026-09-24
+**Implementer:** Claude Code (wherever the text says "the implementer"; it was Codex in 1.0–1.1).
 **Stack:** .NET (latest LTS) + EF Core + Npgsql + PostgreSQL 18 — settled (the document, Section 0).
 
 ---
@@ -11,16 +12,16 @@
 
 This spec performs two functions in a single text:
 
-1. **Build instructions** for Codex, task by task, starting at T0.
+1. **Build instructions** for the implementer, task by task, starting at T0.
 2. **An acceptance criterion** against which any other implementation of the core is measured — including an attempted retrofit built on a different project.
 
-**The design consequence:** acceptance criteria are written as **externally observable behavior** (a SQL query under a given role, or an HTTP request, and its expected result) — not as "use such-and-such class." The tests live in an independent project (`Conformance`) that takes connection strings and the seed contract from configuration, so it runs against Codex's database and against any other database that satisfies the seed contract (Section 7).
+**The design consequence:** acceptance criteria are written as **externally observable behavior** (a SQL query under a given role, or an HTTP request, and its expected result) — not as "use such-and-such class." The tests live in an independent project (`Conformance`) that takes connection strings and the seed contract from configuration, so it runs against the implementer's database and against any other database that satisfies the seed contract (Section 7).
 
 **An explicit limit:** some tests are **white-box** — they check an internal mechanism not visible from the outside (such as throwing an exception on a read taken outside a transaction). These are tagged `[W]`, and for these, an **equivalent proof** is accepted from another implementation, not the exact test. The rest, `[B]`, are black-box and run as-is.
 
 ---
 
-## 1. Binding Rules of Engagement for Codex
+## 1. Binding Rules of Engagement for the Implementer
 
 ```
 1.  One task = one branch = one PR. Do not start a task before its
@@ -46,6 +47,17 @@ This spec performs two functions in a single text:
     build it. Ask.
 10. No business logic beyond what the task requires. The proof
     demonstrates isolation, not the product.
+11. (1.2) Before any code in every task: run in isolation every engine
+    or framework behavior the document assumes and the task builds on,
+    and every new text in the document's latest version (a policy, an
+    SQL command, a check) — in both directions, on actual PostgreSQL
+    18, and through real EF commands wherever the path goes through
+    EF. A conflict → stop and return the reproduction table; do not
+    work around it in code.
+    (Why: every version from 1.10 to 1.15 was opened by a finding of
+    this kind.)
+12. (1.2) No force-push to main, nor to a merged branch. On an unmerged
+    PR branch: --force-with-lease only, and declared in the PR.
 ```
 
 ---
@@ -56,10 +68,11 @@ This spec performs two functions in a single text:
 |---|---|---|---|
 | **T0** | Structure, the five roles, connections, CI pipeline | — | 9, 22 |
 | **T1** | The transaction layer — "loud above, silent below" | T0 | 3, 4, 5, 14, 27 (first template) |
-| **T2** | The core schema: the three layers + the ten CI checks | T1 | 1, 2, 6, 8, 10, 12, 13, 15, 18, 21, 23 |
-| **T3** | Login and tenant selection + second-axis resolution | T2 | **26 first**, 7, 11 (partial), 20, 24‑c, 27 (memberships) |
-| **T4** | Bootstrap + the invite-and-accept cycle + departure | T3 | 10, 11, 18, spec items a, c, d, f, g |
-| **T5** | The first scoped module (a minimal subscriptions module) | T4 | 16, 17, 19, 24, 25, 27 (client_scope) |
+| **T2** | The core schema: the three layers + the ten CI checks | T1 | 1, 2, 6, 8, 10, 12, 13, 15, 18 (FK part), 21 (core part), 23, **28** |
+| **T2b** | (1.2) Migration dropping the four attribution columns (v1.15) | T2 | 16‑d, 17, 24 (re-run) |
+| **T3** | Login and tenant selection + second-axis resolution | T2b | **26 first**, 7, 11 (partial), **18 (second part)**, 20, 24‑c, 27 (memberships) |
+| **T4** | Bootstrap + the invite-and-accept cycle + departure | T3 | 10, 11, 18, **28c (full bootstrap)**, spec items a, c, d, f, g |
+| **T5** | The first scoped module (a minimal subscriptions module) | T4 | 16, 17, 19, **21 (scope_ref_id part)**, 24, 25, 27 (client_scope) |
 | **T6** | The cross-tenant unified view | T5 | 3 (via fan-out), 19 (merged) |
 | **T7** | Background jobs | T5 | System context (8/5) |
 | **T8** | Measurement + one RTL screen | T6, T7 | Performance threshold (T8) |
@@ -129,7 +142,7 @@ This spec performs two functions in a single text:
 
 **Spec item n:** seed the `core.scope.manage` permission into the `permissions` catalog, and grant it by default to the seeded `owner` and `admin` roles — a `migrator` migration item.
 
-**Spec item b (`auth_attempts` retention):** a `migrator` pruning procedure that deletes rows older than **90 days**, documented and scheduled outside the application. The figure is changeable by the project owner's decision, not Codex's.
+**Spec item b (`auth_attempts` retention):** a `migrator` pruning procedure that deletes rows older than **90 days**, documented and scheduled outside the application. The figure is changeable by the project owner's decision, not the implementer's.
 
 **The ten CI checks (3.6)** — all written here and run on every subsequent PR. Check 10 is built on `pg_depend` (`classid = 'pg_policy'::regclass`), and the declared chain list (4.6) is a file in the repository, alongside the manifest.
 
@@ -140,8 +153,20 @@ This spec performs two functions in a single text:
 | T2.2 | A negative test for every check: a trial migration that deliberately breaks it → the check fails (proving the check actually works, not merely that it is always green) | [W] |
 | T2.3 | Document tests 1, 2, 6, 8, 10, 12, 13, 15, 18, 21, 23 | [B] |
 | T2.4 | Test 23 is executed **via direct SQL** with the `app_user` role, not via the API | [B] |
+| T2.5 | (1.2) Test 28 on all three sides: the catalog, the EF model, and real EF behavior (forgetting throws 23514) | [W] |
 
-**A note to Codex:** T2.2 matters more than T2.1. A check that has never been seen to fail once cannot be trusted for being green.
+### T2b — Dropping the Attribution Columns (1.2)
+
+**Build:** a standalone migration, in a small branch before T3: drop `updated_by` and `updated_at` from `membership_scope`, and `granted_by` and `granted_at` from `scope_assignments` (v1.15, 4.1), along with the EF model and the seed data. The audit log is the sole source of attribution.
+
+**Acceptance criteria:**
+| # | Criterion | Type |
+|---|---|---|
+| T2b.1 | The ten checks green, each failing on its plant, after the migration | [B] |
+| T2b.2 | The four columns absent from the catalog and from the EF model | [W] |
+| T2b.3 | Tests 16‑d, 17, and 24 as before, unmodified | [B] |
+
+**A note to the implementer:** T2.2 matters more than T2.1. A check that has never been seen to fail once cannot be trusted for being green.
 
 ---
 
@@ -176,6 +201,7 @@ Three separate reads, not a single join. The absence of a `membership_scope` row
 | T3.5 | A failed login → a row in `auth_attempts`; and an existing versus non-existent username → identical responses, in text and in approximate timing | [B] |
 | T3.6 | The cookie contains no scope and no permission (checking its content) | [W] |
 | T3.7 | (1.1) Test 27 — the memberships part: on a reused connection, `app.user_id` alone (the tenant-selection path) → the caller's own memberships only, **with no error** | [B] |
+| T3.8 | (1.2) Test 18, second part: a membership with no `membership_scope` row → **a loud error** at tenant selection, not a silent default | [B] |
 
 ---
 
@@ -190,7 +216,7 @@ Three separate reads, not a single join. The absence of a `membership_scope` row
 | **a.** "The last owner cannot leave" | In the departure or role-change transaction: `SELECT … FROM tenants WHERE id = … FOR UPDATE` first, then count active owners. Locking the tenant row serializes two concurrent departures. **Not** an advisory lock (it does not show up in ordinary lock logs, and is harder to diagnose). |
 | **c.** The acceptance provider | `'password'` is fixed in the acceptance path's contract. Its source becomes a tenant setting once SSO arrives — out of scope for the proof. |
 | **d.** `invited_by` | `WITH CHECK (invited_by = app.user_id)` on creating an invitation, in addition to the tenant condition. |
-| **f.** The invitation's scope mode | An `invitations.intended_scope_mode` column (`'all' \| 'assigned'`, NOT NULL, no default). At creation, it is verified that the creator holds `can_manage_scope` if the value is `'all'`, and it is copied as-is into `membership_scope` at acceptance. |
+| **f.** The invitation's scope mode | The column has been in the schema since T2 (v1.13). Validation at creation is **in the database**, via `invitations_insert` (the document, 3.9) — T4 builds the path on top of it; and it is copied as-is into `membership_scope` at acceptance. |
 | **g.** The last `all`-scope membership cannot be downgraded | The same mechanism as item a: lock the tenant row, then count active `all` memberships before the downgrade. |
 
 **Acceptance criteria:**
@@ -203,7 +229,10 @@ Three separate reads, not a single join. The absence of a `membership_scope` row
 | T4.5 | Two concurrent departures of the last two owners → one succeeds and one fails, never both | [B] |
 | T4.6 | Two concurrent downgrades of the last two `all` memberships → the same result | [B] |
 | T4.7 | An invitation with `intended_scope_mode = 'all'` from a member with no `can_manage_scope` → fails | [B] |
-| T4.8 | bootstrap → a tenant + a first `owner` member with scope `all` + an audit entry, in a single transaction | [B] |
+| T4.8 | (amended 1.2) bootstrap → a tenant + **its roles and role permissions from the templates** + a first `owner` member with scope `all` + an audit entry, in a single transaction, with `provisioner` setting `app.tenant_id` to the new tenant first (the document, 3.9) | [B] |
+| T4.9 | (1.2) Bootstrap's template-derived inserts are critical writes: roles created = templates, under rows-affected; without read access to the templates → a loud error, not a silent zero | [W] |
+| T4.10 | (1.2) Test 28c on the full path: bootstrap and invitation acceptance through real EF commands → **zero commands containing RETURNING** | [W] |
+| T4.11 | (1.2) The acceptance request carries the target tenant id alongside the token, and `provisioner` sets `app.tenant_id` from it before reading the invitation; a tenant id not matching the token's tenant → no invitation (zero rows) → a loud rejection | [B] |
 
 ---
 
@@ -250,6 +279,7 @@ Modules.Subscriptions:
 | T5.6 | INSERT of a subscription with `scope_ref_id` for an unassigned client, from an `assigned` member → fails under `WITH CHECK` | [B] |
 | T5.7 | Check 8 is green: both tables carrying `scope_ref_id` have `client_scope` and `NOT NULL` | [B] |
 | T5.8 | (1.1) Test 27 — the client_scope part: on a reused connection where second-axis variables were previously set, a query with no context → zero rows **with no error** | [B] |
+| T5.9 | (1.2) Test 21, the `scope_ref_id` part: changing a subscription's `scope_ref_id` to another tenant's client → rejected by the module's composite FK (`23503`) | [B] |
 
 ---
 
@@ -315,7 +345,7 @@ Billing, public self-registration, SSO, identity deletion for compliance, single
 
 ---
 
-## 5. What Is Returned to the Project Owner, Not Decided by Codex
+## 5. What Is Returned to the Project Owner, Not Decided by the Implementer
 
 1. Any test that looks wrong.
 2. Exceeding the measurement threshold.
@@ -326,7 +356,7 @@ Billing, public self-registration, SSO, identity deletion for compliance, single
 
 ## 6. Using the Spec as an Acceptance Criterion for Another Implementation
 
-**The principle:** an implementation is measured by its behavior, not by its resemblance to Codex's implementation. The question is never "did you build X" but "does the test pass."
+**The principle:** an implementation is measured by its behavior, not by its resemblance to our implementation. The question is never "did you build X" but "does the test pass."
 
 **Procedure:**
 1. The implementation being evaluated provides: five connection strings for the five roles (or their functional equivalents, with a mapping table), a database satisfying the seed contract (Section 7), and the API endpoints named in T3–T6 with the same contracts.
@@ -337,7 +367,7 @@ Billing, public self-registration, SSO, identity deletion for compliance, single
 
 **What counts as a categorical failure regardless of everything else:** any failure in Tests 1, 2, 3, 15, 16‑a, 16‑b, 21, 25, 27 — because these are leakage or blinding of the isolation mechanism itself, not of a feature. (1.1: 27 added — an implementation that throws on a reused connection has no deterministic fail-safe, which every layer above it relies on.)
 
-**An explicit limit on the comparison:** the other implementation passing every test proves that it **satisfies the written contract**, not that it is free of flaws. The tests check what occurred to their author (the document, 3.7). And the standard for judging both implementations remains the same — including Codex's own.
+**An explicit limit on the comparison:** the other implementation passing every test proves that it **satisfies the written contract**, not that it is free of flaws. The tests check what occurred to their author (the document, 3.7). And the standard for judging both implementations remains the same — including our own.
 
 ---
 
@@ -366,4 +396,4 @@ Maan's clients:     X, Y          — 3 subscriptions each
 
 ## 8. The State at Completion
 
-The proof is complete when: T0–T8 are merged, the twenty-seven tests and the ten CI checks are green, the acceptance criteria added here (T*.n) are all green, and the measurement report is written. **Only then** is the question of the scoped entity's home opened (the document, Section 9) — with input from working code, not from text.
+The proof is complete when: T0–T8 are merged, the twenty-eight tests and the ten CI checks are green, the acceptance criteria added here (T*.n) are all green, and the measurement report is written. **Only then** is the question of the scoped entity's home opened (the document, Section 9) — with input from working code, not from text.

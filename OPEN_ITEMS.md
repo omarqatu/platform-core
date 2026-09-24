@@ -16,6 +16,11 @@ Closed by the T2 PR:
   removed.
 - **5.** The catalog checks run before every test step in CI.
 
+Closed by the T2b PR:
+- **10.** Attribution on the scope surface: PLATFORM_CORE v1.15 dropped `membership_scope.updated_by`
+  and `updated_at`, and `scope_assignments.granted_by` and `granted_at`; migration 0006 drops them.
+  The audit log is the sole source of attribution.
+
 ## For T3 — the second part of Test 18
 
 ### 7. A membership with no membership_scope row → a loud error at tenant selection
@@ -25,6 +30,19 @@ Closed by the T2 PR:
 - **What T3 must do:** when a tenant is selected, a membership with no
   `membership_scope` row is a thrown error, not a silent fallback (PLATFORM_CORE
   §3.5/7, §3.7 Test 18). Beneath it, if bypassed, zero rows.
+
+## For T3 — Test 17-c
+
+### 11. A scope variable from a request header or payload → no effect
+
+- **Origin:** T2b (PR #4), decision 24. T2b covers Test 17-a and 17-b at the
+  database level; 17-c needs the request path, which T3 builds.
+- **What T3 must do:** a request that sets `app.scope_all` (or `app.membership_id`,
+  `app.can_manage_scope`) through a header or the payload → no effect: the
+  member's behavior stays that of their resolved scope (an `assigned` member stays
+  `assigned`). The only source is resolution per transaction (PLATFORM_CORE §3.5/6,
+  §3.7 Test 17-c). Check 9 guards the code statically; this test guards the
+  behavior.
 
 ## For T4 — the rest of Test 28 (c)
 
@@ -51,41 +69,22 @@ Closed by the T2 PR:
 
 ## For the next version of the document — not for the code
 
-### 10. Attribution on the scope-management surface: granted_by and updated_by
+### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12
 
-- **Origin:** T2 review (PR #3), the project owner. Checked by running it (PostgreSQL
-  18.6, the T2 schema, a rolled-back transaction).
-- **The inconsistency:** `invited_by` is bound to `app.user_id` in the invitation's
-  `WITH CHECK` (spec item d). The two attribution columns on the scope-management
-  surface are not:
-  - **`scope_assignments.granted_by` can be forged.** `scope_assignment_insert`
-    checks the tenant and `can_manage_scope` only. A scope manager (Rami) inserted
-    an assignment with `granted_by` = another user (Omar): **1 row**.
-  - **`membership_scope.updated_by` and `updated_at` cannot be recorded by the
-    change, and keep their old values.** The §3.8 grant is `UPDATE (scope_mode)`
-    only, so `app_user` cannot set either column (`permission denied`). Their only
-    writer is `provisioner` at insert time, whose `WITH CHECK` is the tenant alone:
-    it wrote `updated_by` = another user (Omar), accepted. Then a scope manager
-    (Nour, Maan's owner, not her own membership) changed `scope_mode`:
-
-    | | Written by provisioner | After Nour's change of `scope_mode` |
-    |---|---|---|
-    | `scope_mode` | `assigned` | `all` |
-    | `updated_by` | `omar` | **`omar`**: the old value stays |
-    | `updated_at` | `2025-01-01` | **`2025-01-01`**: the old value stays |
-
-    So after an admin's change the row states a **false attribution and a false
-    date**: that Omar last changed it, on 2025-01-01. (With the seed contract, whose
-    `updated_by` is NULL, it stays NULL, for the same reason.) Worse than a missing
-    value: a plausible, wrong one.
-- **For the document to decide:** bind `granted_by` to `app.user_id` in
-  `scope_assignment_insert`, as for `invited_by`; and for `membership_scope`, either
-  widen the grant to `UPDATE (scope_mode, updated_by, updated_at)` with
-  `updated_by = app.user_id` in `membership_scope_admin_update`'s `WITH CHECK` (and
-  the provisioner's insert bound the same way), or drop the two columns and declare
-  that the audit log alone attributes scope changes (§7). The two columns must not
-  stay as they are: a value nothing keeps current reads as a fact. Then run the new texts in isolation before
-  building, as every version since 1.11.
+- **Origin:** T2b (PR #4), decision 26, accepted by the project owner.
+- **The discrepancy:** §3.7 Test 17-a says an admin's UPDATE of their own
+  `membership_scope` "fails under the restrictive policy on that table". But
+  `membership_scope_admin_update`, as §4.8 writes it, is **permissive**, with the
+  condition `membership_id <> app.membership_id`. The own row is filtered out, so
+  the UPDATE affects **zero rows, silently**. The protection holds; the text
+  describes a different mechanism.
+- **For the document:** restate 17-a in two layers, as 1.12 restated Test 23:
+  - **The database (silent):** the admin's UPDATE of their own mode → zero rows,
+    the row untouched.
+  - **The API (loud):** changing `scope_mode` is a **critical write** under the
+    rows-affected guard (§3.5/5), so the same attempt through the API → an explicit
+    error.
+  Then run the new text in isolation before building (PROOF_SPEC rule 11).
 
 ## For T3 and T5 — the rest of Test 27 (PLATFORM_CORE v1.10)
 

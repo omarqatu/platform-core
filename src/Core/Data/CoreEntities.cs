@@ -87,8 +87,7 @@ public sealed class MembershipScope
     public Guid TenantId { get; set; }
     public Guid MembershipId { get; set; }
     public string ScopeMode { get; set; } = "";
-    public Guid? UpdatedBy { get; set; }
-    public DateTime UpdatedAt { get; set; }
+    // (v1.15) No updated_by / updated_at: the audit log attributes every change (§4.1, 7).
 }
 
 public sealed class ScopeAssignment
@@ -99,8 +98,7 @@ public sealed class ScopeAssignment
     public Guid ScopeRefId { get; set; }
     public string AssignmentRole { get; set; } = "";
     public bool Active { get; set; }
-    public Guid GrantedBy { get; set; }
-    public DateTime GrantedAt { get; set; }
+    // (v1.15) No granted_by / granted_at: the audit log attributes every change (§4.1, 7).
     public string? Reason { get; set; }
 }
 

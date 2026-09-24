@@ -78,10 +78,11 @@ BEGIN
       SELECT uuidv7(), rec.tenant_id, m, r.id FROM roles r WHERE r.tenant_id = rec.tenant_id AND r.code = ANY (rec.role_codes);
     INSERT INTO membership_auth (id, tenant_id, membership_id, provider, provider_config)
       VALUES (uuidv7(), rec.tenant_id, m, 'password', NULL);
-    INSERT INTO membership_scope (id, tenant_id, membership_id, scope_mode, updated_by, updated_at)
-      VALUES (uuidv7(), rec.tenant_id, m, rec.scope_mode, NULL, now());
-    INSERT INTO scope_assignments (id, tenant_id, membership_id, scope_ref_id, assignment_role, active, granted_by, granted_at, reason)
-      SELECT uuidv7(), rec.tenant_id, m, c, 'contributor', true, usr, now(), 'seed contract'
+    -- (v1.15) No attribution columns on the scope surface: the audit log attributes (§4.1, 7).
+    INSERT INTO membership_scope (id, tenant_id, membership_id, scope_mode)
+      VALUES (uuidv7(), rec.tenant_id, m, rec.scope_mode);
+    INSERT INTO scope_assignments (id, tenant_id, membership_id, scope_ref_id, assignment_role, active, reason)
+      SELECT uuidv7(), rec.tenant_id, m, c, 'contributor', true, 'seed contract'
       FROM unnest(rec.clients) c;
   END LOOP;
 
