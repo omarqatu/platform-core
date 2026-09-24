@@ -75,6 +75,37 @@ Closed by the T3 PR:
   subscriptions; the tenant's other clients after lowering the mode), with no re-login
   (§3.7 Test 20).
 
+## For T4 — automatic auditing in the same transaction
+
+### 17. Every write audited in its own transaction, by the mechanism §7 prescribes
+
+- **Origin:** T3, decided by the project owner. T3's two administrative endpoints add their
+  audit rows explicitly, in the request's transaction.
+- **What T4 must do:** the automatic mechanism of §7 — at `SavingChanges`, then a second save of
+  the audit rows in the same transaction once the new entities' ids exist, with a flag that keeps
+  the interceptor from intercepting the audit save itself — so that "a write with no corresponding
+  log entry is structurally impossible", starting with T4's own paths (bootstrap, invitation,
+  acceptance, departure) and replacing T3's explicit rows.
+
+## Before launch — outside the proof
+
+### 16. Login attempt limiting (§4.3-a/2)
+
+- **Origin:** T3, decision 43; decided by the project owner.
+- **The direction:** an escalating delay per (username + IP), with **no account lockout** (a
+  lockout lets anyone lock out a known user), and a ceiling per IP. The checks read
+  `auth_attempts`, as §4.3-a/2 says.
+- **The numbers** (delays, windows, ceilings) are settled at launch.
+
+## For production — outside the proof
+
+### 18. Persistent Data Protection keys
+
+- **Origin:** T3, decision 32; decided by the project owner.
+- **The gap:** the session cookie is encrypted with ASP.NET Core Data Protection, whose keys now
+  live inside the container: a restart or a second instance invalidates every session.
+- **For production:** persist the key ring, protected at rest, shared by every Api instance.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12

@@ -19,6 +19,8 @@ alone, and it still holds every [B] test.
 | `Test28a_*`, `Test28b_*`, `Test28c_*` | Test 28 [W] (v1.14 §3.7), an acceptance criterion of T2 under rule 8: (a) no DEFAULT, keys `app_id`, NOT NULL timestamps `app_ts`, each query seen failing on a planted table; (b) every EF property `ValueGenerated.Never`; (c) a forgotten key or timestamp → `23514`, nothing saved, and no `RETURNING` for any of the 19 entity types |
 | `Test26_*` | T3.1 — Test 26 (v1.15 §3.7): a single join before `app.membership_id` → zero rows and Rule 7 throws; the order a-b-c → succeeds with each member's values; the guard: exactly three reads, each followed by its `SET LOCAL`, in order; a membership with no scope row → the resolver throws |
 | `T3_6_*` | T3.6: the session cookie, decrypted with the Api's own ticket format, carries `user_id` (after login) and `user_id` + `tenant_id` (after selection) — no scope, no permission; HTTP-only, Secure, SameSite=Strict. Api hosted in-process |
+| `Layer1_*`, `Layer2_*` | Decision 36 (amended): scope administration in two layers, each alone — the application refuses without `core.scope.manage` before any command reaches the database; with that check bypassed, the database refuses on its own (an update → zero rows → the rows-affected guard; an insert → `42501`) |
+| `RequireHttpsFalse_*`, `AllowedCombinations_*` | Decision 33 (amended): Api refuses to start with `Session:RequireHttps=false` outside an environment named Development or CI; starts otherwise |
 | `UnitOfWork_UserWithoutTenant_*` | The tenant-selection path through the unit of work: `app.user_id` alone, no second-axis variable, own memberships only |
 
 Since T2 the tests run on the real schema, through Core's EF model, against two tenants of their
