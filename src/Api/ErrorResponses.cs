@@ -36,6 +36,9 @@ public sealed class ErrorResponses(RequestDelegate next, ILogger<ErrorResponses>
                     return (StatusCodes.Status500InternalServerError, "membership_scope_missing");
                 case NoActiveMembershipException:
                     return (StatusCodes.Status403Forbidden, "not_a_member");
+                // The application layer's explicit permission check (5), before any write.
+                case Endpoints.NotPermittedException:
+                    return (StatusCodes.Status403Forbidden, "not_permitted");
                 // The rows-affected guard (3.5/5): the row is not writable under this context.
                 case CriticalWriteException:
                     return (StatusCodes.Status403Forbidden, "not_permitted");
