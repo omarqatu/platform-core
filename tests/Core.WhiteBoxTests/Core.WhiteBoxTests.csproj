@@ -35,7 +35,6 @@
 
   <ItemGroup>
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\fixtures\t1_probe.sql" Link="t1_probe.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

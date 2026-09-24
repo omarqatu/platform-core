@@ -1,0 +1,4 @@
+{
+  "_comment": "Tables in public exempt from RLS coverage (PLATFORM_CORE v1.14 §3.6, Check 5). Empty today; an entry is added only by the project owner's decision.",
+  "tables": []
+}

@@ -13,7 +13,7 @@ share.
 
 | Check | What it enforces | Added |
 |---|---|---|
-| `check-schema-allowlist` | The only non-system schemas are those in `schema-allowlist.txt` (`public`, `migrations_meta`), and `migrations_meta` contains only `__EFMigrationsHistory`. Drift is reported in both directions: anything extra, and anything allowlisted but missing. | T0 (PR #1) |
+| `check-schema-allowlist` | The only non-system schemas are those in `schema-allowlist.txt` (`public`, `migrations_meta`), and `migrations_meta` contains only `__EFMigrationsHistory`. Drift is reported in both directions: anything extra, and anything allowlisted but missing. | T0 (PR #1); runs beside Checks 1–10 since T2 |
 
 ## check-schema-allowlist
 

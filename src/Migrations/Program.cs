@@ -1,5 +1,6 @@
 using Core;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 
@@ -29,6 +30,9 @@ var options = new DbContextOptionsBuilder<CoreDbContext>()
         .MigrationsAssembly(typeof(Program).Assembly.GetName().Name)
         // Outside public: Check 5 requires RLS on every public table, with an empty exemption list.
         .MigrationsHistoryTable("__EFMigrationsHistory", "migrations_meta"))
+    // The schema is written as SQL (Migrations/Sql), not diffed from the EF model,
+    // so the model never "matches" a migration snapshot. Only the SQL is authoritative.
+    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
     .Options;
 
 await using var db = new CoreDbContext(options);

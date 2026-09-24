@@ -1,9 +1,9 @@
 # وثيقة نواة المنصّة — طبقة تعدّد الجهات (Tenancy)
 ## منصّة SaaS عامة — تصميم greenfield مستقل
 
-**الإصدار:** 1.10 — **النسخة المجمّدة**
+**الإصدار:** 1.14 — **النسخة المجمّدة**
 **تاريخ:** 2026-09-24
-**سجل المراجعات:** سبع مراجعات معمارية + مراجعتا نموذج (حتى 1.6)، ثم **تعديل متطلَّب** في 1.7، ثم **مراجعة خارجية ثامنة** حسمت 1.8، ثم **مراجعة تاسعة** حسمت 1.9، ثم **أول اكتشاف من كود مشغَّل** حسم 1.10. سجل التغيير الكامل في الملاحق.
+**سجل المراجعات:** سبع مراجعات معمارية + مراجعتا نموذج (حتى 1.6)، ثم **تعديل متطلَّب** في 1.7، ثم **مراجعة خارجية ثامنة** حسمت 1.8، ثم **مراجعة تاسعة** حسمت 1.9، ثم **أول اكتشاف من كود مشغَّل** حسم 1.10، ثم **اختبار افتراضين قبل T2** حسم 1.11، ثم **تعارضان كشفهما نفس الإجراء** حسما 1.12، ثم **مسودة policies مشغَّلة قبل T2** حسمت 1.13، ثم **تشغيل فحوص CI كما كُتبت** حسم 1.14. سجل التغيير الكامل في الملاحق.
 **طبيعة الوثيقة:** تحليل تقني خالص، لا غرض إقناع.
 
 **قرار التجميد — وحدود إعادة الفتح:** تجميد 1.6 كان قراراً صحيحاً عن **صنف** الاكتشافات لا عن الوثيقة: المراجعة السابعة وجدت نصف اكتشافاتها في اتساق النصّ مع نفسه، وهذا صنف تكشفه كتابة المواصفة والكود أسرع وأرخص من مراجعة نصّ ثامنة. ذلك القرار قائم: **أي خلل اتساق أو بند تنفيذي يُحسم في المواصفة أو الكود، لا في نسخة جديدة.**
@@ -11,6 +11,74 @@
 1.7 و1.8 و1.9 ليست من ذلك الصنف. **1.7** تغيير في نموذج النطاق فرضه متطلَّب منتج (القسم 4.8). و**1.8** إصلاح **خلل بنائي في آلية ذلك النموذج** كشفته مراجعة خارجية: سلسلة policies متداخلة عطّلت المحور الثاني بالكامل (3.1، 4.8). و**1.9** إصلاح **تناقض بين قرار نموذج وآليته** (النطاق يُستعمل بديلاً عن الصلاحية) و**ثغرة تُبطل ضمان المحور** (سجل التدقيق). موضعها كلها طبقة المعاملة وطبقة الهوية — أي **قبل** T0 لا بعده. القاعدة الحاكمة بعد 1.9: **هذه آخر نسخة نصّية. لا تُفتح الوثيقة إلا لاكتشاف ينجو من تشغيل الاختبارات ويُثبته الكود** — المبرّر في 13. و**1.10 أول نسخة تُفتح بهذه القاعدة**: اكتشاف لم يجده نصّ، وجده تشغيل PostgreSQL 18.6.
 
 البنود التنفيذية المتبقية تبقى منقولة صراحةً إلى أول بنود المواصفة (القسم 13).
+
+**تغيير 1.14 عن 1.13 — فحص 8 كان يطالب بتكرار لا نهائي:** خلل من 1.7، عبر تسع مراجعات وستة إصدارات، وظهر عند تشغيل فحوص CI كما كُتبت على مخطط كامل قبل T2. الفحص يطلب `client_scope` على كل جدول يحمل `scope_ref_id`، و`scope_assignments` يحمله — لكن القالب يقرؤه، فتلبية الفحص تكرار لا نهائي (`42P17`) يُفشل كل قراءة على كل جدول مُنطَّق. الإصلاح استثناء بنيوي واحد مع شقّ عكسي حارس (3.6، فحص 8). وأُثبت معه أن فحوص 1 و4 و5 و10 كما كُتبت صحيحة على المخطط الكامل، وأن نصوص 1.13 تطابق المسودة المشغَّلة (31 من 32 حرفياً، والباقية تفكيكاً بتفكيك).
+
+**تغيير 1.13 عن 1.12 — النصوص الناقصة، وbootstrap من القوالب، والقيم المولّدة:** قبل T2، ظهر أن الوثيقة تكتب 22 policy كاملة وقالبين، بينما كل منح في مصفوفة 3.8 لدور غير `migrator` يحتاج policy للدور والأمر نفسيهما — فتحت `FORCE RLS` المنح بلا policy **ميّت**. كُتبت المسودة، وشُغّلت على PostgreSQL 18.6 في الاتجاهين (108 حالة SQL ناجحة، ومسار EF حقيقي في قاعدة منفصلة)، ثم دخلت الوثيقة. خمسة أشياء:
+
+**(1) 32 policy ناقصة كُتبت نصّاً (القسم 3.9).** والدليل أنها المطلوبة: التشغيل **بدونها** أفشل 41 من 42 حالة مسار مقصود — ومنها مسار الدخول (`users_authenticator_read`) والخطوة ج من حلّ النطاق (`permissions_read`)، اللذان كانا سيعيدان **صفر صفوف بصمت**، لا خطأً. الصنف نفسه الذي تطارده الوثيقة منذ 1.5.
+
+**(2) `provisioner` مقيَّد بجهة واحدة لكل معاملة.** يضبط `app.tenant_id` على الجهة المستهدفة داخل معاملته، وكل سياساته على جداول الجهات `WITH CHECK (tenant_id = app.tenant_id)`. فخلل في أخطر دور في النظام لا يستطيع الكتابة في جهتين داخل معاملة واحدة. الجداول العامة بلا `tenant_id` تبقى `true`.
+
+**(3) bootstrap كان مستحيلاً، وصار ممكناً.** لم يكن في النظام من يستطيع إنشاء أدوار جهة جديدة وقت التشغيل: `provisioner` بلا منح على `roles`، و`migrator` يزرع وقت الترحيل فقط، و`app_user` ممنوع من الأدوار النظامية. الحلّ: `provisioner` يُنشئها من كتالوج عام جديد (`role_templates` و`role_template_permissions`) يزرعه `migrator` — مصدر حقيقة واحد للجهات الجديدة ولترقية القائمة (5). ونشأ منه اكتشاف: بلا قراءة القوالب، أوامر `INSERT … SELECT` تُدرج **صفر صفوف بلا خطأ** — فكل إدخال مشتقّ من القوالب كتابة حرجة.
+
+**(4) لا `RETURNING` في أي أمر، ولا قيمة تولّدها القاعدة.** أُثبت بالتشغيل: `RETURNING` يشترط `SELECT` على الأعمدة المُرجَعة **ويُخضع الصفّ لسياسات `SELECT`**. فإدخال `provisioner` بـ `RETURNING` يفشل على الجداول التي لا يقرؤها، والأخطر: عضو `assigned` يُدخل في `audit_log` بـ `RETURNING` فيرفضه `audit_read` — و**كل كتابة لعضو مُسنَد كانت ستفشل**، لأن التدقيق في نفس المعاملة. وEF يطلب `RETURNING` تلقائياً لأي قيمة مولّدة في القاعدة. فالمفاتيح والطوابع تُولَّد في التطبيق، ولا `DEFAULT` على أي عمود في `public` (2).
+
+**(5) لكن مع EF، النسيان كان صامتاً.** قرار «`NOT NULL` بلا افتراضي يجعل النسيان صاخباً» صحّ لـ SQL اليدوي وحده: EF يرسل `Guid.Empty` و`0001-01-01` كقيمتين عاديتين، فحُفظ صفّ بمفتاح صفري وصفّا تدقيق بتاريخ السنة الأولى، **بصمت**. الحلّ في طبقة القيود لا فوقها — لأنها تشمل كل من يكتب لا EF وحده — عبر **نوعَي domain**: `app_id` يرفض المفتاح الصفري، و`app_ts` يرفض ما قبل 2000. واختيار الـ domain لا قيود CHECK متفرقة مقصود: فرض وجودها صار سؤالاً عن **نوع** العمود في الكتالوج لا عن **نصّ** قيد — فلا يعود تحليل النصوص الذي تُرك في 1.9 و1.11. أُثبت بـ EF: النسيان يرمي `23514` ولا يُحفظ شيء.
+
+**ورُدّ من المراجعة** سؤال واحد عن تعارض قاعدتين: الجدولان اللذان مفتاحهما الأساسي هو مفتاح أجنبي أيضاً (`user_password_credentials.user_id` و`role_template_permissions`) — **قاعدة الـ PK تغلب**: `app_id`. لا يكسر شيئاً، ويُبقي اختبار 28 حرفياً بلا استثناءات.
+
+**تغيير 1.12 عن 1.11 — تعارضان أدخلتهما الوثيقة بنفسها، كشفهما الاختبار بمعزل:**
+
+**(1) أمر كلمة المرور في 1.11 يناقض المنح في 3.8.** الأمر المضاف في 1.11 يكتب `updated_at`، والمصفوفة تمنح `UPDATE (password_hash)` وحده:
+
+| الصيغة (بدور `app_user`، المنح كما في 3.8) | النتيجة |
+|---|---|
+| `SET password_hash = $1, updated_at = now()` (نصّ 1.11) | `ERROR: permission denied` |
+| `SET password_hash = $1` وحده | صفّ واحد ✅ |
+
+**الإصلاح:** توسيع المنح إلى `UPDATE (password_hash, updated_at)` — بيانات وصفية يكتبها التطبيق عن حق، ومنح `UPDATE` عليها كتابة بلا قراءة فلا تكشف شيئاً. رُفض بديلان: حذف `updated_at` من الأمر (عمود راكد)، وtrigger يحدّثه (آلية جديدة لا تحتاجها الوثيقة). وصُحّحت معه رسالة الخطأ المقتبسة في 1.11: الفعلية `permission denied for table …` لا `for column user_id`، والاختبار يؤكّد على SQLSTATE `42501` لا على نصّ الرسالة.
+
+**(2) `system_role_guard` كان يُخفي الأدوار الأساسية عن القراءة، وحمايته صامتة.** مكتوب في 1.8 بصيغة `AS RESTRICTIVE FOR ALL`، و`FOR ALL` تطبّق `USING` على `SELECT`:
+
+| العملية بدور `app_user` (جهة فيها owner وadmin نظاميان + custom) | النتيجة |
+|---|---|
+| قراءة أدوار الجهة | `custom` وحده — `owner` و`admin` اختفيا |
+| تعديل `owner` | `UPDATE 0` — صامت |
+| حذف `admin` | `DELETE 0` — صامت |
+| ترقية `custom` إلى `is_system = true` | `ERROR` ✅ |
+| إدخال دور بـ `is_system = true` | `ERROR` ✅ |
+
+**الإصلاح:** ثلاث مقيِّدات مفصولة بالأمر (`UPDATE` و`DELETE` و`INSERT`)، والقراءة متروكة لـ `tenant_isolation` (5). واختبار 23 أُعيدت صياغته: الحماية في القاعدة **صامتة** (صفر صفوف والصفّ سليم) والصخب في الطبقة فوقها عبر حارس rows-affected — وهو مبدأ «صاخب فوق، صامت تحت» نفسه، بلا آلية جديدة.
+
+**والدرس:** التعارض الثاني تكرار **حرفي** لخطأ 1.7 في `scope_assignments`، كتبته 1.8 في قسم آخر وهي تُصلح الأول. فأُضيفت قاعدة عامة في 3.1: `AS RESTRICTIVE FOR ALL` فقط حين يكون تضييق القراءة **مقصوداً**. والتعارض الأول أدخلته 1.11 وهي تُصلح شرطاً آخر. كلاهما من صنف واحد: **نصّ يُكتب ليُصلح شيئاً، ولا يُشغَّل قبل أن يُثبَّت.** وكلاهما كشفه الإجراء الذي فرضته 1.11 — الاختبار بمعزل قبل البناء — لا قراءة.
+
+**تغيير 1.11 عن 1.10 — افتراضان آخران عن المحرّك، اختُبرا قبل البناء:** بدرس 1.10 نفسه، وقبل سطر واحد من T2، اختُبر بمعزل افتراضان تبني عليهما الوثيقة — على PostgreSQL 18.6:
+
+**(1) فحصا 2 و8 كانا سيفشلان على كل جدول صحيح.** الوثيقة قالت إن نصّ الـ policy «يطابق القالب مطابقة تامة (pg_get_expr بعد تطبيع المسافات)». لكن PostgreSQL لا يعيد النصّ كما كُتب، بل صيغة مُعاد تفكيكها:
+
+| المصدر | النصّ |
+|---|---|
+| القالب 3.1 (v1.10) | `tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)` |
+| `pg_get_expr(polqual)` | `(tenant_id = ( SELECT (NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid AS "nullif"))` |
+| متساويان بعد تطبيع المسافات؟ | **لا** — تحويلات `::text` مضافة، وأقواس، واسم بديل `AS "nullif"` |
+| التفكيك مستقرّ؟ (إنشاء policy من الناتج ثم تفكيكها مجدداً) | **نعم** |
+
+ولـ `client_scope` يتضمّن التفكيك اسم الجدول نفسه، فيختلف من جدول لآخر. لا تطبيع مسافات يسدّ هذا. **الإصلاح: مقارنة تفكيك بتفكيك** — الفحص، بدور `migrator` داخل معاملة تُلغى، يُنشئ كل policy متوقّعة (من القالب أو من الـ manifest) كمرجع على **نفس** الجدول، ويقارن `pg_get_expr` للواقع بـ `pg_get_expr` للمرجع. PostgreSQL يُنتج المرجع بنفسه، فلا نصّ ثانٍ يُصان، والجدول نفسه يحلّ اسم الجدول في `client_scope`. رُفض بديلان: تخزين الناتج المفكَّك في الـ manifest (نصّان لقالب واحد، هشّ عبر إصدارات PostgreSQL)، وتطبيع الطرفين بقواعد (مُحلّل جزئي للتعبير — عين ما تُرك في 1.9 حين انتقل فحص 10 إلى `pg_depend`).
+
+**(2) «UPDATE بلا SELECT» صحيح بشرط لم يُكتب.** نتيجة الاختبار على `user_password_credentials` بدور `app_user` بلا أي `SELECT`:
+
+| الصيغة | النتيجة |
+|---|---|
+| `UPDATE … SET password_hash = $1 WHERE user_id = $2` (ما يولّده EF) | `permission denied for table …` (SQLSTATE `42501`) — صاخب *(صُحّحت الرسالة في 1.12)* |
+| `UPDATE … SET password_hash = $1` بلا `WHERE` ولا `RETURNING`، وRLS تحدّد الصفّ | صفّ واحد بالضبط ✅ |
+| ومع منح `SELECT` على عمود `user_id` لـ«إصلاح» الصيغة الأولى | صفر صفوف **صامتاً** — لأن `WHERE` يُخضع التحديث لسياسات `SELECT` أيضاً |
+
+ادعاء الوثيقة صحيح واختبار 13 قابل للنجاح — **لكن بالصيغة الثانية وحدها**. والصيغة الثالثة فخّ: «إصلاح» الخطأ الصاخب بمنح عمود يحوّله إلى حجب صامت لا يبقى أمامه إلا حارس rows-affected. فكُتب الشرط في 3.8 و4.3، وفحص 6 صار يمنع صراحةً أي `SELECT` **عمودي** على الجدول، واختبار 13 صار يحرس أن الصيغة الأولى تبقى فاشلة بصوت.
+
+**وتأكيد ثالث صمد:** `pg_depend` يسجّل تبعيات تعابير الـ policies فعلاً (فحص 10 سليم)، مع تفصيل: جدول الـ policy نفسه يظهر كمرجع، فيُستثنى `refobjid = polrelid`.
+
+**النمط، مرة ثالثة خلال يومين:** ثلاثة افتراضات عن سلوك PostgreSQL — `NULLIF` في 1.10، والتفكيك وشرط `WHERE` هنا — كلها بدت بديهية، ولم يشكّ فيها أحد عبر تسع مراجعات، ووُجدت كلها بتشغيل لا بقراءة. **الاختبار بمعزل قبل البناء صار إجراءً ثابتاً في كل مهمة، لا استثناءً.**
 
 **تغيير 1.10 عن 1.9 — افتراض الفشل الآمن كان خاطئاً منذ 1.0:** عند بدء T1، وقبل كتابة أي كود، اختُبر سلوك افتراضي تعتمد عليه طبقة المعاملة كلها — وفشل. أُعيد إنتاجه على PostgreSQL 18.6 بدور `app_user`، على جدول مؤقت يحمل `tenant_isolation` بنصّ 1.9 الحرفي:
 
@@ -154,7 +222,25 @@ person              هوية فيزيائية واحدة — عابرة للجه
 | الكيان المُنطَّق | الكيان الذي يدور عليه المحور الثاني داخل الجهة (العميل في موديول الاستشارات). |
 | Module / Permission | وحدة قابلة للتفعيل / صلاحية ذرّية يسجّلها الموديول. |
 
-**نمط المفاتيح:** `uuidv7` (built-in في Postgres 18) لكل المفاتيح — موقعية زمنية للفهارس المركّبة (3.2) مجاناً.
+**نمط المفاتيح والقيم المولّدة (أُعيدت كتابته في 1.13):** `uuidv7` لكل المفاتيح — موقعية زمنية للفهارس المركّبة (3.2) — لكنه **يُولَّد في التطبيق** (`Guid.CreateVersion7()` في .NET) لا في القاعدة، وكل طابع زمني يضبطه التطبيق صراحةً. ثلاث قواعد ملزمة:
+
+```
+1. لا RETURNING في أي أمر: يشترط SELECT على الأعمدة المُرجَعة
+   ويُخضع الصفّ لسياسات SELECT — فيفشل على كل جدول لا يقرؤه
+   الدور، ومنه audit_log لعضو assigned (الرأس، 1.13).
+2. لا DEFAULT ولا identity ولا عمود مولَّد على أي عمود في public.
+   زرع migrator يكتب uuidv7() وnow() صراحةً في VALUES.
+3. نوعا domain للقيم التي ينساها EF بصمت:
+     CREATE DOMAIN app_id AS uuid        CHECK (VALUE <> '00000000-0000-0000-0000-000000000000');
+     CREATE DOMAIN app_ts AS timestamptz CHECK (VALUE >= '2000-01-01');
+   app_id لكل عمود في مفتاح أساسي — وإن كان مفتاحاً أجنبياً أيضاً.
+   app_ts لكل timestamptz NOT NULL. NOT NULL على العمود لا في الـ
+   domain (وثائق PostgreSQL تحذّر منه داخل الـ domain). الأعمدة
+   القابلة للـ null والمفاتيح الأجنبية الخالصة تبقى uuid/timestamptz
+   — الـ FK المركّب يلتقط نسيانها.
+```
+
+**لماذا الحدّ 2000 لا تاريخ قريب:** غرضه الوحيد التقاط ما يرسله EF لـ `DateTime.MinValue` (`0001-01-01`، أو `-infinity`)، لا التحقق من صحة التواريخ. حدّ قريب كان سيرفض بيانات قديمة مستوردة مستقبلاً بلا سبب. اختبار 28 يحرس القواعد الثلاث.
 
 ---
 
@@ -173,6 +259,8 @@ CREATE POLICY tenant_isolation ON <t>
 ```
 
 **قاعدة ملزمة (1.10) — `NULLIF` حول كل متغيّر سياق:** كل قراءة لـ `app.*` في أي تعبير policy تُكتب `NULLIF(current_setting('app.x', true), '')::<type>`، ولا استثناء. المبرّر في رأس الوثيقة: المتغيّر المخصّص يصير `''` لا `NULL` بعد أول ضبط في الجلسة، ولا يُزيله `DISCARD ALL`، فالتحويل المباشر يرمي على الاتصالات المُعادة. `NULLIF` **قبل** التحويل: `NULLIF(...)::uuid` صحيح، و`NULLIF(...::uuid, …)` يُبقي الخطأ. فحص 2 يفرض القاعدة على كل policy (3.6)، واختبار 27 يحرس الحالة.
+
+**قاعدة ملزمة (1.12) — `AS RESTRICTIVE FOR ALL` فقط حين يكون تضييق القراءة مقصوداً:** `FOR ALL` تطبّق `USING` على `SELECT` أيضاً، فكل مقيِّدة `FOR ALL` تحجب القراءة بشرطها. هذا مقصود في `client_scope` (المحور الثاني يضيّق الرؤية نفسها)، وكان غير مقصود مرتين: `scope_assignments` في 1.7، و`system_role_guard` في 1.8. فالقاعدة: المقيِّدة التي تحرس الكتابة وحدها تُكتب **مفصولة حسب الأمر** (`FOR UPDATE` / `FOR DELETE` / `FOR INSERT`)، ولا تُكتب `FOR ALL` إلا بنصّ يقول صراحةً إن القراءة مقصودة بالتضييق.
 
 **قاعدة ملزمة:** كل policy تُكتب بـ `FOR <cmd>` و`TO <role>` صريحين. policy بلا `TO` تُطبَّق على PUBLIC فتُجمع المتساهلة بـ OR على أدوار لم تُقصد. بوابة CI (3.6 فحص 4) ترفضها.
 
@@ -262,7 +350,7 @@ scope_assignments.membership_id  →  FK مركّب نحو memberships (tenant_i
 | دور المصادقة | `authenticator` — حلّ الاعتمادات + سجل المحاولات (الكتابة الوحيدة)، DataSource منفصل (4.3) |
 | دور الشغل الخلفي | `job_runner` — قراءة `tenants` النشطة لبدء الـ fan-out فقط؛ المعالجة بسياق `app_user` لكل جهة (8) |
 | دور الترحيلات | `migrator` — مالك، migrations فقط، **BYPASSRLS واعٍ موثّق** (أدناه)؛ ويملك وحده كتابة الكتالوجات العامة (زرع modules/permissions) وإجراءات الأرشفة والتشذيب الموثّقة |
-| دور التهيئة | `provisioner` — **مساران عابران للعزل**: bootstrap + قبول الدعوات (4.4, 4.5) |
+| دور التهيئة | `provisioner` — **مساران عابران للعزل**: bootstrap + قبول الدعوات (4.4, 4.5). **(1.13) يضبط `app.tenant_id` على الجهة المستهدفة داخل معاملته** — جهة واحدة لكل معاملة (3.9) |
 | تنظيف الاتصال | تُعاد حالة الاتصال عند عودته للـ pool؛ لا يُعتمد على بقاء SET LOCAL وحده |
 | الفشل الآمن | بلا ضبط app.tenant_id → صفر صفوف (الشبكة الأخيرة — 3.5). وعلى المحور الثاني: بلا `app.scope_all` ولا `app.membership_id` → صفر صفوف كذلك (3.1). **(1.10) «بلا ضبط» تشمل المتغيّر الذي ضُبط في معاملة سابقة على نفس الاتصال وعاد `''` — مضمونة بـ `NULLIF` لا بتاريخ الاتصال (3.1، اختبار 27)** |
 
@@ -352,27 +440,45 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
 -- فحص 2 (manifest — عُدّل في 1.7): يُقيَّم على مجموعتَي الـ policies
 --   منفصلتين: المتساهلة (permissive) والمقيِّدة (restrictive).
 --   خارج الـ manifest:
---     - المتساهلة: policy وحيدة tenant_isolation نصّها يطابق القالب
---       المعياري مطابقة تامة (pg_get_expr بعد تطبيع المسافات).
+--     - المتساهلة: policy وحيدة tenant_isolation تطابق القالب
+--       المعياري **تفكيكاً بتفكيك** (أدناه — عُدّل في 1.11).
 --     - المقيِّدة: فارغة، أو client_scope وحدها بنصّها المعياري (3.1)
 --       — ووجودها إلزامي متى حمل الجدول scope_ref_id (فحص 8).
 --   داخل الـ manifest: مجموعة policies الواقع = مجموعة الـ manifest تماماً
 --     (بالاسم والأمر والأدوار والصنف permissive/restrictive والنصّ).
 --     ناقصة أو زائدة أو منحرفة = فشل.
+--   (1.11) آلية مقارنة النصّ — تفكيك بتفكيك لا نصّ بنصّ:
+--     pg_get_expr لا يعيد النصّ كما كُتب (يضيف ::text وأقواساً
+--     واسماً بديلاً)، فمطابقة نصّ الوثيقة تفشل على كل جدول صحيح.
+--     الفحص، بدور migrator داخل معاملة تُلغى في النهاية: لكل policy
+--     متوقّعة — من القالب أو من ملف الـ manifest — يُنشئ نسختها
+--     المرجعية باسم مؤقت على **نفس** الجدول، ويقارن pg_get_expr
+--     لـ qual وwith_check في الواقع بنظيريهما في المرجع. التفكيك
+--     مستقرّ (أُثبت)، ونفس الجدول يحلّ اسم الجدول داخل client_scope.
+--     الـ manifest يبقى نصّ SQL كما يُكتب — PostgreSQL يُنتج المرجع.
+--     (المعاملة تأخذ قفلاً حصرياً على الجدول: تُشغَّل في CI وعلى
+--      بيئة اختبار، لا على قاعدة إنتاج حيّة.)
 --   (الفصل بين المجموعتين جوهري لا شكلي: المتساهلة تُجمع بـ OR
 --    فتوسّع، والمقيِّدة بـ AND فتضيّق — خلطهما في فحص واحد يُخفي
 --    انقلاب المعنى. polpermissive في pg_policy هو الفاصل.)
 --   (1.10) وعلى كل policy في المخطط — داخل الـ manifest وخارجه:
 --     كل ظهور لـ current_setting في qual أو with_check يقع داخل
---     NULLIF(…, '') قبل أي تحويل. ظهور مجرّد = فشل. هذا يحرس
+--     NULLIF(…, '') قبل أي تحويل. ظهور مجرّد = فشل. (1.11: يُفحص على
+--     الصيغة المفكَّكة، حيث يأتي current_setting مباشرة بعد
+--     NULLIF( ويصير ''::text — لا على نصّ الوثيقة.) هذا يحرس
 --     policies الـ manifest التي لا يطابقها القالب نصّاً، حيث يسهل
 --     أن يُنسى الغلاف في policy جديدة.
 -- جداول الـ manifest بعد 1.8: audit_log, memberships, invitations,
 --   persons, users, membership_auth, user_password_credentials,
 --   tenants, auth_attempts, modules, permissions,
 --   membership_scope, scope_assignments (1.7 — سطوح إدارية خاصة),
---   roles (1.8 — عليه مقيِّدة system_role_guard ليست القالب الثاني).
---   (خرج منه membership_roles وrole_permissions — القالب القياسي يكفيهما.)
+--   roles (1.8، عُدّل 1.12 — عليه ثلاث مقيِّدات system_role_guard_*
+--   مفصولة بالأمر، ليست القالب الثاني).
+--   (1.13) عاد إليه membership_roles وrole_permissions، ودخله
+--   tenant_modules: كلٌّ منها بـ tenant_isolation **مسرودة صراحةً**
+--   مع policy الـ provisioner — داخل الـ manifest تُطلب المجموعة
+--   كاملة. ودخله الكتالوجان role_templates وrole_template_permissions.
+--   (وخرج منه في 1.6 membership_roles وrole_permissions، ثم عادا.)
 
 -- فحص 3: policies النواة المطلوبة موجودة كما في الـ manifest — جزء من
 --   تنفيذ فحص 2، يُذكر منفصلاً لأن غيابه = تسريب PII أو حجب دخول.
@@ -387,7 +493,10 @@ SELECT c.relname FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE c.relkind = 'r' AND n.nspname = 'public'
   AND (c.relrowsecurity = false OR c.relforcerowsecurity = false)
-  AND c.relname NOT IN (SELECT tbl FROM rls_exemptions);  -- فارغة
+  AND c.relname <> ALL ($1::text[]);  -- (1.13) $1 من ملف في المستودع، فارغ اليوم
+-- (1.13) قائمة الإعفاء **ملف في المستودع** كالـ manifest وجدول السلاسل،
+-- يُمرَّر للفحص كمُدخل — لا جدول rls_exemptions. الجدول كان سيقع في
+-- public فيحتاج RLS، ولا tenant_id له، ولا policy — فحص يعفي نفسه.
 
 -- فحص 6 (grants — اتسع في 1.8): لا يكفي role_table_grants وحده؛
 --   أسطح الصلاحيات في Postgres أوسع منه. يقارن السكربت بمصفوفة 3.8
@@ -402,7 +511,12 @@ WHERE c.relkind = 'r' AND n.nspname = 'public'
 --     - CONNECT و TEMP على قاعدة البيانات
 --     - عضوية الأدوار: لا دور تطبيقي عضو في migrator أو provisioner
 --       (يمنع SET ROLE — اختبار 22)
---   أخصّها يبقى: لا SELECT لـ app_user على user_password_credentials،
+--   أخصّها يبقى: لا SELECT لـ app_user على user_password_credentials
+--   — (1.11) ولا على أيٍّ من أعمدته منفرداً (column_privileges)،
+--   و(1.12) منح UPDATE عليه (password_hash, updated_at) بالضبط لا أكثر
+--   ولا أقل — أي عمود زائد أو ناقص = فشل، لأن
+--   منح عمود user_id «لإصلاح» تحديث بـ WHERE يحوّل الخطأ الصاخب إلى
+--   صفر صفوف صامت (3.8)،
 --   ولا UPDATE/DELETE لأي دور تطبيقي على audit_log، ولا كتابة لغير
 --   migrator على الكتالوجات العامة، ولا DELETE على scope_assignments.
 
@@ -414,15 +528,21 @@ WHERE c.relkind = 'r' AND n.nspname = 'public'
 
 -- فحص 8 (جديد في 1.7 — تغطية المحور الثاني): كل جدول يحمل عمود
 --   scope_ref_id عليه policy مقيِّدة اسمها client_scope، TO app_user،
---   نصّها يطابق القالب الثاني (3.1) مطابقة تامة. غيابها أو انحرافها
+--   تطابق القالب الثاني (3.1) تفكيكاً بتفكيك على نفس الجدول
+--   (آلية فحص 2 — 1.11). غيابها أو انحرافها
 --   = فشل. نفس منطق فحص 1، على المحور الجديد: التغطية افتراضاً.
 SELECT c.relname FROM pg_class c
 JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'scope_ref_id'
 WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
+  AND c.relname <> 'scope_assignments'   -- (1.14) الجدول الذي يقرؤه القالب
   AND NOT EXISTS (
     SELECT 1 FROM pg_policy p
     WHERE p.polrelid = c.oid AND p.polname = 'client_scope'
       AND p.polpermissive = false);
+-- (1.14) والشقّ العكسي: وجود client_scope على scope_assignments = فشل
+--   (تكرار لا نهائي 42P17 على كل جدول مُنطَّق) — حارس «الإصلاح» الخاطئ.
+SELECT polname FROM pg_policy
+WHERE polrelid = 'scope_assignments'::regclass AND polname = 'client_scope';
 
 -- فحص 9 (جديد في 1.7 — مصدر النطاق): سكربت ثابت على الكود يرفض أي
 --   قراءة لـ app.scope_all أو app.membership_id أو app.can_manage_scope
@@ -441,7 +561,15 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
 --   متقابلان (16‑أ تسريباً و16‑ب حجباً).
 --   المبرّر: خلل 1.7 كان سلسلة خطّية سليمة الشكل ومحجوبة الأثر —
 --   لا فحص من 1..9 يراه.
+--   (1.11) تفصيل تنفيذي أُثبت: pg_depend يسجّل جدول الـ policy
+--   نفسه كمرجع (deptype a، ومعه أعمدته)، فيُستثنى refobjid =
+--   polrelid من استخراج السلسلة — وإلا ظهرت كل policy كسلسلة
+--   إلى جدولها.
 ```
+
+**تصحيح 1.14 — فحص 8 كان يطالب بتكرار لا نهائي:** كما كُتب منذ 1.7، يطلب الفحص `client_scope` على كل جدول يحمل `scope_ref_id` — و`scope_assignments` يحمله (4.1). لكن القالب **يقرأ `scope_assignments` نفسه**، فوضعه عليه تكرار لا نهائي بالتعريف. أُثبت بالتشغيل على PostgreSQL 18.6: الفحص يُعلِّم جدولاً صحيحاً، وتلبيته حرفياً تجعل قراءة الإسناد ترمي `42P17: infinite recursion detected` — ولأن `client_scope` على **كل** جدول مُنطَّق يقرأ الإسناد، كان التكرار سيُفشل **كل قراءة على كل جدول مُنطَّق** من T5. والحلّ استثناء واحد **بنيوي**: الجدول الذي يقرؤه القالب لا يحمله. لا قائمة استثناءات، بل حقيقة عن القالب نفسه. ويُحرس من الاتجاهين: شقّ عكسي يُفشل الفحص إن وُجد القالب هناك، واختبار 16‑د يثبت أن قراءة الإسناد صحيحة بدونه.
+
+رُفض بديلان: (أ) قصر الفحص على ما خارج الـ manifest — كان سيُسقط «التغطية افتراضاً» عن فئة كاملة، فجدول manifest يحمل `scope_ref_id` ويُنسى قالبه في الواقع وفي الـ manifest معاً يمرّ بفحص 2 لأنهما متطابقان في النقص؛ و(ب) إعادة تسمية العمود — تغيير نموذج يمسّ 3.1 و4.1 و4.8، أكبر من المشكلة.
 
 **حدّ صريح على الفحص 10:** `pg_depend` يسجّل الجداول والدوال المشار إليها مباشرة في التعبير (1.9: أدقّ من تحليل النصّ ولا يحتاج parser)، لكنه لا يرى ما **تقرؤه** تلك الدالة أو الـ view من الداخل. لذلك يُمنع نصّاً ذكر view أو دالة غير `SECURITY INVOKER` داخل تعبير policy — استثناء واحد معلَن لا غير: دالة `SECURITY DEFINER` مخصّصة لحلّ الإسناد، إن اعتُمدت لاحقاً لكسر السلسلة أو لخفض تكلفتها (13).
 
@@ -466,7 +594,11 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
     يفشل على مستوى grant قبل policy.
 13. hashes محجوبة: SELECT على user_password_credentials بدور app_user
     → يفشل grant؛ وتغيير كلمة المرور (UPDATE بلا SELECT) يصيب صفاً
-    واحداً بالضبط.
+    واحداً بالضبط — (1.11) **بصيغة بلا WHERE ولا RETURNING**. ويحرس
+    الاختبار الاتجاه الآخر: نفس التحديث بـ WHERE user_id = … يفشل
+    **صاخباً** (SQLSTATE 42501 — 1.12: يُؤكَّد على الرمز لا على نصّ
+    الرسالة)، لا صفر صفوف. ظهور صفر صفوف بدل
+    الخطأ يعني أن أحداً منح SELECT على عمود = فشل (3.8، فحص 6).
 14. الكتابة الحرجة الصامتة: تحديث لصفّ غير مرئي → خطأ rows-affected
     لا نجاح صامت (3.5/5).
 15. (1.6) طبقة القيود: دعوة في الأمين بـ role_id من مان →
@@ -515,10 +647,16 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
     provisioner من دور تطبيقي → يفشل؛ ولا دور تطبيقي عضو فيهما
     (فحص 6). ومحاولة استخدام اتصال provisioner لمسار ثالث → تفشل
     بغياب المنح، لا بالمراجعة.
-23. (جديد 1.8) الدور النظامي محصّن من القاعدة: UPDATE أو DELETE
-    على دور is_system عبر SQL مباشر بدور app_user → يفشل بالـ policy
-    المقيِّدة؛ ورفع is_system من false إلى true على دور عادي → يفشل
-    بـ WITH CHECK (5). الاختبار عبر SQL لا عبر الـ API.
+23. (جديد 1.8، أُعيدت صياغته 1.12) الدور النظامي محصّن — بطبقتين:
+    أ. القاعدة (SQL مباشر بدور app_user): UPDATE أو DELETE على دور
+       is_system → **صفر صفوف والصفّ لم يُمسّ** (صامت — الشبكة
+       الأخيرة)؛ ورفع is_system من false إلى true، أو إدخال دور بـ
+       is_system = true → **خطأ** (WITH CHECK).
+    ب. الـ API: تعديل دور نظامي أو حذفه → **خطأ صريح** من حارس
+       rows-affected (3.5/5) — الصخب فوق.
+    ج. **والاتجاه المقابل (الحجب):** قراءة أدوار الجهة بدور app_user
+       تعيد الأدوار النظامية والخاصة معاً — غياب أيٍّ من owner/admin/
+       operator/viewer = فشل (5، 1.12). هذا الفرع كان سيكشف خطأ 1.8.
 24. (جديد 1.9) النطاق ليس صلاحية — الاتجاهان:
     أ. عضو بدور viewer ونطاق all (بلا core.scope.manage) → INSERT
        أو UPDATE على scope_assignments وUPDATE على membership_scope
@@ -545,6 +683,21 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
     الثالث — **ولا خطأ في أيٍّ منها**. ومثله بعد ROLLBACK بدل
     COMMIT. الاختبار يفشل على نصّ 1.9 — وهذا مقصود: هو الحالة
     التي فاتت الوثيقة تسع مراجعات.
+28. (جديد 1.13) [W] لا قيمة تولّدها القاعدة ولا EF، والنسيان صاخب —
+    بجانبين:
+    أ. القاعدة، ثلاثة استعلامات على الكتالوج، كلها فارغة على المخطط:
+       (1) لا atthasdef ولا attidentity ولا attgenerated على أي عمود
+           في public.
+       (2) كل عمود في مفتاح أساسي نوعه app_id
+           (pg_index.indisprimary، atttypid <> 'app_id'::regtype).
+       (3) كل timestamptz NOT NULL نوعه app_ts.
+       وكلٌّ منها يُرى يفشل مرة على جدول مزروع (DEFAULT، مفتاح uuid
+       عادي، طابع timestamptz عادي).
+    ب. النموذج: كل خاصية في كل كيان EF بـ ValueGenerated == Never.
+    ج. السلوك، بأوامر EF الفعلية: كيان جديد مفتاحه Guid.Empty →
+       23514 (app_id_check)؛ وطابع بقيمته الافتراضية → 23514
+       (app_ts_check)؛ ولا يُحفظ شيء. وصفر أوامر فيها RETURNING
+       في مسار bootstrap كاملاً.
 ```
 
 **حدّ صريح:** الاختبار يفحص ما خطر لكاتبه؛ أخطر الثغرات ما لم يخطر لأحد. **والوجه المقابل (1.8–1.9):** الخلل الذي فتح 1.8 كان اختباره (16‑ب) مكتوباً قبل وقوعه — الاختبار المكتوب لا يحمي ما لم يُشغَّل. سبع مراجعات كشفت ما لم يكن أي اختبار مكتوب ليكشفه — تسريباً (4)، وحجباً (5)، وغياب عملية (6)، وطبقة قيود كاملة (7). الاختبار شبكة أمان، لا بديل عن العين — ومن هنا قرار نقل العين إلى المواصفة والكود (رأس الوثيقة).
@@ -558,7 +711,7 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
 | tenants | SELECT | — | INSERT | SELECT |
 | persons | SELECT | — | **SELECT**، INSERT | — |
 | users | SELECT، UPDATE (أعمدة: last_login_at, language, theme فقط) | SELECT | **SELECT**، INSERT | — |
-| user_password_credentials | UPDATE (password_hash) **بلا SELECT** | SELECT | INSERT | — |
+| user_password_credentials | UPDATE (password_hash, updated_at — **1.12**) **بلا SELECT** | SELECT | INSERT | — |
 | memberships | SELECT، UPDATE (status) | — | **SELECT**، INSERT | — |
 | membership_roles | SELECT، INSERT، DELETE | — | INSERT | — |
 | membership_auth | SELECT | SELECT | INSERT | — |
@@ -567,18 +720,179 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
 | invitations | SELECT، INSERT، UPDATE (status) | — | SELECT، UPDATE (status) | — |
 | auth_attempts | — | SELECT، INSERT | — | — |
 | audit_log | SELECT (**بشرط `scope_all` — 1.9، القسم 7**)، INSERT — **لا UPDATE/DELETE لأي دور تطبيقي** | — | INSERT | — |
-| roles | SELECT، INSERT، UPDATE، DELETE (ضمن RLS؛ **والأدوار المزروعة is_system محصّنة بـ policy مقيِّدة من القاعدة — 1.8، القسم 5**) | — | SELECT | — |
-| role_permissions | SELECT، INSERT، DELETE | — | — | — |
+| roles | SELECT، INSERT، UPDATE، DELETE (ضمن RLS؛ **والأدوار المزروعة is_system محصّنة بـ policy مقيِّدة من القاعدة — 1.8، القسم 5**) | — | SELECT، **INSERT (1.13 — الأدوار الأساسية وحدها، bootstrap)** | — |
+| role_permissions | SELECT، INSERT، DELETE | — | **INSERT (1.13 — bootstrap)** | — |
 | tenant_modules | SELECT، UPDATE (is_active) | — | INSERT | — |
 | modules (كتالوج عام) | SELECT فقط — الكتابة لـ migrator (زرعاً) | — | SELECT | — |
 | permissions (كتالوج عام) | SELECT فقط — الكتابة لـ migrator (زرعاً) | — | SELECT | — |
+| role_templates (كتالوج عام — 1.13) | — | — | SELECT فقط — الكتابة لـ migrator (زرعاً) | — |
+| role_template_permissions (كتالوج عام — 1.13) | — | — | SELECT فقط — الكتابة لـ migrator (زرعاً) | — |
 | جداول الموديولات | SELECT، INSERT، UPDATE، DELETE (ضمن RLS) | — | — | — |
 
 **مبرّر SELECT الـ provisioner (تصحيح 1.6):** مسار قبول الدعوة يلزمه مطابقة بريد المدعو المصادَق ببريد الدعوة، وربط حساب موجود بدل إنشاء مكرر، وفحص `UNIQUE(tenant_id, user_id)` برسالة لائقة — كلها قراءات. القراءة العابرة مقبولة **على نفس السطح المحصور** الذي قُبلت كتابته العابرة؛ ما كان مرفوضاً هو إعلان مسار وحرمانه أدواته.
 
 **لماذا `scope_mode` جدولٌ لا عمود (تصحيح تصميمي في 1.7):** الوضع الطبيعي هو عمود `scope_mode` على `memberships`. وهو **خطأ تحت نموذج هذه الوثيقة** تحديداً: منح الأعمدة دورية لا policy‑ية (لا يمكن منح عمود لـ policy دون أخرى)، و`memberships` عليها `membership_self_leave` تتيح للعضو `UPDATE` على صفّه هو (4.5). فإضافة `scope_mode` لمنح `UPDATE` الخاص بـ `app_user` كانت ستفتح لكل عضو **ترقية نطاق نفسه من assigned إلى all بأمر واحد** — وما من policy تمنعه، لأن الصفّ صفّه والجهة جهته. الجدول المنفصل يفصل السطحين: `memberships.status` يبقى ذاتياً، و`membership_scope.scope_mode` سطح إداري بـ policy مقيِّدة تستثني عضوية الفاعل (4.8، اختبار 17).
 
-نقاط تصميم مسمّاة: **UPDATE بلا SELECT** على `user_password_credentials` مقصود وممكن في Postgres — تغيير الكلمة بلا قدرة أي كود تطبيقي على قراءة hash قط. **grants الأعمدة** على `users` تمنع مسار التحديث الذاتي من العبث بـ `person_id`/`user_type`/`status`. الكتالوجات العامة تحت RLS بpolicy قراءة + غياب grant كتابة — طبقتان حتى للعام.
+نقاط تصميم مسمّاة: **UPDATE بلا SELECT** على `user_password_credentials` مقصود وممكن في Postgres — تغيير الكلمة بلا قدرة أي كود تطبيقي على قراءة hash قط. **(1.11) بشرط أُثبت بالتشغيل:** الأمر يُكتب `UPDATE user_password_credentials SET password_hash = $1, updated_at = now()` **بلا `WHERE` ولا `RETURNING`**، والـ policy `password_self_update` هي ما يحدّد الصفّ. السبب: PostgreSQL يشترط `SELECT` على كل عمود يُقرأ في `WHERE`، فتحديث EF العادي (بتتبّع الكيان و`WHERE user_id = …`) يفشل بـ `permission denied`. والفخّ: منح `SELECT` على عمود `user_id` «لإصلاحه» يُخضع التحديث لسياسات `SELECT` أيضاً — ولا `SELECT` policy على الجدول — فيصير **صفر صفوف صامتاً**. لذلك: المسار أمر SQL خام لا تحديث EF متتبَّع، وهو كتابة حرجة يحرسها rows-affected = 1 (3.5/5)، وفحص 6 يمنع أي منح عمودي على الجدول، واختبار 13 يحرس الاتجاهين. **(1.12)** والأمر يكتب `updated_at` أيضاً، فمنح `UPDATE` في المصفوفة هو `(password_hash, updated_at)` بالضبط — نصّ 1.11 كان يناقض منحها `(password_hash)` وحده، وأُثبت بالتشغيل أنه يرمي `permission denied`. **grants الأعمدة** على `users` تمنع مسار التحديث الذاتي من العبث بـ `person_id`/`user_type`/`status`. الكتالوجات العامة تحت RLS بpolicy قراءة + غياب grant كتابة — طبقتان حتى للعام.
+
+### 3.9 نصوص الـ policies المكمّلة (جديد 1.13)
+
+**لماذا هذا القسم:** حتى 1.12 كانت الوثيقة تكتب 22 policy كاملة، بينما كل منح في مصفوفة 3.8 لدور غير `migrator` يحتاج policy للدور والأمر نفسيهما — وتحت `FORCE RLS` المنح بلا policy ميّت: قراءة تعيد صفر صفوف بصمت، وكتابة تُرفض. هذه الـ 32 تُكمل الصورة. كلها شُغّلت على PostgreSQL 18.6 في الاتجاهين (المسار المقصود ينجح، والممنوع يفشل)، والتشغيل بدونها أفشل 41 من 42 حالة مسار مقصود. النصّ أدناه هو النصّ المشغَّل حرفياً.
+
+**قاعدتان تحكمانها:**
+- `provisioner` **يضبط `app.tenant_id` على الجهة المستهدفة** داخل معاملته — الجديدة في bootstrap، أو جهة الدعوة عند القبول (4.5). سياساته على جداول الجهة `tenant_id = app.tenant_id`، فلا يكتب في جهتين داخل معاملة واحدة. وعلى الجداول العامة بلا `tenant_id` — `persons` و`users` و`user_password_credentials` والكتالوجان الجديدان — `true`: حمايتها الاتصال المنفصل والمنح والمساران المحصوران (4.4).
+- **لا سلاسل جديدة.** الوحيدة التي تقرأ جدولاً آخر `membership_auth_self_read → memberships`، المعلنة أصلاً في 4.6.
+
+```sql
+-- ===== provisioner — جداول الجهة (الجهة المستهدفة: app.tenant_id، 4.4) =====
+CREATE POLICY tenants_provisioner_insert ON tenants
+  FOR INSERT TO provisioner
+  WITH CHECK (id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY memberships_provisioner_select ON memberships
+  FOR SELECT TO provisioner
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY memberships_provisioner_insert ON memberships
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY membership_roles_provisioner_insert ON membership_roles
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY membership_auth_provisioner_insert ON membership_auth
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY membership_scope_provisioner_insert ON membership_scope
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY tenant_modules_provisioner_insert ON tenant_modules
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY roles_provisioner_select ON roles
+  FOR SELECT TO provisioner
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY roles_provisioner_insert ON roles
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+              AND is_system);
+
+CREATE POLICY role_permissions_provisioner_insert ON role_permissions
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY invitations_provisioner_select ON invitations
+  FOR SELECT TO provisioner
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY invitations_provisioner_update ON invitations
+  FOR UPDATE TO provisioner
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY audit_log_provisioner_insert ON audit_log
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+-- ===== provisioner — الجداول العامة (بلا tenant_id) =====
+CREATE POLICY persons_provisioner_select ON persons
+  FOR SELECT TO provisioner
+  USING (true);
+
+CREATE POLICY persons_provisioner_insert ON persons
+  FOR INSERT TO provisioner
+  WITH CHECK (true);
+
+CREATE POLICY users_provisioner_select ON users
+  FOR SELECT TO provisioner
+  USING (true);
+
+CREATE POLICY users_provisioner_insert ON users
+  FOR INSERT TO provisioner
+  WITH CHECK (true);
+
+CREATE POLICY user_password_credentials_provisioner_insert ON user_password_credentials
+  FOR INSERT TO provisioner
+  WITH CHECK (true);
+
+CREATE POLICY role_templates_provisioner_read ON role_templates
+  FOR SELECT TO provisioner
+  USING (true);
+
+CREATE POLICY role_template_permissions_provisioner_read ON role_template_permissions
+  FOR SELECT TO provisioner
+  USING (true);
+
+-- ===== authenticator — حلّ الدخول (4.3‑أ) =====
+CREATE POLICY users_authenticator_read ON users
+  FOR SELECT TO authenticator
+  USING (true);
+
+CREATE POLICY user_password_credentials_authenticator_read ON user_password_credentials
+  FOR SELECT TO authenticator
+  USING (true);
+
+CREATE POLICY membership_auth_authenticator_read ON membership_auth
+  FOR SELECT TO authenticator
+  USING (true);
+
+CREATE POLICY auth_attempts_authenticator_read ON auth_attempts
+  FOR SELECT TO authenticator
+  USING (true);
+
+CREATE POLICY auth_attempts_authenticator_insert ON auth_attempts
+  FOR INSERT TO authenticator
+  WITH CHECK (true);
+
+-- ===== app_user =====
+CREATE POLICY membership_auth_self_read ON membership_auth
+  FOR SELECT TO app_user
+  USING (EXISTS (
+    SELECT 1 FROM memberships m
+    WHERE m.id = membership_auth.membership_id
+      AND m.user_id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid)));
+
+CREATE POLICY invitations_tenant_read ON invitations
+  FOR SELECT TO app_user
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY invitations_insert ON invitations
+  FOR INSERT TO app_user
+  WITH CHECK (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND invited_by = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid)
+    AND (intended_scope_mode = 'assigned'
+         OR COALESCE((SELECT NULLIF(current_setting('app.can_manage_scope', true), '')::boolean), false)));
+
+CREATE POLICY invitations_tenant_update ON invitations
+  FOR UPDATE TO app_user
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY audit_log_insert ON audit_log
+  FOR INSERT TO app_user
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY modules_read ON modules
+  FOR SELECT TO app_user, provisioner
+  USING (true);
+
+CREATE POLICY permissions_read ON permissions
+  FOR SELECT TO app_user, provisioner
+  USING (true);
+```
+
+**ملاحظات على النصوص:**
+- `roles_provisioner_insert` مشروطة بـ `is_system`: `provisioner` لا يُنشئ إلا الأدوار الأساسية من القوالب، فلا يستطيع — ولو أخطأ الكود — إنشاء دور خاص عشوائي. و`system_role_guard_insert` مكتوبة `TO app_user` فلا تمنعه، وتبقى تمنع `app_user` كما هي.
+- `invitations_insert` تفرض بند المواصفة و **في القاعدة**: دعوة بنطاق `'all'` تتطلب `can_manage_scope` — امتداد قرار 1.9 (لا حماية تطبيقية وحدها لسطح حسّاس). ومعها `invited_by = app.user_id` (بند المواصفة د).
+- `modules_read` و`permissions_read` تسمّيان دورين في policy واحدة بـ `TO` صريح — صالح، ويمرّ بفحص 4.
+- تحديث صفّ جهة أخرى (`invitations_*_update`) يعطي **صفر صفوف** لا خطأ — «صامت تحت»، ومسارا القبول والإلغاء تحت حارس rows-affected.
+- **حُذفت** policy كانت 4.2 تذكرها: «رؤية بنطاق الجهة للأدمن» على `membership_auth`. القاعدة لا تملك متغيّر سياق يعبّر عن «أدمن»، فكانت ستُفتح لكل عضو في الجهة وهي تقول «أدمن» — نصّ يوهم بحماية غير موجودة أسوأ من غيابه، ولا مستهلك لها قبل SSO.
 
 ---
 
@@ -608,8 +922,14 @@ membership_roles(id, tenant_id, membership_id, role_id,   -- (1.6: tenant_id أ�
 invitations(id, tenant_id, email, role_id, token_hash,
             status,          -- pending | accepted | revoked | expired
             invited_by, expires_at, created_at,
+            intended_scope_mode,  -- (1.13) 'all' | 'assigned'، NOT NULL، بلا افتراضي
   FOREIGN KEY (tenant_id, role_id) REFERENCES roles (tenant_id, id))
+-- intended_scope_mode يُبنى مع المخطط (T2)، وسلوكه — التحقق عند الإنشاء
+-- والنسخ عند القبول — مع T4. التحقق في القاعدة أيضاً: invitations_insert (3.9).
 -- FK المركّب: دعوة بدور جهة أخرى مرفوضة من القاعدة (3.3, اختبار 15).
+
+tenants(id, name, status, created_at,          -- (1.13) كان بلا تعريف قط
+        CHECK (status IN ('active', 'suspended')))
 
 auth_attempts(id, username_entered, ip_address, succeeded, created_at)
 -- append-only؛ سياسة الاحتفاظ والتشذيب بند مواصفة (13).
@@ -657,7 +977,7 @@ membership_auth(
 
 عمر يدخل لعضويته في الأمين عبر Entra، ولمان عبر Google — نفس Person، تنفيذان خلف نفس الطبقة. الربط على العضوية هو ما يجعل SSO إضافةً لا تمزيقاً.
 
-**policies القراءة (سدّ عمى step-up):** رؤية ذاتية عبر `memberships.user_id = app.user_id`، ورؤية بنطاق الجهة النشطة للأدمن (إدارة SSO حين يأتي) — كلتاهما `FOR SELECT TO app_user` في الـ manifest، والسلسلة `membership_auth → memberships` خطية (قاعدة لا-دورة 4.6).
+**policies القراءة (سدّ عمى step-up):** رؤية ذاتية عبر `memberships.user_id = app.user_id` — `membership_auth_self_read` (3.9) — `FOR SELECT TO app_user` في الـ manifest. (1.13: حُذفت «الرؤية بنطاق الجهة للأدمن» — القاعدة لا تملك متغيّراً يعبّر عن «أدمن»، فكانت ستُفتح لكل عضو؛ تُضاف مع SSO بآلية تفرضه — 3.9.) والسلسلة `membership_auth → memberships` خطية (قاعدة لا-دورة 4.6).
 
 **ثمن الربط على العضوية — صريح:** تبديل الجهة النشطة إلى عضوية provider‑ها مختلف = **إعادة مصادقة (step-up)**. الجلسة تحمل مجموعة auth grants مستوفاة؛ التبديل إلى عضوية grant‑ها مستوفى فوري، وإلا يُطلب الدخول عبر provider‑ها. سلوك مقصود: جهة فرضت Entra لا تُدخَل بجلسة كلمة مرور.
 
@@ -694,7 +1014,10 @@ CREATE POLICY user_self_update ON users
   WITH CHECK (id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid));
 
 -- تغيير كلمة المرور — UPDATE بلا SELECT (3.8)، بعد تحقق الكلمة
--- الحالية عبر سطح authenticator.
+-- الحالية عبر سطح authenticator. (1.11) بأمر خام بلا WHERE ولا
+-- RETURNING — الـ policy أدناه هي التي تحدّد الصفّ (3.8):
+--   UPDATE user_password_credentials
+--      SET password_hash = $1, updated_at = now();
 CREATE POLICY password_self_update ON user_password_credentials
   FOR UPDATE TO app_user
   USING (user_id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid))
@@ -959,6 +1282,18 @@ roles(id, tenant_id, code, name_ar, name_en, is_system, is_active,
 role_permissions(id, tenant_id, role_id, permission_id,   -- (1.6: tenant_id أُضيف)
   FOREIGN KEY (tenant_id, role_id) REFERENCES roles (tenant_id, id))
 -- permission_id يبقى FK أحادياً — الكتالوج عام بلا جهة تُتَّسق.
+
+-- (1.13) قوالب الأدوار الأساسية — كتالوج عام يزرعه migrator:
+role_templates(id, code, name_ar, name_en)
+role_template_permissions(template_id, permission_id,
+  PRIMARY KEY (template_id, permission_id))   -- app_id — قاعدة الـ PK (2)
+-- provisioner يقرؤهما وحده وقت bootstrap، فيُنشئ أدوار الجهة الجديدة
+-- وصلاحياتها منهما (3.9). و migrator يرقّي أدوار الجهات القائمة منهما
+-- أيضاً — مصدر حقيقة واحد. بند المواصفة ن (core.scope.manage للمالك
+-- والمدير) صار بيانات في هذا الكتالوج.
+-- وإدخالات bootstrap المشتقة منهما (INSERT … SELECT) كتابات حرجة:
+-- بلا قراءة القوالب تُدرج صفر صفوف بلا خطأ — أُثبت بالتشغيل. عدد
+-- الأدوار المُنشأة = عدد القوالب، تحت حارس rows-affected (3.5/5).
 ```
 
 الموديول الجديد يضيف صلاحياته دون تعديل النواة. الأدوار الأساسية (owner/admin/operator/viewer) تُزرع لكل جهة بعلامة `is_system`. الفرض بصلاحية صريحة على كل نقطة، وكل شاشة تصل لبياناتها بنفس صلاحيتها (منح صلاحية شاشة أخرى لجلب بيانات = تسريب تنقّل).
@@ -966,13 +1301,27 @@ role_permissions(id, tenant_id, role_id, permission_id,   -- (1.6: tenant_id أ�
 **حماية الدور النظامي — انتقلت إلى القاعدة (1.8):** حتى 1.7 كانت `is_system` تُحمى **تطبيقياً**، وهو خرق لمبدأ الوثيقة نفسه: أي مسار يملك المنح ذاتها يتجاوز حماية طبقة التطبيق، ومصفوفة 3.8 تمنح `app_user` صلاحية `UPDATE` و`DELETE` على `roles`. الحلّ policy مقيِّدة واحدة تسدّ الاتجاهين معاً:
 
 ```sql
-CREATE POLICY system_role_guard ON roles
-  AS RESTRICTIVE FOR ALL TO app_user
-  USING (NOT is_system)        -- لا تعديل ولا حذف لدور نظامي
-  WITH CHECK (NOT is_system);  -- ولا ترقية دور عادي إلى نظامي
+-- (1.12) ثلاث مقيِّدات مفصولة بالأمر — لا FOR ALL (أدناه).
+CREATE POLICY system_role_guard_update ON roles
+  AS RESTRICTIVE FOR UPDATE TO app_user
+  USING (NOT is_system)         -- لا تعديل لدور نظامي
+  WITH CHECK (NOT is_system);   -- ولا ترقية دور عادي إلى نظامي
+
+CREATE POLICY system_role_guard_delete ON roles
+  AS RESTRICTIVE FOR DELETE TO app_user
+  USING (NOT is_system);        -- لا حذف لدور نظامي
+
+CREATE POLICY system_role_guard_insert ON roles
+  AS RESTRICTIVE FOR INSERT TO app_user
+  WITH CHECK (NOT is_system);   -- ولا إدخال دور بعلامة نظامية
+-- SELECT متروك لـ tenant_isolation وحده: الأدوار المزروعة مرئية.
 ```
 
-`USING` تحمي الصفّ القائم، و`WITH CHECK` تحمي القيمة الناتجة — فالمسارَان (العبث بدور مزروع، وزرع دور جديد بعلامة نظامية) يُسدّان بقيد واحد. والزرع نفسه لـ `migrator` (3.8)، وهو خارج نطاق الـ policy لأنها `TO app_user`. اختبار 23 يفحصها **عبر SQL مباشر لا عبر الـ API** — وإلا لاختُبرت طبقة التطبيق مرة أخرى. و`roles` يدخل الـ manifest بهذه المقيِّدة (3.6 فحص 2)، لأنها ليست القالب الثاني.
+`USING` تحمي الصفّ القائم، و`WITH CHECK` تحمي القيمة الناتجة — فالمسارات الثلاثة (العبث بدور مزروع، وحذفه، وزرع دور جديد بعلامة نظامية) مسدودة. والزرع نفسه لـ `migrator` (3.8)، وهو خارج نطاق الـ policies لأنها `TO app_user`. و`roles` يدخل الـ manifest بهذه المقيِّدات الثلاث (3.6 فحص 2)، لأنها ليست القالب الثاني.
+
+**تصحيح 1.12 — `FOR ALL` كانت تُخفي الأدوار الأساسية عن القراءة:** صياغة 1.8 كانت policy واحدة `AS RESTRICTIVE FOR ALL`. و`FOR ALL` تطبّق `USING` على `SELECT` أيضاً — فصار `NOT is_system` شرطاً على **القراءة**، واختفت `owner` و`admin` و`operator` و`viewer` من منظور `app_user` كلياً. أُثبت بالتشغيل: قائمة أدوار جهة فيها دوران نظاميان ودور خاص تعيد الخاص وحده. فقائمة الأدوار، واسم دور العضو، واختيار دور للدعوة — كلها كانت ستفقد الأدوار الأساسية بلا أثر. **حجب صامت** بلا أي مبرّر: القسم قصد «لا تعديل ولا حذف»، لا «لا قراءة». وهو **الخطأ نفسه** الذي أصلحته 1.8 في `scope_assignments` (سياسة `FOR ALL` تحجب القراءة من غير قصد)، مكتوباً في 1.8 نفسها في قسم آخر. فأُضيفت قاعدة عامة في 3.1.
+
+**وسلوك الحماية — صامت تحت، صاخب فوق (1.12):** تعديل دور نظامي أو حذفه بـ SQL مباشر يعطي **صفر صفوف والصفّ لم يُمسّ** — لا خطأ. هذا صحيح بمبدأ الوثيقة: القاعدة تحمي بصمت كشبكة أخيرة. والصخب في الطبقة فوقها: تعديل الأدوار وحذفها **كتابة حرجة** بحارس rows-affected (3.5/5)، فالـ API يرمي خطأً صريحاً. أما الإدخال والترقية فيفشلان صاخبين من القاعدة نفسها (`WITH CHECK` يرمي). اختبار 23 أُعيدت صياغته ليحرس الطبقتين — لا آلية جديدة (trigger) لجعل القاعدة صاخبة.
 
 **أثر جانبي مقصود:** الجهة لا تستطيع تعديل أدوارها المزروعة، فتُنشئ أدواراً خاصة بها بدل تحوير الأساسية. هذا يجعل ترقية تعريفات الأدوار الأساسية عبر الترحيلات آمنة — ما كان ممكناً حين يجوز للجهات تحويرها.
 
@@ -1036,7 +1385,7 @@ audit_log(id, tenant_id, actor_id, actor_type, action,
 
 **ملاحظة تنفيذ ملزمة:** لحظة `SavingChanges` الـ ids المولّدة للكيانات الجديدة غير موجودة بعد. الحل: حفظ ثانٍ لصفوف التدقيق داخل نفس المعاملة (بعد توليد الـ ids)، مع حارس ضد recursion — علم يمنع المُعترِض من اعتراض حفظ التدقيق نفسه.
 
-**الكتّاب ثلاثة، بpolicies صريحة في الـ manifest:** `app_user` (بـ `WITH CHECK (tenant_id = app.tenant_id)`)، و`provisioner` (سجلا المسارين)، والشغل الخلفي يمرّ مرور `app_user` في سياق كل جهة. لا كاتب رابع.
+**الكتّاب ثلاثة، بpolicies صريحة في الـ manifest:** `app_user` (بـ `WITH CHECK (tenant_id = app.tenant_id)`)، و`provisioner` (سجلا المسارين)، والشغل الخلفي يمرّ مرور `app_user` في سياق كل جهة. لا كاتب رابع. (1.13: نصّا سياستَي الكتابة — `audit_log_insert` و`audit_log_provisioner_insert` — في 3.9.)
 
 **القرّاء — سياسة القراءة مكتوبة (1.9):** حتى 1.8 كانت قراءة السجل بنطاق الجهة، ومؤجَّلة كبند مواصفة بصيغة «القرار المرجَّح». وكان ذلك تقديراً خاطئاً للخطورة: السجل يحمل `old_value` و`new_value`، فالعضو `assigned` كان يقرأ **محتوى** تعديلات كيانات غير مُسنَدة إليه — ثغرة تُبطل ضمان المحور الثاني لا تفصيل تنفيذي. فحُسمت هنا:
 
@@ -1127,6 +1476,12 @@ CREATE POLICY audit_read ON audit_log
 
 ## 11. التقدير الصادق — من البرهان إلى المنتج
 
+**أثر 1.13 على التقدير:** أكبر نسخة نصّاً منذ 1.7 — 32 policy، وجدولان، ونوعا domain، واختبار — لكنها أول نسخة كُتبت **كلها** من نصّ مشغَّل قبل دخوله الوثيقة: 108 حالة SQL في الاتجاهين، ومسار EF حقيقي. ومن تسع قرارات حسمها صاحب المشروع في هذه النسخة، ثلاثة لم تكن لتُرى إلا بالتشغيل: `RETURNING`، والنسيان الصامت في EF، والإدراج الصامت من القوالب. **كلها في المسافة بين ما يقوله SQL وما يرسله الإطار فعلاً.**
+
+**أثر 1.12 على التقدير:** دقائق نصّاً، ولم يُبنَ شيء بعد. والملاحظ أن الخطأين **كتبتهما الوثيقة وهي تُصلح** — 1.8 وهي تُصلح `scope_assignments`، و1.11 وهي تُصلح شرط `WHERE`. الإصلاح نصّ جديد، والنصّ الجديد غير مُشغَّل. فالإجراء في 13 يسري على **تعديلات الوثيقة نفسها** أيضاً: كل policy أو أمر SQL يُضاف في نسخة جديدة يُشغَّل بمعزل قبل أن يُبنى عليه.
+
+**أثر 1.11 على التقدير:** ساعات، ولم يُكتب سطر T2 بعد — وهذا بيت القصيد: لو بُني T2 على الافتراض الأول، لكان فحصا 2 و8 أحمرين على كل جدول منذ أول تشغيل، وأقرب «إصلاح» تحت الضغط هو تخفيف المطابقة — أي تعطيل الفحص الذي يحرس القوالب. ولو بُني على الثاني، لكان أقرب «إصلاح» لخطأ الصلاحية هو منح عمود — أي الفخّ الصامت. **الافتراض غير المُختبَر لا يكلّف حين يُكتشف، بل حين يُصلَح على عجل.**
+
 **أثر 1.10 على التقدير:** ساعة — استبدال آلي في 33 موضعاً، وأربعة نصوص مكتوبة، واختبار. الثمن ليس في الحجم بل في التوقيت: لو اكتُشف بعد T2، لكان كل جدول مبنياً بنصّ قالب خاطئ، وفحص 2 يطابقه حرفياً فلا يرى الخطأ — يتقاطع هنا مع درس 1.8: **الفحص الذي يطابق القالب نصّاً يحرس القالب، لا صحّته.**
 
 **أثر 1.9 على التقدير:** ساعات إلى يوم: متغيّر سياق ثالث، وخطوة حلّ، وأربع سياسات تبدّل شرطها، وسياسة قراءة للسجل، وثلاثة اختبارات. الثمن الحقيقي في 1.9 ليس كوداً بل **قرار التوقّف**: لا نسخة 1.10 من مراجعة نصّ (13).
@@ -1158,6 +1513,15 @@ CREATE POLICY audit_read ON audit_log
 
 | الخطر | الحال |
 |---|---|
+| **فحص 8 يطالب بـ `client_scope` على الجدول الذي يقرؤه القالب — تكرار لا نهائي يُفشل كل جدول مُنطَّق** | **سُدّ في 1.14** — استثناء بنيوي + شقّ عكسي حارس + اختبار 16‑د (3.6) |
+| **منح بلا policy تحت FORCE RLS — ميّت: صفر صفوف صامت أو رفض** (مسار الدخول والخطوة ج منها) | **سُدّ في 1.13** — 32 policy مكتوبة ومشغّلة في الاتجاهين (3.9) |
+| **bootstrap لا يستطيع إنشاء أدوار الجهة الجديدة** | **سُدّ في 1.13** — `provisioner` من قوالب عامة، مشروطاً بـ `is_system`، وإدخالاته كتابات حرجة (3.9، 5) |
+| **`RETURNING` يُرفض على ما لا يقرؤه الدور — ومنه كل كتابة لعضو `assigned` عبر التدقيق** | **سُدّ في 1.13** — لا `RETURNING` ولا قيم مولّدة في القاعدة + اختبار 28 (2) |
+| **EF ينسى المفتاح والطابع بصمت (`Guid.Empty`، السنة 1)** | **سُدّ في 1.13** — `app_id` و`app_ts` في طبقة القيود + اختبار 28 ج (2) |
+| **مقيِّدة `FOR ALL` تحرس الكتابة فتُخفي القراءة بلا قصد** (تكرّر مرتين: 1.7 و1.8) | **سُدّ في 1.12** — تقسيم `system_role_guard` حسب الأمر + قاعدة عامة في 3.1 + فرع الحجب في اختبار 23 (5) |
+| **أمر كلمة المرور يكتب عموداً لا يملك منحه** | **سُدّ في 1.12** — المنح `(password_hash, updated_at)` بالضبط، وفحص 6 يفرض المطابقة التامة (3.8) |
+| **فحصا 2 و8 يطابقان نصّ الوثيقة، وpg_get_expr يعيد صيغة مفكّكة مختلفة — فيفشلان على كل جدول صحيح** | **سُدّ في 1.11** — مقارنة تفكيك بتفكيك على نفس الجدول داخل معاملة تُلغى (3.6) |
+| **تغيير كلمة المرور بتحديث EF عادي يفشل؛ و«إصلاحه» بمنح عمود يحوّله صفر صفوف صامتاً** | **سُدّ في 1.11** — الشرط مكتوب (بلا WHERE ولا RETURNING)، وفحص 6 يمنع المنح العمودي، واختبار 13 يحرس الاتجاهين (3.8، 4.3) |
 | **المتغيّر المخصّص يعود `''` لا `NULL` بعد أول ضبط، فيرمي التحويل على الاتصالات المُعادة** | **سُدّ في 1.10** — `NULLIF` حول كل متغيّر سياق في 33 موضعاً + فرضه في فحص 2 + اختبار 27. **اكتُشف بتشغيل الكود لا بمراجعة** (الرأس، 3.1) |
 | **مواضع مُضمرة في النصّ («نفس التعبير»، «policy مماثلة») يبنيها T2 حرفياً** | **سُدّ في 1.10** — كُتبت الأربعة نصّاً. أي نصّ مُضمر في policy هو نصّ لن يطابقه فحص 2 (3.1، 4.6، 4.8) |
 | **سلسلة policies محجوبة تُبطل آليةً كاملة بصمت** | **سُدّ في 1.8** — فصل سياسات `scope_assignments`، وجدول سلاسل معلَن بفاعله، وفحص 10، واختبار 16‑ب/د (1, 4.6, 4.8) |
@@ -1213,6 +1577,8 @@ CREATE POLICY audit_read ON audit_log
 
 **وقاعدة إعادة الفتح (1.7، اتسعت في 1.8، وأُغلقت في 1.9 — انظر الدرس أدناه):** تُفتح الوثيقة لتغيير في **النموذج**، أو لـ**خلل يُبطل آليةً قائمة فيه** — لا لتصحيح في **النصّ**. 1.7 استوفت الشرط الأول (محور نطاق جديد)، و1.8 الثاني (سلسلة محجوبة عطّلت ذلك المحور بالكامل). ما لا يستوفي أحدهما يبقى في المواصفة أو الكود.
 
+**درس إجرائي من 1.11 — الإجراء صار ثابتاً:** ثلاثة افتراضات عن المحرّك في يومين، كلها بدت بديهية، وكلها وُجدت بتشغيل. فالاختبار بمعزل لكل سلوك محرّك تفترضه الوثيقة **خطوة أولى إلزامية في كل مهمة من PROOF_SPEC**، قبل الكود — لا ردّ فعل حين يصادف المنفّذ شيئاً غريباً. وقاعدة إعادة الفتح كما هي: 1.11 فُتحت باكتشافين أثبتهما التشغيل، لا بمراجعة.
+
 **درس إجرائي من 1.10 — القاعدة عملت كما صُمّمت:** قرار 1.9 قال إن الصنف التالي من الأخطاء لا يُرى إلا بتشغيل الكود. أول ما شُغّل — قبل سطر كود واحد في T1، باختبار لسلوك تفترضه الوثيقة — وُجد خطأ لم تجده تسع مراجعات. هذا لا يفتح الباب لمراجعة نصّية عاشرة؛ يؤكد العكس. **قاعدة إعادة الفتح تبقى كما هي**، و1.10 أول تطبيق لها لا استثناء منها. والإجراء الذي أنتج الاكتشاف يُعمَّم: **قبل البناء على أي سلوك للمحرّك تفترضه الوثيقة، يُختبر بمعزل.**
 
 **درس إجرائي من 1.9 — وهو سبب التوقّف:** المراجعة التاسعة وجدت أربعة، ثلاثة منها **أدخلتها الإصدارات 1.7–1.8 نفسها**، وأحدها داخل إصلاح 1.8 (تضييق قراءة `membership_scope` ولّد دجاجة وبيضة الحلّ). كل تضييق نصّي أنشأ سلسلة تبعية لم تكن موجودة، والمراجعة التالية وجدتها — دورة لا تتقارب بالقراءة. **هذا الإصدار آخر نسخة نصّية.** أي اكتشاف قادم — مهما بدا نموذجياً — يُحسم بتشغيل الاختبارات الـ 26 على كود حقيقي أولاً؛ ولا تُفتح الوثيقة إلا لاكتشاف **ينجو من الاختبارات ويُثبته الكود**، لا لاكتشاف في النصّ.
@@ -1221,7 +1587,7 @@ CREATE POLICY audit_read ON audit_log
 
 **ترتيب الإلزام قبل T0 (1.7، حُدّث 1.8):** متغيّرا السياق الجديدان وجدول `membership_scope` **شرط مسبق** لا إضافة لاحقة — طبقة المعاملة و`provisioner` يُبنيان مرة واحدة، وإدخال متغيّر سياق أو حقل ذرّي بعد بنائهما ترحيل يمسّ كل مسار. ويلحق بهما في 1.8: **حلّ النطاق لكل معاملة** (قرار في طبقة المعاملة نفسها)، **وعقد إعلان النطاق** (يُكتب في عقد أول نقطة تجميعية وإلا انتشر الخطأ في كل نقطة بعدها). أما القالب المقيِّد وفحوص 8 و9 و10 فيكفي أن تُكتب مع أول جدول حامل `scope_ref_id` — وفحص 10 قبل أي policy جديدة تقرأ جدولاً.
 
-**1. مواصفة البرهان الأنحف** كمهام كودكس، مرتّبة: مسار الدخول واختيار الجهة أولاً — **وفيه حلّ المحور الثاني بالترتيب الملزم الثلاثي (3.5/6)، واختباره 26 قبل أي شيء بعده** — ثم دورة دعوة–قبول كاملة، ثم الرؤية الموحّدة بدمج المؤشرات، ثم العزل العدائي (الاختبارات السبعة والعشرون + فحوص CI العشرة)، ثم الهوية والـ bootstrap وطبقة auth، ثم شاشة الاشتراكات المصغّرة.
+**1. مواصفة البرهان الأنحف** كمهام كودكس، مرتّبة: مسار الدخول واختيار الجهة أولاً — **وفيه حلّ المحور الثاني بالترتيب الملزم الثلاثي (3.5/6)، واختباره 26 قبل أي شيء بعده** — ثم دورة دعوة–قبول كاملة، ثم الرؤية الموحّدة بدمج المؤشرات، ثم العزل العدائي (الاختبارات الثمانية والعشرون + فحوص CI العشرة)، ثم الهوية والـ bootstrap وطبقة auth، ثم شاشة الاشتراكات المصغّرة.
 
 **2. بنود منقولة من الوثيقة إلى أول بنود المواصفة (لا إلى نسخة جديدة):**
 
@@ -1275,7 +1641,66 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق أ — سجل ما تغيّر من 1.9 إلى 1.10
+## ملحق أ — سجل ما تغيّر من 1.13 إلى 1.14
+
+| البند | 1.13 | 1.14 |
+|---|---|---|
+| فحص 8 | كل جدول يحمل `scope_ref_id` — ومنه `scope_assignments` نفسه: تكرار لا نهائي | **كل جدول عدا الذي يقرؤه القالب، + شقّ عكسي يُفشل وجود القالب عليه** (3.6) |
+
+**ما لم يتغيّر:** كل ما سواه.
+
+---
+
+## ملحق ب — سجل ما تغيّر من 1.12 إلى 1.13
+
+| البند | 1.12 | 1.13 |
+|---|---|---|
+| policies الأدوار غير `app_user` | 22 مكتوبة، والمنح الباقية ميّتة | **+32 مكتوبة ومشغّلة (3.9)** |
+| `provisioner` | بلا نطاق جهة | **يضبط `app.tenant_id` على الجهة المستهدفة؛ جهة واحدة لكل معاملة** (3.4، 3.9) |
+| bootstrap | مستحيل — لا من يُنشئ أدوار جهة جديدة | **من كتالوج `role_templates` عام، بإدخال مشروط بـ `is_system`** (5، 3.9) |
+| المفاتيح والطوابع | `uuidv7` في القاعدة | **من التطبيق؛ لا `DEFAULT` ولا `RETURNING`؛ `app_id` و`app_ts`** (2) |
+| `rls_exemptions` | جدول في public (يحتاج RLS ولا tenant_id له) | **ملف في المستودع** (3.6، فحص 5) |
+| `tenants` | بلا تعريف | **معرَّف** (4.1) |
+| `invitations.intended_scope_mode` | في المواصفة وحدها | **في المخطط، ومفروض في القاعدة** (4.1، 3.9) |
+| `membership_auth` | ذاتية + «للأدمن» بلا فرض | **ذاتية وحدها** (4.2) |
+| الـ manifest | — | **+ membership_roles وrole_permissions وtenant_modules بـ tenant_isolation مسرودة، + الكتالوجان** (3.6) |
+| الاختبار العدائي | 27 | **28 — لا قيم مولّدة، والنسيان صاخب** (3.7) |
+
+**ما لم يتغيّر:** النموذج، والطبقات الثلاث، وكل policy في 1.12. 1.13 تكملة لما لم يُكتب، لا تعديل لما كُتب.
+
+---
+
+## ملحق ج — سجل ما تغيّر من 1.11 إلى 1.12
+
+| البند | 1.11 | 1.12 |
+|---|---|---|
+| منح `UPDATE` على `user_password_credentials` | `(password_hash)` — يناقض أمر 1.11 | **`(password_hash, updated_at)`**، وفحص 6 يفرض المطابقة التامة (3.8) |
+| رسالة خطأ صيغة `WHERE` | `permission denied for column user_id` | **`permission denied for table …` — الاختبار على SQLSTATE `42501`** |
+| `system_role_guard` | مقيِّدة واحدة `FOR ALL` — تُخفي الأدوار الأساسية عن القراءة | **ثلاث مقيِّدات حسب الأمر؛ القراءة لـ `tenant_isolation`** (5) |
+| اختبار 23 | «يفشل» | **القاعدة صامتة (صفر صفوف والصفّ سليم)، والـ API صاخب (rows-affected)، + فرع الحجب** (3.7) |
+| مقيِّدات `FOR ALL` | بلا قاعدة | **فقط حين يكون تضييق القراءة مقصوداً** (3.1) |
+
+**ما لم يتغيّر:** النموذج والطبقات الثلاث. 1.12 تصحيح لتعارضين داخل النصّ.
+
+---
+
+## ملحق د — سجل ما تغيّر من 1.10 إلى 1.11
+
+| البند | 1.10 | 1.11 |
+|---|---|---|
+| مطابقة الـ policies في فحصي 2 و8 | نصّ الوثيقة بعد تطبيع المسافات — يفشل على كل جدول صحيح | **تفكيك بتفكيك**: مرجع يُنشأ على نفس الجدول داخل معاملة تُلغى (3.6) |
+| قاعدة `NULLIF` في فحص 2 | على النصّ | **على الصيغة المفكّكة** (3.6) |
+| فحص 10 | `pg_depend` | **+ استثناء `refobjid = polrelid`** (3.6) |
+| تغيير كلمة المرور | «UPDATE بلا SELECT» بلا شرط | **بلا `WHERE` ولا `RETURNING`، أمر خام لا تحديث EF** (3.8، 4.3) |
+| فحص 6 على `user_password_credentials` | لا `SELECT` على الجدول | **+ لا `SELECT` على أي عمود منفرداً** (3.6) |
+| اختبار 13 | صفّ واحد بالضبط | **+ الصيغة بـ `WHERE` تفشل صاخبةً لا صامتة** (3.7) |
+| الاختبار بمعزل قبل البناء | ردّ فعل | **خطوة أولى إلزامية في كل مهمة** (13) |
+
+**ما لم يتغيّر:** النموذج، والطبقات الثلاث، ونصوص كل الـ policies. 1.11 تصحيح لطريقة فحصها ولشرط تنفيذ واحد.
+
+---
+
+## ملحق هـ — سجل ما تغيّر من 1.9 إلى 1.10
 
 | البند | 1.9 | 1.10 |
 |---|---|---|
@@ -1291,7 +1716,7 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق ب — سجل ما تغيّر من 1.8 إلى 1.9
+## ملحق و — سجل ما تغيّر من 1.8 إلى 1.9
 
 | البند | 1.8 | 1.9 |
 |---|---|---|
@@ -1310,7 +1735,7 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق ج — سجل ما تغيّر من 1.7 إلى 1.8
+## ملحق ز — سجل ما تغيّر من 1.7 إلى 1.8
 
 | البند | 1.7 | 1.8 |
 |---|---|---|
@@ -1335,7 +1760,7 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق د — سجل ما تغيّر من 1.6 إلى 1.7
+## ملحق ح — سجل ما تغيّر من 1.6 إلى 1.7
 
 | البند | 1.6 | 1.7 |
 |---|---|---|
@@ -1358,7 +1783,7 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق هـ — سجل ما تغيّر من 1.5 إلى 1.6
+## ملحق ط — سجل ما تغيّر من 1.5 إلى 1.6
 
 | البند | 1.5 | 1.6 |
 |---|---|---|

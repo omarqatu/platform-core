@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- One SQL file per schema layer, run by the migration of the same number. -->
+    <EmbeddedResource Include="Sql\*.sql" />
   </ItemGroup>
 
 </Project>
