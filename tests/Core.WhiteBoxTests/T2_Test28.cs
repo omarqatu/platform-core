@@ -170,10 +170,10 @@ public class T2_Test28(WhiteBoxFixture fixture)
     {
         await using var dataSource = fixture.CreateAppUserDataSource();
         await using var db = WhiteBoxFixture.Context(dataSource);
+        // (T3) A real member of W1 with mode 'all': app.scope_all comes from resolution, never set by hand (rule 6).
         var error = await Assert.ThrowsAnyAsync<Exception>(() =>
-            UnitOfWork.RunAsync(db, new SessionContext(Guid.CreateVersion7(), fixture.W1), async (context, ct) =>
+            UnitOfWork.RunAsync(db, new SessionContext(fixture.W1User, fixture.W1), async (context, ct) =>
             {
-                await context.Database.ExecuteSqlRawAsync("SET LOCAL app.scope_all = 'true'", ct);
                 context.AuditLog.Add(entry);
                 await context.SaveChangesAsync(ct);
             }));

@@ -165,6 +165,8 @@ public class T1_TransactionLayerTests(WhiteBoxFixture fixture)
     }
 
     // ---- T1 build — variables: independent SET LOCAL statements, app.user_id then app.tenant_id.
+    // (T3, decided by the project owner) then the three second-axis variables in the order of 3.5/6 —
+    // exactly five SET LOCAL, in that order, for a real member of W1.
 
     [Fact]
     public async Task UnitOfWork_SetsUserThenTenant_AsSeparateStatements_BeforeAnyAccess()
@@ -172,17 +174,25 @@ public class T1_TransactionLayerTests(WhiteBoxFixture fixture)
         await using var dataSource = fixture.CreateAppUserDataSource();
         var recorder = new CommandRecorder();
         await using var db = WhiteBoxFixture.Context(dataSource, recorder);
-        var userId = Guid.CreateVersion7();
+        var userId = fixture.W1User;
 
         var (user, tenant) = await UnitOfWork.RunAsync(db, new SessionContext(userId, fixture.W1), async (context, ct) =>
             (await SettingAsync(context, "app.user_id", ct), await SettingAsync(context, "app.tenant_id", ct)));
 
         Assert.Equal(userId.ToString(), user);
         Assert.Equal(fixture.W1.ToString(), tenant);
-        var commands = recorder.Commands;
-        Assert.Equal($"SET LOCAL app.user_id = '{userId}'", commands[0]);
-        Assert.Equal($"SET LOCAL app.tenant_id = '{fixture.W1}'", commands[1]);
-        Assert.All(commands.Skip(2), text => Assert.DoesNotContain("SET LOCAL", text));
+        var setLocals = recorder.Commands.Where(text => text.Contains("SET LOCAL")).ToList();
+        Assert.Equal(5, setLocals.Count);
+        Assert.Equal($"SET LOCAL app.user_id = '{userId}'", setLocals[0]);
+        Assert.Equal($"SET LOCAL app.tenant_id = '{fixture.W1}'", setLocals[1]);
+        Assert.Equal($"SET LOCAL app.membership_id = '{fixture.W1Membership}'", setLocals[2]);
+        Assert.Equal("SET LOCAL app.scope_all = 'true'", setLocals[3]);
+        Assert.Equal("SET LOCAL app.can_manage_scope = 'false'", setLocals[4]);
+        // user and tenant first; all five before the work's first access.
+        var commands = recorder.Commands.ToList();
+        Assert.Equal(commands[0], setLocals[0]);
+        Assert.Equal(commands[1], setLocals[1]);
+        Assert.True(commands.IndexOf(setLocals[4]) < commands.FindIndex(text => text.Contains("current_setting")));
     }
 
     [Fact]
@@ -246,15 +256,16 @@ public class T1_TransactionLayerTests(WhiteBoxFixture fixture)
             new ParallelOptions { MaxDegreeOfParallelism = 32 },
             async (i, ct) =>
             {
-                var (tenant, expectedRows) = (i % 3) switch
+                // (T3) Each tenant's real member: the unit of work resolves the second axis for them.
+                var (user, tenant, expectedRows) = (i % 3) switch
                 {
-                    0 => ((Guid?)fixture.W1, WhiteBoxFixture.W1CustomRoles + 1),
-                    1 => (fixture.W2, WhiteBoxFixture.W2CustomRoles),
-                    _ => (null, 0),
+                    0 => (fixture.W1User, (Guid?)fixture.W1, WhiteBoxFixture.W1CustomRoles + 1),
+                    1 => (fixture.W2User, fixture.W2, WhiteBoxFixture.W2CustomRoles),
+                    _ => (Guid.CreateVersion7(), null, 0),
                 };
 
                 await using var db = WhiteBoxFixture.Context(dataSource);
-                var visible = await UnitOfWork.RunAsync(db, new SessionContext(Guid.CreateVersion7(), tenant),
+                var visible = await UnitOfWork.RunAsync(db, new SessionContext(user, tenant),
                     (context, token) => context.Roles.Select(r => r.TenantId).ToListAsync(token), ct);
 
                 if (visible.Count != expectedRows || visible.Any(t => t != tenant))

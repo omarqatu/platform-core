@@ -20,7 +20,8 @@ public class T3_Test26(WhiteBoxFixture fixture)
     };
 
     // Resolution with a single join query, before app.membership_id is set → zero rows, so Rule 7 throws:
-    // the failure is loud, not a silent default.
+    // the failure is loud, not a silent default. The transaction is opened by hand with app.user_id and
+    // app.tenant_id only — the state before step a — since the unit of work itself now resolves in order.
     [Theory]
     [MemberData(nameof(Usernames))]
     public async Task Test26_SingleJoin_BeforeMembershipId_ReturnsZero_AndRule7IsLoud(string username)
@@ -28,21 +29,24 @@ public class T3_Test26(WhiteBoxFixture fixture)
         var (user, tenant) = await UserAndAlAminAsync(username);
         await using var dataSource = fixture.CreateAppUserDataSource();
         await using var db = WhiteBoxFixture.Context(dataSource);
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlAsync($"SELECT set_config('app.user_id', {user.ToString("D")}, true)");
+        await db.Database.ExecuteSqlAsync($"SELECT set_config('app.tenant_id', {tenant.ToString("D")}, true)");
 
-        var rows = await UnitOfWork.RunAsync(db, new SessionContext(user, tenant), (c, ct) =>
-            (from m in c.Memberships
-             join s in c.MembershipScopes on m.Id equals s.MembershipId
+        var rows = await ((from m in db.Memberships
+             join s in db.MembershipScopes on m.Id equals s.MembershipId
              where m.UserId == user && m.TenantId == tenant
              select new
              {
                  m.Id,
                  s.ScopeMode,
-                 CanManage = (from mr in c.MembershipRoles
-                              join rp in c.RolePermissions on mr.RoleId equals rp.RoleId
-                              join p in c.Permissions on rp.PermissionId equals p.Id
+                 CanManage = (from mr in db.MembershipRoles
+                              join rp in db.RolePermissions on mr.RoleId equals rp.RoleId
+                              join p in db.Permissions on rp.PermissionId equals p.Id
                               where mr.MembershipId == m.Id && p.Code == "core.scope.manage"
                               select 1).Any(),
-             }).ToListAsync(ct));
+             }).ToListAsync());
+        await transaction.RollbackAsync();
 
         Assert.Empty(rows);
         Assert.Throws<MissingMembershipScopeException>(() =>
