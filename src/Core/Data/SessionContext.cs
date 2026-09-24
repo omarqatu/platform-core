@@ -3,7 +3,7 @@ namespace Core.Data;
 /// <summary>
 /// The first-axis context of one transaction: the authenticated user and the
 /// active tenant (4.3). The second-axis variables are resolved per transaction
-/// in T3 (3.5/6) and are never part of this record.
+/// (3.5/6) and are never part of this record.
 /// </summary>
 public sealed record SessionContext(Guid? UserId, Guid? TenantId)
 {
@@ -12,15 +12,9 @@ public sealed record SessionContext(Guid? UserId, Guid? TenantId)
 
 /// <summary>
 /// Supplies the current request's session. Its only source is the authenticated
-/// session (T3), never a request payload, header, or token claim (3.5/6).
+/// session, never a request payload, header, or token claim (3.5/6).
 /// </summary>
 public interface ISessionContextAccessor
 {
     SessionContext Current { get; }
-}
-
-/// <summary>Until login exists (T3), no request carries a session.</summary>
-public sealed class NoSessionContextAccessor : ISessionContextAccessor
-{
-    public SessionContext Current => SessionContext.None;
 }
