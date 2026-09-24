@@ -126,10 +126,10 @@ public class T2_DocumentTests
             membership: await Seed.MembershipAsync("sara", Seed.AlAmin), scopeAll: true, canManageScope: true);
 
         Assert.Equal("23503", await session.SqlStateOfAsync(
-            "INSERT INTO scope_assignments (id, tenant_id, membership_id, scope_ref_id, assignment_role, active, granted_by, granted_at) " +
-            "VALUES (@id, @t, @m, @ref, 'contributor', true, @u, now())",
+            "INSERT INTO scope_assignments (id, tenant_id, membership_id, scope_ref_id, assignment_role, active) " +
+            "VALUES (@id, @t, @m, @ref, 'contributor', true)",
             ("id", Guid.CreateVersion7()), ("t", alAmin), ("m", await Seed.MembershipAsync("nour", Seed.Maan)),
-            ("ref", Guid.CreateVersion7()), ("u", sara)));
+            ("ref", Guid.CreateVersion7())));
     }
 
     // ---- Test 21: cross-linking via UPDATE, not just INSERT — rejected by the composite constraint.

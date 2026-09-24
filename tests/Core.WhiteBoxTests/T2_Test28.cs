@@ -148,11 +148,11 @@ public class T2_Test28(WhiteBoxFixture fixture)
 
         db.AddRange(
             new MembershipRole { Id = Id(), TenantId = tenant.Id, MembershipId = membership.Id, RoleId = role.Id },
-            new MembershipScope { Id = Id(), TenantId = tenant.Id, MembershipId = membership.Id, ScopeMode = "all", UpdatedAt = now },
+            new MembershipScope { Id = Id(), TenantId = tenant.Id, MembershipId = membership.Id, ScopeMode = "all" },
             new ScopeAssignment
             {
                 Id = Id(), TenantId = tenant.Id, MembershipId = membership.Id, ScopeRefId = Id(), AssignmentRole = "contributor",
-                Active = true, GrantedBy = user.Id, GrantedAt = now,
+                Active = true,
             },
             new MembershipAuth { Id = Id(), TenantId = tenant.Id, MembershipId = membership.Id, Provider = "password" },
             new AuditEntry { Id = Id(), TenantId = tenant.Id, ActorType = "test", Action = "t28", EntityType = "test", CreatedAt = now });
