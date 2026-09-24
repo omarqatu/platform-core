@@ -1,9 +1,9 @@
 # Platform Core Document — Tenancy Layer
 ## A general-purpose SaaS platform — independent greenfield design
 
-**Version:** 1.13 — **Frozen release**
+**Version:** 1.14 — **Frozen release**
 **Date:** 2026-09-24
-**Review history:** Seven architecture reviews + two model reviews (through 1.6), then a **requirement-driven change** in 1.7, then an **eighth external review** that settled 1.8, then a **ninth review** that settled 1.9, then **the first finding from running code**, which settled 1.10, then **testing two assumptions before T2**, which settled 1.11, then **two conflicts found by the same procedure**, which settled 1.12, then **a policy draft run before T2**, which settled 1.13. The full changelog is in the appendices.
+**Review history:** Seven architecture reviews + two model reviews (through 1.6), then a **requirement-driven change** in 1.7, then an **eighth external review** that settled 1.8, then a **ninth review** that settled 1.9, then **the first finding from running code**, which settled 1.10, then **testing two assumptions before T2**, which settled 1.11, then **two conflicts found by the same procedure**, which settled 1.12, then **a policy draft run before T2**, which settled 1.13, then **running the CI checks as written**, which settled 1.14. The full changelog is in the appendices.
 **Nature of this document:** Pure technical analysis, not persuasive writing.
 
 **The freeze decision — and the limits of reopening it:** Freezing 1.6 was the right call about the **category** of findings, not about the document: the seventh review found half its findings were about the text's internal consistency — a category that writing the spec and the code exposes faster and more cheaply than an eighth text review. That decision stands: **any consistency defect or implementation-level item is resolved in the spec or the code, not in a new version.**
@@ -11,6 +11,8 @@
 1.7, 1.8, and 1.9 are not of that category. **1.7** was a change to the scope model driven by a product requirement (Section 4.8). **1.8** fixed a **structural flaw in that model's mechanism**, uncovered by an external review: a nested policy chain that disabled the second axis entirely (3.1, 4.8). **1.9** fixed a **contradiction between a model decision and its mechanism** (scope being used as a substitute for permission) and **a gap that voided the axis's guarantee** (the audit log). All of these sit in the transaction layer and the identity layer — i.e., **before** T0, not after. The governing rule after 1.9: **this is the last text-only revision. The document is reopened only for a finding that survives running the tests and is proven by the code** — the justification is in Section 13. And **1.10 is the first version reopened under this rule**: a finding no text review caught, found by running PostgreSQL 18.6.
 
 The remaining implementation items are explicitly carried forward to the first items of the spec (Section 13).
+
+**Change in 1.14 vs. 1.13 — Check 8 was demanding infinite recursion:** a defect from 1.7, through nine reviews and six versions, found by running the CI checks as written against a full schema before T2. The check requires `client_scope` on every table carrying `scope_ref_id`, and `scope_assignments` carries it — but the template reads it, so satisfying the check is infinite recursion (`42P17`) that fails every read on every scoped table. The fix is one structural exception with a guarding inverse clause (3.6, Check 8). Also proven alongside it: Checks 1, 4, 5, and 10 as written are correct on the full schema, and the 1.13 texts match the executed draft (31 of 32 byte for byte, the last deparse against deparse).
 
 **Change in 1.13 vs. 1.12 — the missing texts, bootstrap from templates, and generated values:** before T2, it emerged that the document writes 22 policies in full plus two templates, while every grant in the 3.8 matrix to a role other than `migrator` needs a policy for the same role and command — so under `FORCE RLS` a grant with no policy is **dead**. A draft was written, run on PostgreSQL 18.6 in both directions (108 SQL cases passing, plus a real EF path in a separate database), and then entered the document. Five things:
 
@@ -592,10 +594,15 @@ WHERE c.relkind = 'r' AND n.nspname = 'public'
 SELECT c.relname FROM pg_class c
 JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'scope_ref_id'
 WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
+  AND c.relname <> 'scope_assignments'   -- (1.14) the table the template reads
   AND NOT EXISTS (
     SELECT 1 FROM pg_policy p
     WHERE p.polrelid = c.oid AND p.polname = 'client_scope'
       AND p.polpermissive = false);
+-- (1.14) And the inverse: client_scope present on scope_assignments = failure
+--   (infinite recursion 42P17 on every scoped table) — a guard against the wrong "fix".
+SELECT polname FROM pg_policy
+WHERE polrelid = 'scope_assignments'::regclass AND polname = 'client_scope';
 
 -- Check 9 (new in 1.7 — source of the scope): a static code
 --   script rejects any read of app.scope_all, app.membership_id,
@@ -623,6 +630,10 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
 --   extraction — otherwise every policy would show as a chain to
 --   its own table.
 ```
+
+**Correction in 1.14 — Check 8 was demanding infinite recursion:** as written since 1.7, the check requires `client_scope` on every table carrying `scope_ref_id` — and `scope_assignments` carries it (4.1). But the template **reads `scope_assignments` itself**, so placing it there is infinite recursion by definition. Proven by running it on PostgreSQL 18.6: the check flags a correct table, and satisfying it literally makes reading assignments throw `42P17: infinite recursion detected` — and since `client_scope` on **every** scoped table reads the assignments, the recursion would have failed **every read on every scoped table** from T5. The fix is one **structural** exception: the table the template reads cannot carry it. Not an exception list, but a fact about the template itself. Guarded in both directions: an inverse clause fails the check if the template is present there, and Test 16-d proves reading assignments is correct without it.
+
+Two alternatives were rejected: (a) limiting the check to tables outside the manifest — it would drop "coverage by default" for an entire class, so a manifest table carrying `scope_ref_id` whose template is forgotten both in reality and in the manifest passes Check 2, because the two match in their omission; and (b) renaming the column — a model change touching 3.1, 4.1, and 4.8, bigger than the problem.
 
 **An explicit limit on Check 10:** `pg_depend` records the tables and functions referenced directly in the expression (1.9: more precise than text parsing and needs no parser), but it does not see what that function or view **reads** internally. For this reason it is textually forbidden to reference a view or a non-`SECURITY INVOKER` function inside a policy expression — with one declared exception and no others: a `SECURITY DEFINER` function dedicated to resolving assignments, if it is later adopted to break the chain or reduce its cost (13).
 
@@ -1673,6 +1684,7 @@ An intermediary registry → (a third option, 1.8) scopable_entities
 
 | Risk | Status |
 |---|---|
+| **Check 8 demands `client_scope` on the very table the template reads — infinite recursion failing every scoped table** | **Closed in 1.14** — a structural exception + a guarding inverse clause + Test 16-d (3.6) |
 | **A grant with no policy under FORCE RLS is dead: silent zero rows or rejection** (the login path and step c among them) | **Closed in 1.13** — 32 policies written and run in both directions (3.9) |
 | **Bootstrap cannot create the new tenant's roles** | **Closed in 1.13** — `provisioner` from global templates, conditioned on `is_system`, its inserts critical writes (3.9, 5) |
 | **`RETURNING` is rejected on what the role cannot read — including every assigned member's write via the audit log** | **Closed in 1.13** — no `RETURNING`, no database-generated values + Test 28 (2) |
@@ -1816,7 +1828,17 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix A — Changelog from 1.12 to 1.13
+## Appendix A — Changelog from 1.13 to 1.14
+
+| Item | 1.13 | 1.14 |
+|---|---|---|
+| Check 8 | Every table carrying `scope_ref_id` — including `scope_assignments` itself: infinite recursion | **Every table except the one the template reads, + an inverse clause failing if the template is present on it** (3.6) |
+
+**What did not change:** everything else.
+
+---
+
+## Appendix B — Changelog from 1.12 to 1.13
 
 | Item | 1.12 | 1.13 |
 |---|---|---|
@@ -1835,7 +1857,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix B — Changelog from 1.11 to 1.12
+## Appendix C — Changelog from 1.11 to 1.12
 
 | Item | 1.11 | 1.12 |
 |---|---|---|
@@ -1849,7 +1871,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix C — Changelog from 1.10 to 1.11
+## Appendix D — Changelog from 1.10 to 1.11
 
 | Item | 1.10 | 1.11 |
 |---|---|---|
@@ -1865,7 +1887,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix D — Changelog from 1.9 to 1.10
+## Appendix E — Changelog from 1.9 to 1.10
 
 | Item | 1.9 | 1.10 |
 |---|---|---|
@@ -1881,7 +1903,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix E — Changelog from 1.8 to 1.9
+## Appendix F — Changelog from 1.8 to 1.9
 
 | Item | 1.8 | 1.9 |
 |---|---|---|
@@ -1900,7 +1922,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix F — Changelog from 1.7 to 1.8
+## Appendix G — Changelog from 1.7 to 1.8
 
 | Item | 1.7 | 1.8 |
 |---|---|---|
@@ -1925,7 +1947,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix G — Changelog from 1.6 to 1.7
+## Appendix H — Changelog from 1.6 to 1.7
 
 | Item | 1.6 | 1.7 |
 |---|---|---|
@@ -1948,7 +1970,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix H — Changelog from 1.5 to 1.6
+## Appendix I — Changelog from 1.5 to 1.6
 
 | Item | 1.5 | 1.6 |
 |---|---|---|
