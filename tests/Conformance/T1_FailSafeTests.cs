@@ -3,7 +3,7 @@ using Npgsql;
 
 namespace Conformance;
 
-// PROOF_SPEC T1.2 and T1.3 against t1_probe, a test-only table under the verbatim
+// PROOF_SPEC T1.2, T1.3 and T1.6 against t1_probe, a test-only table under the verbatim
 // v1.10 tenant_isolation template. Harness proofs (project-owner decision, T1 PR):
 // they are proven again against a real table after T2 is merged.
 [Collection(T1ProbeCollection.Name)]
@@ -36,16 +36,17 @@ public class T1_FailSafeTests(T1ProbeFixture probe)
 
     public enum Ending { Commit, Rollback }
 
-    // T1.2 on a reused connection — Test 27 (v1.10), first-template part: all five
-    // context variables set with SET LOCAL, the transaction ends, optionally
-    // DISCARD ALL, then a query with no context → zero rows and no error.
-    // (Test 27's client_scope and memberships parts need those tables: T5 and T2/T3.)
+    // T1.6 [B] (PROOF_SPEC 1.1) — Test 27, first-template part: on the same
+    // connection, all five context variables set with SET LOCAL, the transaction
+    // ends (COMMIT or ROLLBACK), optionally DISCARD ALL, then a query with no
+    // context → zero rows and no error.
+    // (Test 27's memberships part is T3.7 and its client_scope part T5.8.)
     [Theory]
     [InlineData(Ending.Commit, false)]
     [InlineData(Ending.Commit, true)]
     [InlineData(Ending.Rollback, false)]
     [InlineData(Ending.Rollback, true)]
-    public async Task T1_2_Test27_NoTenantContext_ReusedConnection_ZeroRowsNoError(Ending ending, bool discardAll)
+    public async Task T1_6_Test27_NoTenantContext_ReusedConnection_ZeroRowsNoError(Ending ending, bool discardAll)
     {
         await using var connection = await Target.OpenUnpooledAsync(Target.AppUser);
 

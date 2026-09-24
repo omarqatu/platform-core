@@ -40,13 +40,13 @@ names the task it belongs to. An item is removed only by the PR that closes it.
 - **What T2 must do:** settle both in Check 6's approved list (§3.6, Check 6:
   "CONNECT and TEMP on the database").
 
-### 4. Re-prove T1.2 and T1.3 in Conformance against a real table
+### 4. Re-prove T1.2, T1.3 and T1.6 in Conformance against a real table
 
-- **Origin:** T1 (PR #2), decision 8. T1.2 and T1.3 run against `t1_probe`, a
-  test-only table, so today they are harness proofs, not tests that run
-  unmodified against another implementation.
-- **What T2 must do:** once the first real tenant table exists, point T1.2
-  (including Test 27's first-template part) and T1.3 at it in Conformance.
+- **Origin:** T1 (PR #2), decision 8; PROOF_SPEC v1.1, T1 build. T1.2, T1.3
+  and T1.6 run against `t1_probe`, a test-only table, so today they are
+  harness proofs, not tests that run unmodified against another implementation.
+- **What T2 must do:** once the first real tenant table exists, point T1.2,
+  T1.3 and T1.6 at it in Conformance.
   Then remove `t1_probe` along with its fixtures (`tests/fixtures/t1_probe.sql`,
   both `T1ProbeFixture` classes) and the "No test residue" CI step.
 
@@ -63,11 +63,11 @@ names the task it belongs to. An item is removed only by the PR that closes it.
 
 ### 6. Test 27's memberships and client_scope parts
 
-- **Origin:** T1 (PR #2). T1 covers the first-template part of Test 27 (a
-  reused connection with all five variables set, then COMMIT/ROLLBACK and
-  optionally DISCARD ALL: zero rows, no error).
-- **Still to cover:**
-  - **memberships**, with `app.user_id` alone, returning only the caller's own
-    memberships: in T3, next to Test 7, whose path it guards.
-  - **a table under `client_scope`**: in T5, where the first such table
+- **Origin:** T1 (PR #2). T1 covers the first-template part of Test 27 as
+  T1.6 (a reused connection with all five variables set, then COMMIT/ROLLBACK
+  and optionally DISCARD ALL: zero rows, no error).
+- **Still to cover — now acceptance criteria in PROOF_SPEC v1.1:**
+  - **T3.7, memberships:** with `app.user_id` alone, only the caller's own
+    memberships, next to Test 7, whose path it guards.
+  - **T5.8, a table under `client_scope`:** where the first such table
     appears.
