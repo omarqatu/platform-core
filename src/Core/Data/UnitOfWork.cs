@@ -14,10 +14,17 @@ public static class UnitOfWork
         where TContext : CoreDbContext
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        await ApplyContextAsync(db, session, cancellationToken);
-        var result = await work(db, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return result;
+        try
+        {
+            await ApplyContextAsync(db, session, cancellationToken);
+            var result = await work(db, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return result;
+        }
+        finally
+        {
+            db.Scope = null;
+        }
     }
 
     public static Task RunAsync<TContext>(
@@ -30,14 +37,19 @@ public static class UnitOfWork
             return true;
         }, cancellationToken);
 
-    // Each variable is its own SET LOCAL statement (3.5/2), in the order
-    // app.user_id then app.tenant_id (3.5/1).
+    // Each variable is its own SET LOCAL statement (3.5/2), in the order app.user_id, app.tenant_id,
+    // then — when both a user and an active tenant are present — the three second-axis variables,
+    // resolved from the database on every transaction in the order of Rule 6 (3.5/1, 3.5/6).
+    // A tenant with no user (no membership to resolve) sets no second-axis variable: the policies
+    // beneath fail safe into zero rows on the second axis.
     private static async Task ApplyContextAsync(CoreDbContext db, SessionContext session, CancellationToken ct)
     {
         if (session.UserId is { } userId)
             await SetLocalAsync(db, "app.user_id", userId, ct);
         if (session.TenantId is { } tenantId)
             await SetLocalAsync(db, "app.tenant_id", tenantId, ct);
+        if (session is { UserId: { } user, TenantId: { } tenant })
+            db.Scope = await ScopeResolver.ResolveAsync(db, user, tenant, ct);
     }
 
     // SET LOCAL takes no bind parameters. The variable name is one of two

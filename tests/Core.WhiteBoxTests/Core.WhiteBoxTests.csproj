@@ -5,7 +5,8 @@
     implementation is evaluated against the spec, this project is not run;
     an equivalent proof is submitted in its place, as §6 describes.
     It references Core directly: a conscious exception to Conformance's
-    independence, specific to this implementation (T1 PR, decision 9).
+    independence, specific to this implementation (T1 PR, decision 9) —
+    and, since T3, Api, hosted in-process to read its own cookie (T3.6).
   -->
 
   <PropertyGroup>
@@ -17,6 +18,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.12" />
@@ -31,6 +33,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Core\Core.csproj" />
+    <ProjectReference Include="..\..\src\Api\Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>

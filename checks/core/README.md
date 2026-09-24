@@ -23,7 +23,7 @@ a live production database.
 | 6 | Grants against the §3.8 matrix in both directions, with the columns, the database (CONNECT, TEMP), the schemas, executable routines, sequences, views, default privileges, and role memberships | `grants.json` |
 | 7 | Every FK between two `tenant_id` tables is composite on `tenant_id` | — |
 | 8 | `client_scope` on every table carrying `scope_ref_id` except `scope_assignments`, its inverse (1.14), and its text against the template | `manifest.json` (templates) |
-| 9 | The second-axis variables appear in application code only in the declared writers (static) | `scope-variable-writers.json` (empty in T2) |
+| 9 | The second-axis variables appear in application code only in the declared writers (static) | `scope-variable-writers.json` (T3: the resolver, `src/Core/Data/ScopeResolver.cs`) |
 | 10 | Every table a policy expression reads (`pg_depend`, own table excluded) is a declared chain, each chain's inner table has its covering read policy, and no view or non-system function sits in a policy | `policy-chains.json` |
 
 **The input files:**

@@ -38,6 +38,12 @@ public class CoreDbContext : DbContext
     public DbSet<RoleTemplatePermission> RoleTemplatePermissions => Set<RoleTemplatePermission>();
     public DbSet<AuditEntry> AuditLog => Set<AuditEntry>();
 
+    /// <summary>
+    /// The second-axis values the unit of work resolved for the current transaction (3.5/6), or null
+    /// outside one or when no tenant is active. Set by UnitOfWork only; never carried past the transaction.
+    /// </summary>
+    public ResolvedScope? Scope { get; internal set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Tenant>().ToTable("tenants");

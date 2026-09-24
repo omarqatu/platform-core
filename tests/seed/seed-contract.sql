@@ -1,9 +1,14 @@
--- The seed contract (PROOF_SPEC v1.1 §7), seeded by migrator before every Conformance run.
+-- The seed contract (PROOF_SPEC v1.2 §7), seeded by migrator before every Conformance run.
 -- T2 seeds the core part: tenants, persons, memberships with their roles, scopes and assignments.
 -- The clients A–D, X, Y and their subscriptions are module rows, added by T5 — their ids are fixed
 -- here because the assignments already point at them (scope_ref_id is an opaque id, §3.3, 9).
 -- Conformance finds everything by name (tenant name, username), never by these ids.
 -- Keys and timestamps are written explicitly (PLATFORM_CORE v1.14 §2). Run on a clean database.
+--
+-- Passwords (T3): TEST VALUES ONLY, published here so any implementation under test can log in. Each
+-- seed user's password is <username>-seed-password (omar-seed-password, sara-seed-password, ...).
+-- The hashes below are this implementation's (PBKDF2-HMAC-SHA512, 210,000 iterations — Core.Identity);
+-- another implementation stores the same passwords in its own format. Never a real credential.
 \set ON_ERROR_STOP on
 
 DO $seed$
@@ -22,6 +27,7 @@ DECLARE
   usr uuid;
   m uuid;
   rec record;
+  pw_hash text;
 BEGIN
   IF EXISTS (SELECT 1 FROM tenants) THEN
     RAISE EXCEPTION 'the seed contract runs on a clean database: tenants already exist';
@@ -67,9 +73,17 @@ BEGIN
         VALUES (person, rec.full_name, rec.username || '@seed.test', NULL, now());
       INSERT INTO users (id, person_id, user_type, username, status, language, theme, last_login_at)
         VALUES (usr, person, 'employee', rec.username, 'active', 'ar', NULL, NULL);
-      -- Not a real hash: T3 builds authentication and replaces the seed credentials.
+      -- <username>-seed-password, hashed (test values only — the header).
+      pw_hash := CASE rec.username
+        WHEN 'omar'   THEN 'pbkdf2-sha512$210000$To2DKiQdIccrJ9aE107OVA==$ZNnPHK1u+DqrSlpWyQmJWQ89yNLi5fCoJwrUJsPGdR/MHLF/dJ6DcB0cJqwD0WGvMlTfMVjOvqgfuhbl6D+AvA=='
+        WHEN 'sara'   THEN 'pbkdf2-sha512$210000$O/MqlIa02J6twbQagaKHRg==$lcKAp/lvKT1zT72fZ/abuNpC7Qs9d3HeG+ZV4M4CZDSMfmUsrnLBEA4DJzD+EL1BhpUsv93gOHUZTxPskRCjvA=='
+        WHEN 'khaled' THEN 'pbkdf2-sha512$210000$PFHH0vZSoMvcu7TleHkKwQ==$O7tkRkJVM313PvRr8xSptHYQA1Ax0y1E+a1/4YRtjYJcCzgETPN+MUZ6XzkEDYt8O0F9kCXnBixOjpSQh9OM8Q=='
+        WHEN 'layla'  THEN 'pbkdf2-sha512$210000$6KEStUC5oNOe5AMxrkV9rQ==$uyRnxsEV7Era+7QoriRzc9DtuY4v9dX9CQCeMEYM/iruZb/GceHDuZ7bPFOhFYyp5OsSFiQjvN8ff5HskSQmhQ=='
+        WHEN 'rami'   THEN 'pbkdf2-sha512$210000$FqL/WuP4hvJKdjWQqEOtGg==$bNzKTePWNbShj9ey3TxOj5dJ5GC7qJzjmkBxLlccTS8Mq1bexJXxFfIgRmZBinMhQKxtBVCqmvyPKeLF+GrITQ=='
+        WHEN 'nour'   THEN 'pbkdf2-sha512$210000$+5HiaQTG+s03xYt/BWXW+Q==$LRpZqPoSzsrpIfFCZdIV4pss6yQll+n9sBTQHGn5YCKpBJNnWtv4/3z4vvBaAZFqu5a8H8C5AtemKim0ch2JJg=='
+      END;
       INSERT INTO user_password_credentials (user_id, password_hash, updated_at)
-        VALUES (usr, 'seed-placeholder-not-a-hash', now());
+        VALUES (usr, pw_hash, now());
     END IF;
 
     m := uuidv7();

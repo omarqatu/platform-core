@@ -1,5 +1,10 @@
+using System.Text.Json;
+using Api;
+using Api.Endpoints;
 using Core.Data;
 using Core.Http;
+using Core.Identity;
+using Microsoft.AspNetCore.Authentication.Cookies;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,11 +28,61 @@ foreach (var name in allowedConnections)
         throw new InvalidOperationException($"ConnectionStrings:{name} is not configured.");
 }
 
+// The session cookie is Secure unless explicitly relaxed — and relaxing it is allowed only in an environment
+// named Development or CI (a plain-HTTP test run). Anywhere else, Api refuses to start: the same pattern as
+// the connection-string guard above (PROOF_SPEC T3, decision 33 as amended by the project owner).
+string[] plainHttpEnvironments = ["Development", "CI"];
+var requireHttps = builder.Configuration.GetValue("Session:RequireHttps", true);
+if (!requireHttps && !plainHttpEnvironments.Contains(builder.Environment.EnvironmentName, StringComparer.Ordinal))
+    throw new InvalidOperationException(
+        $"Session:RequireHttps=false is allowed only in {string.Join(" or ", plainHttpEnvironments)}; " +
+        $"this environment is '{builder.Environment.EnvironmentName}'.");
+
 builder.Services.AddCoreDataAccess(builder.Configuration.GetConnectionString("app_user")!);
-builder.Services.AddSingleton<ISessionContextAccessor, NoSessionContextAccessor>();
+
+// The authenticator path (4.3-a/1): its own data source and role, never registered as the app_user one.
+var authenticatorDataSource = CoreDataAccess.CreateDataSource(builder.Configuration.GetConnectionString("authenticator")!);
+builder.Services.AddDbContext<AuthenticatorDbContext>(options => options.UseCoreDataAccess(authenticatorDataSource));
+
+// The session: an HTTP-only cookie carrying user_id and the active tenant only (PROOF_SPEC T3).
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<ISessionContextAccessor, CookieSessionAccessor>();
+builder.Services.AddAuthentication(SessionCookie.Scheme)
+    .AddCookie(SessionCookie.Scheme, options =>
+    {
+        options.Cookie.Name = "session";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Strict;
+        // Secure unless explicitly relaxed for a plain-HTTP test run (guarded above).
+        options.Cookie.SecurePolicy = requireHttps ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
+        options.Events.OnRedirectToLogin = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        };
+    });
+builder.Services.AddAuthorization();
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower);
 
 var app = builder.Build();
 
+app.UseRouting();
+app.UseMiddleware<ErrorResponses>();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseMiddleware<UnitOfWorkMiddleware>();
 
+app.MapAuthEndpoints();
+app.MapTenantEndpoints();
+app.MapScopeEndpoints();
+
+app.Lifetime.ApplicationStopped.Register(authenticatorDataSource.Dispose);
 app.Run();
+
+public partial class Program;

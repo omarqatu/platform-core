@@ -28,7 +28,7 @@ public class T1_MiddlewareTests(WhiteBoxFixture fixture)
     [Fact]
     public async Task Middleware_RunsTheWholeRequestInOneTransaction_WithTheSessionContext()
     {
-        var userId = Guid.CreateVersion7();
+        var userId = fixture.W1User;
         await using var dataSource = fixture.CreateAppUserDataSource();
         using var host = await StartHostAsync(dataSource, new SessionContext(userId, fixture.W1),
             async (http, db) =>

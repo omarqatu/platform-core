@@ -9,6 +9,15 @@ namespace Core.Http;
 /// </summary>
 public sealed class UnitOfWorkMiddleware(RequestDelegate next)
 {
-    public Task InvokeAsync(HttpContext http, CoreDbContext db, ISessionContextAccessor session) =>
-        UnitOfWork.RunAsync(db, session.Current, (_, _) => next(http), http.RequestAborted);
+    public Task InvokeAsync(HttpContext http, CoreDbContext db, ISessionContextAccessor session)
+    {
+        var metadata = http.GetEndpoint()?.Metadata;
+        if (metadata?.GetMetadata<OwnUnitsOfWorkAttribute>() is not null)
+            return next(http);
+
+        var current = session.Current;
+        if (metadata?.GetMetadata<WithoutActiveTenantAttribute>() is not null)
+            current = current with { TenantId = null };
+        return UnitOfWork.RunAsync(db, current, (_, _) => next(http), http.RequestAborted);
+    }
 }
