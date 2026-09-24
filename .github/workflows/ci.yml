@@ -35,8 +35,13 @@ jobs:
       - name: Migrate as migrator (T0.4)
         run: dotnet run --project src/Migrations -c Release --no-build
 
-      - name: Catalog checks
-        run: echo "No catalog checks yet — Checks 1-10 arrive in T2 (PROOF_SPEC T2)."
+      # PLATFORM_CORE §3.6: the ten checks, then each seen failing on its plant (PROOF_SPEC T2.2).
+      # Before any test step, so no test fixture can ever be seen by a catalog check.
+      - name: Catalog checks — Checks 1-10
+        run: bash checks/core/run-checks.sh
+
+      - name: Catalog checks — each fails on its plant (T2.2)
+        run: bash checks/core/run-checks.sh --self-test
 
       # A local repository check, not one of PLATFORM_CORE's ten (checks/local/README.md).
       - name: Local check — check-schema-allowlist
