@@ -28,6 +28,12 @@ jobs:
       - name: Catalog checks
         run: echo "No catalog checks yet — Checks 1-10 arrive in T2 (PROOF_SPEC T2)."
 
+      # A local repository check, not one of PLATFORM_CORE's ten (checks/local/README.md).
+      - name: Local check — check-schema-allowlist
+        run: |
+          bash checks/local/check-schema-allowlist.sh
+          bash checks/local/check-schema-allowlist.sh --self-test
+
       - name: Build Api image
         run: docker build -f src/Api/Dockerfile -t platform-api:ci .
 
