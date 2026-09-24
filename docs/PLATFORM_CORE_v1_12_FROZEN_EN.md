@@ -1,9 +1,9 @@
 # Platform Core Document — Tenancy Layer
 ## A general-purpose SaaS platform — independent greenfield design
 
-**Version:** 1.11 — **Frozen release**
+**Version:** 1.12 — **Frozen release**
 **Date:** 2026-09-24
-**Review history:** Seven architecture reviews + two model reviews (through 1.6), then a **requirement-driven change** in 1.7, then an **eighth external review** that settled 1.8, then a **ninth review** that settled 1.9, then **the first finding from running code**, which settled 1.10, then **testing two assumptions before T2**, which settled 1.11. The full changelog is in the appendices.
+**Review history:** Seven architecture reviews + two model reviews (through 1.6), then a **requirement-driven change** in 1.7, then an **eighth external review** that settled 1.8, then a **ninth review** that settled 1.9, then **the first finding from running code**, which settled 1.10, then **testing two assumptions before T2**, which settled 1.11, then **two conflicts found by the same procedure**, which settled 1.12. The full changelog is in the appendices.
 **Nature of this document:** Pure technical analysis, not persuasive writing.
 
 **The freeze decision — and the limits of reopening it:** Freezing 1.6 was the right call about the **category** of findings, not about the document: the seventh review found half its findings were about the text's internal consistency — a category that writing the spec and the code exposes faster and more cheaply than an eighth text review. That decision stands: **any consistency defect or implementation-level item is resolved in the spec or the code, not in a new version.**
@@ -11,6 +11,31 @@
 1.7, 1.8, and 1.9 are not of that category. **1.7** was a change to the scope model driven by a product requirement (Section 4.8). **1.8** fixed a **structural flaw in that model's mechanism**, uncovered by an external review: a nested policy chain that disabled the second axis entirely (3.1, 4.8). **1.9** fixed a **contradiction between a model decision and its mechanism** (scope being used as a substitute for permission) and **a gap that voided the axis's guarantee** (the audit log). All of these sit in the transaction layer and the identity layer — i.e., **before** T0, not after. The governing rule after 1.9: **this is the last text-only revision. The document is reopened only for a finding that survives running the tests and is proven by the code** — the justification is in Section 13. And **1.10 is the first version reopened under this rule**: a finding no text review caught, found by running PostgreSQL 18.6.
 
 The remaining implementation items are explicitly carried forward to the first items of the spec (Section 13).
+
+**Change in 1.12 vs. 1.11 — two conflicts the document introduced itself, found by testing in isolation:**
+
+**(1) The password command added in 1.11 contradicts the grant in 3.8.** The 1.11 command writes `updated_at`, while the matrix grants `UPDATE (password_hash)` alone:
+
+| Form (as `app_user`, grant as in 3.8) | Result |
+|---|---|
+| `SET password_hash = $1, updated_at = now()` (the 1.11 text) | `ERROR: permission denied` |
+| `SET password_hash = $1` alone | One row ✅ |
+
+**The fix:** widen the grant to `UPDATE (password_hash, updated_at)` — metadata the application legitimately writes, and an `UPDATE` grant on it is a write with no read, so it discloses nothing. Two alternatives were rejected: dropping `updated_at` from the command (a stale column), and a trigger to maintain it (a new mechanism the document does not need). The error message quoted in 1.11 was also corrected: the real one is `permission denied for table …`, not `for column user_id`, and the test asserts on SQLSTATE `42501`, not on the message text.
+
+**(2) `system_role_guard` hid the base roles from reads, and its protection is silent.** Written in 1.8 as `AS RESTRICTIVE FOR ALL`, and `FOR ALL` applies `USING` to `SELECT`:
+
+| Operation as `app_user` (a tenant with system owner and admin + a custom role) | Result |
+|---|---|
+| Reading the tenant's roles | `custom` only — `owner` and `admin` vanished |
+| Editing `owner` | `UPDATE 0` — silent |
+| Deleting `admin` | `DELETE 0` — silent |
+| Promoting `custom` to `is_system = true` | `ERROR` ✅ |
+| Inserting a role with `is_system = true` | `ERROR` ✅ |
+
+**The fix:** three restrictive policies split by command (`UPDATE`, `DELETE`, `INSERT`), with reads left to `tenant_isolation` (5). Test 23 was restated: the protection in the database is **silent** (zero rows, the row untouched), and the loudness lives in the layer above, via the rows-affected guard — the "loud above, silent below" principle itself, with no new mechanism.
+
+**The lesson:** the second conflict is a **literal repeat** of the 1.7 mistake in `scope_assignments`, written by 1.8 in another section while fixing the first. Hence a general rule in 3.1: `AS RESTRICTIVE FOR ALL` only when narrowing reads is **intended**. The first conflict was introduced by 1.11 while fixing a different condition. Both are the same class: **text written to fix something, and never run before being stated as settled.** And both were found by the procedure 1.11 made mandatory — testing in isolation before building — not by reading.
 
 **Change in 1.11 vs. 1.10 — two more engine assumptions, tested before building:** following the 1.10 lesson itself, and before a single line of T2, two assumptions the document builds on were tested in isolation — on PostgreSQL 18.6:
 
@@ -29,7 +54,7 @@ For `client_scope`, the deparse also includes the table's own name, so it differ
 
 | Form | Result |
 |---|---|
-| `UPDATE … SET password_hash = $1 WHERE user_id = $2` (what EF generates) | `permission denied for column user_id` — loud |
+| `UPDATE … SET password_hash = $1 WHERE user_id = $2` (what EF generates) | `permission denied for table …` (SQLSTATE `42501`) — loud *(message corrected in 1.12)* |
 | `UPDATE … SET password_hash = $1` with no `WHERE` and no `RETURNING`, RLS selecting the row | Exactly one row ✅ |
 | And with `SELECT` granted on the `user_id` column to "fix" the first form | Zero rows, **silently** — because `WHERE` also subjects the update to `SELECT` policies |
 
@@ -213,6 +238,8 @@ CREATE POLICY tenant_isolation ON <t>
 ```
 
 **Binding rule (1.10) — `NULLIF` around every context variable:** every read of `app.*` in any policy expression is written as `NULLIF(current_setting('app.x', true), '')::<type>`, with no exception. The justification is in the document's header: a custom variable becomes `''`, not `NULL`, after its first setting in the session, and `DISCARD ALL` does not remove it, so a direct cast throws on reused connections. `NULLIF` goes **before** the cast: `NULLIF(...)::uuid` is correct, while `NULLIF(...::uuid, …)` keeps the error. Check 2 enforces the rule on every policy (3.6), and Test 27 guards the case.
+
+**Binding rule (1.12) — `AS RESTRICTIVE FOR ALL` only when narrowing reads is intended:** `FOR ALL` applies `USING` to `SELECT` as well, so every restrictive `FOR ALL` policy filters reads by its condition. That is intended in `client_scope` (the second axis narrows visibility itself), and it was unintended twice: `scope_assignments` in 1.7, and `system_role_guard` in 1.8. The rule: a restrictive policy that guards writes only is written **split by command** (`FOR UPDATE` / `FOR DELETE` / `FOR INSERT`), and `FOR ALL` is written only alongside text stating explicitly that narrowing reads is intended.
 
 **Binding rule:** every policy is written with an explicit `FOR <cmd>` and `TO <role>`. A policy without `TO` applies to PUBLIC, so permissive policies get OR-combined with roles never intended. The CI gate (3.6, Check 4) rejects it.
 
@@ -456,8 +483,9 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
 --   invitations, persons, users, membership_auth,
 --   user_password_credentials, tenants, auth_attempts, modules,
 --   permissions, membership_scope, scope_assignments (1.7 —
---   dedicated administrative surfaces), roles (1.8 — carries the
---   system_role_guard restrictive policy, not the second template).
+--   dedicated administrative surfaces), roles (1.8, amended 1.12 —
+--   carries three system_role_guard_* restrictive policies split by
+--   command, not the second template).
 --   (membership_roles and role_permissions dropped out — the
 --   standard template suffices for both.)
 
@@ -497,7 +525,9 @@ WHERE c.relkind = 'r' AND n.nspname = 'public'
 --   user_password_credentials — (1.11) nor on any single column of
 --   it (column_privileges), because granting the user_id column to
 --   "fix" an update with a WHERE turns the loud error into a silent
---   zero rows (3.8) — no UPDATE/DELETE for any
+--   zero rows (3.8); and (1.12) its UPDATE grant is exactly
+--   (password_hash, updated_at), no more and no less — any extra or
+--   missing column = failure — no UPDATE/DELETE for any
 --   application role on audit_log, no write access for anyone but
 --   migrator on the global catalogs, and no DELETE on
 --   scope_assignments.
@@ -589,7 +619,8 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
     (UPDATE with no SELECT) affects exactly one row — (1.11) **in
     the form with no WHERE and no RETURNING**. And the test guards
     the other direction: the same update with WHERE user_id = …
-    fails **loudly** (permission denied), not with zero rows. Zero
+    fails **loudly** (SQLSTATE 42501 — 1.12: asserted on the code,
+    not the message text), not with zero rows. Zero
     rows instead of the error means someone granted SELECT on a
     column = failure (3.8, Check 6).
 14. The silent critical write: an update to a row that is not
@@ -657,11 +688,20 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
     application role is a member of either (Check 6). And an
     attempt to use the provisioner connection for a third path →
     fails from the absence of grants, not from review.
-23. (New in 1.8) The system role is immune from the database:
-    UPDATE or DELETE on an is_system role via direct SQL with the
-    app_user role → fails under the restrictive policy; and raising
-    is_system from false to true on an ordinary role → fails under
-    WITH CHECK (5). Tested via SQL, not via the API.
+23. (New in 1.8, restated in 1.12) The system role is protected — in
+    two layers:
+    a. The database (direct SQL as app_user): UPDATE or DELETE on an
+       is_system role → **zero rows, the row untouched** (silent —
+       the last-resort net); and raising is_system from false to
+       true, or inserting a role with is_system = true → **an error**
+       (WITH CHECK).
+    b. The API: editing or deleting a system role → **an explicit
+       error** from the rows-affected guard (3.5/5) — loud above.
+    c. **And the opposite direction (blinding):** reading the
+       tenant's roles as app_user returns the system and custom
+       roles together — any of owner/admin/operator/viewer missing
+       = failure (5, 1.12). This branch would have caught the 1.8
+       mistake.
 24. (New in 1.9) Scope is not a permission — both directions:
     a. A member with role viewer and scope all (with no
        core.scope.manage) → INSERT or UPDATE on scope_assignments
@@ -711,7 +751,7 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
 | tenants | SELECT | — | INSERT | SELECT |
 | persons | SELECT | — | **SELECT**, INSERT | — |
 | users | SELECT, UPDATE (columns: last_login_at, language, theme only) | SELECT | **SELECT**, INSERT | — |
-| user_password_credentials | UPDATE (password_hash) **with no SELECT** | SELECT | INSERT | — |
+| user_password_credentials | UPDATE (password_hash, updated_at — **1.12**) **with no SELECT** | SELECT | INSERT | — |
 | memberships | SELECT, UPDATE (status) | — | **SELECT**, INSERT | — |
 | membership_roles | SELECT, INSERT, DELETE | — | INSERT | — |
 | membership_auth | SELECT | SELECT | INSERT | — |
@@ -731,7 +771,7 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
 
 **Why `scope_mode` is a table, not a column (design correction in 1.7):** the natural instinct is a `scope_mode` column on `memberships`. And it is **a mistake under this document's model specifically**: column grants are cyclical, not policy-scoped (a column cannot be granted to one policy and withheld from another), and `memberships` carries `membership_self_leave`, which lets a member `UPDATE` their own row (4.5). So adding `scope_mode` to `app_user`'s `UPDATE` grant would have opened, for every member, **a one-command self-escalation from assigned to all** — with no policy to stop it, because the row is theirs and the tenant is theirs. The separate table splits the two surfaces: `memberships.status` remains self-service, while `membership_scope.scope_mode` is an administrative surface with a restrictive policy that excludes the acting member's own row (4.8, Test 17).
 
-Named design points: **`UPDATE` with no `SELECT`** on `user_password_credentials` is intentional and achievable in Postgres — changing the password without any application code ever being able to read the hash at all. **(1.11) Under a condition proven by running it:** the command is written `UPDATE user_password_credentials SET password_hash = $1, updated_at = now()` **with no `WHERE` and no `RETURNING`**, and the `password_self_update` policy is what selects the row. The reason: PostgreSQL requires `SELECT` on every column read in a `WHERE`, so an ordinary EF update (a tracked entity with `WHERE user_id = …`) fails with `permission denied`. And the trap: granting `SELECT` on the `user_id` column to "fix" it also subjects the update to `SELECT` policies — and the table has no `SELECT` policy — so it becomes **zero rows, silently**. Therefore: the path is a raw SQL command, not a tracked EF update; it is a critical write guarded by rows-affected = 1 (3.5/5); Check 6 forbids any column grant on the table; and Test 13 guards both directions. **Column grants** on `users` prevent the self-update path from tampering with `person_id`/`user_type`/`status`. The global catalogs sit under RLS with a read policy plus the absence of a write grant — two layers even for what is public.
+Named design points: **`UPDATE` with no `SELECT`** on `user_password_credentials` is intentional and achievable in Postgres — changing the password without any application code ever being able to read the hash at all. **(1.11) Under a condition proven by running it:** the command is written `UPDATE user_password_credentials SET password_hash = $1, updated_at = now()` **with no `WHERE` and no `RETURNING`**, and the `password_self_update` policy is what selects the row. The reason: PostgreSQL requires `SELECT` on every column read in a `WHERE`, so an ordinary EF update (a tracked entity with `WHERE user_id = …`) fails with `permission denied`. And the trap: granting `SELECT` on the `user_id` column to "fix" it also subjects the update to `SELECT` policies — and the table has no `SELECT` policy — so it becomes **zero rows, silently**. Therefore: the path is a raw SQL command, not a tracked EF update; it is a critical write guarded by rows-affected = 1 (3.5/5); Check 6 forbids any column grant on the table; and Test 13 guards both directions. **(1.12)** The command also writes `updated_at`, so the matrix's `UPDATE` grant is exactly `(password_hash, updated_at)` — the 1.11 text contradicted its grant of `(password_hash)` alone, and running it proved it throws `permission denied`. **Column grants** on `users` prevent the self-update path from tampering with `person_id`/`user_type`/`status`. The global catalogs sit under RLS with a read policy plus the absence of a write grant — two layers even for what is public.
 
 ---
 
@@ -1166,13 +1206,27 @@ A new module adds its own permissions without modifying the core. The base roles
 **Protecting the system role — moved to the database (1.8):** through 1.7, `is_system` was protected **only at the application layer**, a breach of the document's own principle: any path holding the same grants bypasses the application layer's protection, and the 3.8 matrix grants `app_user` `UPDATE` and `DELETE` on `roles`. The fix is a single restrictive policy closing both directions at once:
 
 ```sql
-CREATE POLICY system_role_guard ON roles
-  AS RESTRICTIVE FOR ALL TO app_user
-  USING (NOT is_system)        -- no editing or deleting a system role
-  WITH CHECK (NOT is_system);  -- and no promoting an ordinary role to system
+-- (1.12) Three restrictive policies split by command — not FOR ALL (below).
+CREATE POLICY system_role_guard_update ON roles
+  AS RESTRICTIVE FOR UPDATE TO app_user
+  USING (NOT is_system)         -- no editing a system role
+  WITH CHECK (NOT is_system);   -- and no promoting an ordinary role to system
+
+CREATE POLICY system_role_guard_delete ON roles
+  AS RESTRICTIVE FOR DELETE TO app_user
+  USING (NOT is_system);        -- no deleting a system role
+
+CREATE POLICY system_role_guard_insert ON roles
+  AS RESTRICTIVE FOR INSERT TO app_user
+  WITH CHECK (NOT is_system);   -- and no inserting a role flagged as system
+-- SELECT is left to tenant_isolation alone: seeded roles are visible.
 ```
 
-`USING` protects the existing row, and `WITH CHECK` protects the resulting value — so both paths (tampering with a seeded role, and seeding a new role flagged as system) are closed by a single constraint. Seeding itself belongs to `migrator` (3.8), and is outside the policy's scope since it applies `TO app_user`. Test 23 checks it **via direct SQL, not via the API** — otherwise the application layer alone would be tested again. And `roles` enters the manifest with this restrictive policy (3.6, Check 2), since it is not the second template.
+`USING` protects the existing row, and `WITH CHECK` protects the resulting value — so all three paths (tampering with a seeded role, deleting it, and seeding a new role flagged as system) are closed. Seeding itself belongs to `migrator` (3.8), and is outside the policies' scope since they apply `TO app_user`. And `roles` enters the manifest with these three restrictive policies (3.6, Check 2), since they are not the second template.
+
+**Correction in 1.12 — `FOR ALL` was hiding the base roles from reads:** the 1.8 wording was a single `AS RESTRICTIVE FOR ALL` policy. And `FOR ALL` applies `USING` to `SELECT` as well — so `NOT is_system` became a condition on **reading**, and `owner`, `admin`, `operator`, and `viewer` vanished entirely from `app_user`'s point of view. Proven by running it: listing the roles of a tenant with two system roles and one custom role returns the custom one alone. So the role list, a member's role name, and choosing a role for an invitation would all have lost the base roles without a trace. **A silent blinding** with no justification at all: the section meant "no editing or deleting," not "no reading." And it is **the very same mistake** 1.8 fixed in `scope_assignments` (a `FOR ALL` policy unintentionally blocking reads), written in 1.8 itself, in a different section. Hence a general rule was added in 3.1.
+
+**And the protection's behavior — silent below, loud above (1.12):** editing or deleting a system role via direct SQL yields **zero rows, with the row untouched** — not an error. That is correct under the document's principle: the database protects silently, as the last-resort net. The loudness belongs in the layer above: editing and deleting roles is a **critical write** under the rows-affected guard (3.5/5), so the API throws an explicit error. Insertion and promotion, by contrast, fail loudly in the database itself (`WITH CHECK` throws). Test 23 was restated to guard both layers — no new mechanism (a trigger) to make the database loud.
 
 **An intentional side effect:** a tenant cannot edit its own seeded roles, so it creates its own custom roles instead of altering the base ones. This makes upgrading the base role definitions safe across migrations — something that was not possible when tenants could tamper with them.
 
@@ -1341,6 +1395,8 @@ An intermediary registry → (a third option, 1.8) scopable_entities
 
 ## 11. An Honest Estimate — from proof-of-concept to product
 
+**1.12's effect on the estimate:** minutes of text, and nothing built yet. What stands out is that both mistakes **were written by the document while fixing something** — 1.8 while fixing `scope_assignments`, and 1.11 while fixing the `WHERE` condition. A fix is new text, and new text has not been run. So the procedure in Section 13 applies to **the document's own amendments** too: every policy or SQL command added in a new version is run in isolation before anything is built on it.
+
 **1.11's effect on the estimate:** hours, and not a line of T2 written yet — which is the whole point: had T2 been built on the first assumption, Checks 2 and 8 would have been red on every table from the first run, and the nearest "fix" under pressure is loosening the match — that is, disabling the check that guards the templates. Had it been built on the second, the nearest "fix" for the permission error is a column grant — that is, the silent trap. **An untested assumption costs nothing when it is found; it costs when it is fixed in a hurry.**
 
 **1.10's effect on the estimate:** an hour — a mechanical replacement in 33 places, four texts written out, and one test. The cost is not in the size but in the timing: had it been found after T2, every table would have been built with a wrong template text, and Check 2 matches it literally, so it would not see the error — intersecting here with the 1.8 lesson: **a check that matches the template textually guards the template, not its correctness.**
@@ -1374,6 +1430,8 @@ An intermediary registry → (a third option, 1.8) scopable_entities
 
 | Risk | Status |
 |---|---|
+| **A `FOR ALL` restrictive policy guarding writes silently hides reads** (repeated twice: 1.7 and 1.8) | **Closed in 1.12** — `system_role_guard` split by command + a general rule in 3.1 + the blinding branch in Test 23 (5) |
+| **The password command writes a column it has no grant on** | **Closed in 1.12** — the grant is exactly `(password_hash, updated_at)`, and Check 6 enforces an exact match (3.8) |
 | **Checks 2 and 8 match the document's text, while pg_get_expr returns a different deparsed form — so they fail on every correct table** | **Closed in 1.11** — deparse-against-deparse comparison on the same table, inside a rolled-back transaction (3.6) |
 | **A password change via an ordinary EF update fails; and "fixing" it with a column grant turns it into silent zero rows** | **Closed in 1.11** — the condition is written (no WHERE, no RETURNING), Check 6 forbids column grants, and Test 13 guards both directions (3.8, 4.3) |
 | **A custom variable reverts to `''`, not `NULL`, after its first setting, so the cast throws on reused connections** | **Closed in 1.10** — `NULLIF` around every context variable in 33 places + enforced in Check 2 + Test 27. **Found by running code, not by review** (header, 3.1) |
@@ -1511,7 +1569,21 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix A — Changelog from 1.10 to 1.11
+## Appendix A — Changelog from 1.11 to 1.12
+
+| Item | 1.11 | 1.12 |
+|---|---|---|
+| `UPDATE` grant on `user_password_credentials` | `(password_hash)` — contradicts the 1.11 command | **`(password_hash, updated_at)`**, with Check 6 enforcing an exact match (3.8) |
+| Error message for the `WHERE` form | `permission denied for column user_id` | **`permission denied for table …` — the test asserts on SQLSTATE `42501`** |
+| `system_role_guard` | One `FOR ALL` restrictive policy — hides the base roles from reads | **Three restrictive policies by command; reads left to `tenant_isolation`** (5) |
+| Test 23 | "Fails" | **Database silent (zero rows, row untouched), API loud (rows-affected), + the blinding branch** (3.7) |
+| Restrictive `FOR ALL` policies | No rule | **Only when narrowing reads is intended** (3.1) |
+
+**What did not change:** the model and the three layers. 1.12 corrects two conflicts within the text.
+
+---
+
+## Appendix B — Changelog from 1.10 to 1.11
 
 | Item | 1.10 | 1.11 |
 |---|---|---|
@@ -1527,7 +1599,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix B — Changelog from 1.9 to 1.10
+## Appendix C — Changelog from 1.9 to 1.10
 
 | Item | 1.9 | 1.10 |
 |---|---|---|
@@ -1543,7 +1615,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix C — Changelog from 1.8 to 1.9
+## Appendix D — Changelog from 1.8 to 1.9
 
 | Item | 1.8 | 1.9 |
 |---|---|---|
@@ -1562,7 +1634,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix D — Changelog from 1.7 to 1.8
+## Appendix E — Changelog from 1.7 to 1.8
 
 | Item | 1.7 | 1.8 |
 |---|---|---|
@@ -1587,7 +1659,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix E — Changelog from 1.6 to 1.7
+## Appendix F — Changelog from 1.6 to 1.7
 
 | Item | 1.6 | 1.7 |
 |---|---|---|
@@ -1610,7 +1682,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix F — Changelog from 1.5 to 1.6
+## Appendix G — Changelog from 1.5 to 1.6
 
 | Item | 1.5 | 1.6 |
 |---|---|---|
