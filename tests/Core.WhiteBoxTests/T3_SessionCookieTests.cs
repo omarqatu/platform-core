@@ -22,6 +22,25 @@ public class T3_SessionCookieTests(WhiteBoxFixture fixture)
     [Fact]
     public async Task T3_6_Cookie_CarriesUserAndActiveTenantOnly()
     {
+        // Api is hosted as it is deployed: it must not see migrator's connection string, which CI gives this
+        // test process through the environment — Api's own T0 guard refuses to start if it does. The fixture
+        // read its configuration before any test ran, and the white-box tests run one at a time, so the
+        // variable is withheld for this host only and put back afterwards.
+        const string migratorVariable = "ConnectionStrings__migrator";
+        var migrator = Environment.GetEnvironmentVariable(migratorVariable);
+        Environment.SetEnvironmentVariable(migratorVariable, null);
+        try
+        {
+            await CookieContentAsync();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(migratorVariable, migrator);
+        }
+    }
+
+    private async Task CookieContentAsync()
+    {
         await using var api = Api();
         using var client = api.CreateClient(new WebApplicationFactoryClientOptions
         {
