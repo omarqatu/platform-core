@@ -31,6 +31,19 @@ Closed by the T2b PR:
   `membership_scope` row is a thrown error, not a silent fallback (PLATFORM_CORE
   §3.5/7, §3.7 Test 18). Beneath it, if bypassed, zero rows.
 
+## For T3 — Test 17-c
+
+### 11. A scope variable from a request header or payload → no effect
+
+- **Origin:** T2b (PR #4), decision 24. T2b covers Test 17-a and 17-b at the
+  database level; 17-c needs the request path, which T3 builds.
+- **What T3 must do:** a request that sets `app.scope_all` (or `app.membership_id`,
+  `app.can_manage_scope`) through a header or the payload → no effect: the
+  member's behavior stays that of their resolved scope (an `assigned` member stays
+  `assigned`). The only source is resolution per transaction (PLATFORM_CORE §3.5/6,
+  §3.7 Test 17-c). Check 9 guards the code statically; this test guards the
+  behavior.
+
 ## For T4 — the rest of Test 28 (c)
 
 ### 8. Zero RETURNING across a full bootstrap
@@ -53,6 +66,25 @@ Closed by the T2b PR:
   (`subscriptions (tenant_id, scope_ref_id) → clients (tenant_id, id)`), an UPDATE of
   `scope_ref_id` to another tenant's client → rejected by the constraint
   (§3.7 Test 21).
+
+## For the next version of the document — not for the code
+
+### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12
+
+- **Origin:** T2b (PR #4), decision 26, accepted by the project owner.
+- **The discrepancy:** §3.7 Test 17-a says an admin's UPDATE of their own
+  `membership_scope` "fails under the restrictive policy on that table". But
+  `membership_scope_admin_update`, as §4.8 writes it, is **permissive**, with the
+  condition `membership_id <> app.membership_id`. The own row is filtered out, so
+  the UPDATE affects **zero rows, silently**. The protection holds; the text
+  describes a different mechanism.
+- **For the document:** restate 17-a in two layers, as 1.12 restated Test 23:
+  - **The database (silent):** the admin's UPDATE of their own mode → zero rows,
+    the row untouched.
+  - **The API (loud):** changing `scope_mode` is a **critical write** under the
+    rows-affected guard (§3.5/5), so the same attempt through the API → an explicit
+    error.
+  Then run the new text in isolation before building (PROOF_SPEC rule 11).
 
 ## For T3 and T5 — the rest of Test 27 (PLATFORM_CORE v1.10)
 
