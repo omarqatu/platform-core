@@ -21,28 +21,15 @@ Closed by the T2b PR:
   and `updated_at`, and `scope_assignments.granted_by` and `granted_at`; migration 0006 drops them.
   The audit log is the sole source of attribution.
 
-## For T3 — the second part of Test 18
-
-### 7. A membership with no membership_scope row → a loud error at tenant selection
-
-- **Origin:** T2 (PR #3), decision 20. T2 covers Test 18's first part (assigning to
-  another tenant's membership → the composite FK rejects it).
-- **What T3 must do:** when a tenant is selected, a membership with no
-  `membership_scope` row is a thrown error, not a silent fallback (PLATFORM_CORE
-  §3.5/7, §3.7 Test 18). Beneath it, if bypassed, zero rows.
-
-## For T3 — Test 17-c
-
-### 11. A scope variable from a request header or payload → no effect
-
-- **Origin:** T2b (PR #4), decision 24. T2b covers Test 17-a and 17-b at the
-  database level; 17-c needs the request path, which T3 builds.
-- **What T3 must do:** a request that sets `app.scope_all` (or `app.membership_id`,
-  `app.can_manage_scope`) through a header or the payload → no effect: the
-  member's behavior stays that of their resolved scope (an `assigned` member stays
-  `assigned`). The only source is resolution per transaction (PLATFORM_CORE §3.5/6,
-  §3.7 Test 17-c). Check 9 guards the code statically; this test guards the
-  behavior.
+Closed by the T3 PR:
+- **7.** Test 18's second part (T3.8): a membership with no `membership_scope` row → a loud
+  error at tenant selection (`membership_scope_missing`, the tenant not entered); beneath it,
+  with the membership set and no scope resolved, zero rows.
+- **11.** Test 17-c: a scope variable from a header, the query string, or the payload → no
+  effect; an `assigned` member stays `assigned` and cannot manage.
+- **6, the memberships part** (T3.7): on a reused connection, `app.user_id` alone → the caller's
+  own memberships only, with no error, after COMMIT or ROLLBACK, with or without DISCARD ALL.
+  The `client_scope` part stays open below, for T5.
 
 ## For T4 — the rest of Test 28 (c)
 
@@ -67,6 +54,27 @@ Closed by the T2b PR:
   `scope_ref_id` to another tenant's client → rejected by the constraint
   (§3.7 Test 21).
 
+## For T5 — the rest of Test 27 (PLATFORM_CORE v1.10)
+
+### 6. Test 27's client_scope part
+
+- **Origin:** T1 (PR #2). T1 covers the first-template part of Test 27 as T1.6; T3 covers
+  the memberships part as T3.7 (closed above).
+- **Still to cover — T5.8, a table under `client_scope`:** where the first such table
+  appears.
+
+## For T5 — the visible-rows part of Test 20
+
+### 13. A revoked assignment, or a lowered mode → the next request sees zero rows of that entity
+
+- **Origin:** T3, accepted by the project owner. T3.3 proves propagation to the **next
+  request, with no re-login**, on what T3 can observe: the resolved mode (`all` →
+  `assigned`) and the member's own active assignments (B gone after its revocation).
+- **What T5 must do:** with the first scoped table, the same two changes during a live
+  session → the next request returns zero rows of the entity (the revoked client's
+  subscriptions; the tenant's other clients after lowering the mode), with no re-login
+  (§3.7 Test 20).
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12
@@ -83,18 +91,30 @@ Closed by the T2b PR:
     the row untouched.
   - **The API (loud):** changing `scope_mode` is a **critical write** under the
     rows-affected guard (§3.5/5), so the same attempt through the API → an explicit
-    error.
+    error. (Since T3 the API layer exists and is tested: `Test17a_Api_*` in Conformance.)
   Then run the new text in isolation before building (PROOF_SPEC rule 11).
 
-## For T3 and T5 — the rest of Test 27 (PLATFORM_CORE v1.10)
+### 14. membership_auth_authenticator_read and its grant have no consumer — delete them
 
-### 6. Test 27's memberships and client_scope parts
+- **Origin:** T3, found in the rule-11 run, decided by the project owner.
+- **The finding:** §4.3-a gives `authenticator` `SELECT` on `membership_auth` with a policy
+  `USING (true)`. But `membership_auth` has no `user_id`, and `authenticator` has no grant on
+  `memberships`, so it cannot find a given user's rows — it can only read **every tenant's**
+  rows. The provider check therefore happens at **tenant selection**, as `app_user` through
+  `membership_auth_self_read` (§3.9), where the membership is known. The authenticator path
+  never reads `membership_auth`.
+- **For the document:** delete `membership_auth_authenticator_read` (§3.9 / the manifest) and
+  `GRANT SELECT ON membership_auth TO authenticator` (§4.3-a/2, the §3.8 matrix): a cross-tenant
+  read with no need. Then a migration drops both, with the manifest, `grants.json` and Checks 2,
+  3 and 6 updated, after the text is run in isolation (PROOF_SPEC rule 11).
 
-- **Origin:** T1 (PR #2). T1 covers the first-template part of Test 27 as
-  T1.6 (a reused connection with all five variables set, then COMMIT/ROLLBACK
-  and optionally DISCARD ALL: zero rows, no error).
-- **Still to cover — now acceptance criteria in PROOF_SPEC v1.1:**
-  - **T3.7, memberships:** with `app.user_id` alone, only the caller's own
-    memberships, next to Test 7, whose path it guards.
-  - **T5.8, a table under `client_scope`:** where the first such table
-    appears.
+## For the next version of PROOF_SPEC — not for the code
+
+### 15. The seed contract names the seed users' passwords, as test values only
+
+- **Origin:** T3, decided by the project owner. §7 names no passwords, yet every [B] login test
+  needs them, on any implementation.
+- **Now:** `tests/seed/seed-contract.sql` documents them in its header — each seed user's password
+  is `<username>-seed-password`, **test values only** — and Conformance reads the pattern from
+  configuration (`Seed:PasswordFormat`).
+- **For PROOF_SPEC §7:** state the same, so another implementation seeds the same passwords.
