@@ -28,6 +28,16 @@ foreach (var name in allowedConnections)
         throw new InvalidOperationException($"ConnectionStrings:{name} is not configured.");
 }
 
+// The session cookie is Secure unless explicitly relaxed — and relaxing it is allowed only in an environment
+// named Development or CI (a plain-HTTP test run). Anywhere else, Api refuses to start: the same pattern as
+// the connection-string guard above (PROOF_SPEC T3, decision 33 as amended by the project owner).
+string[] plainHttpEnvironments = ["Development", "CI"];
+var requireHttps = builder.Configuration.GetValue("Session:RequireHttps", true);
+if (!requireHttps && !plainHttpEnvironments.Contains(builder.Environment.EnvironmentName, StringComparer.Ordinal))
+    throw new InvalidOperationException(
+        $"Session:RequireHttps=false is allowed only in {string.Join(" or ", plainHttpEnvironments)}; " +
+        $"this environment is '{builder.Environment.EnvironmentName}'.");
+
 builder.Services.AddCoreDataAccess(builder.Configuration.GetConnectionString("app_user")!);
 
 // The authenticator path (4.3-a/1): its own data source and role, never registered as the app_user one.
@@ -43,10 +53,8 @@ builder.Services.AddAuthentication(SessionCookie.Scheme)
         options.Cookie.Name = "session";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Strict;
-        // Secure unless explicitly relaxed for a plain-HTTP test run (CI's black-box Api).
-        options.Cookie.SecurePolicy = builder.Configuration.GetValue("Session:RequireHttps", true)
-            ? CookieSecurePolicy.Always
-            : CookieSecurePolicy.SameAsRequest;
+        // Secure unless explicitly relaxed for a plain-HTTP test run (guarded above).
+        options.Cookie.SecurePolicy = requireHttps ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
         options.Events.OnRedirectToLogin = context =>
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;

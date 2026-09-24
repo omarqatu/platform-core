@@ -68,11 +68,13 @@ jobs:
 
       # PROOF_SPEC T3: the [B] tests reach the system over HTTP too — the Api image built above, run as a
       # container with its three connection strings (never migrator's). Plain HTTP on the runner's loopback,
-      # so the cookie's Secure flag is relaxed for this run only (Session:RequireHttps; the default is on).
+      # so the cookie's Secure flag is relaxed for this run only (Session:RequireHttps; the default is on) —
+      # which Api allows only in an environment named Development or CI, hence ASPNETCORE_ENVIRONMENT=CI.
       - name: Start the Api (the image built above)
         run: |
           docker run -d --name api --network host \
             -e ASPNETCORE_URLS=http://127.0.0.1:5080 \
+            -e ASPNETCORE_ENVIRONMENT=CI \
             -e Session__RequireHttps=false \
             -e "ConnectionStrings__app_user=Host=localhost;Port=5432;Database=platform;Username=app_user;Password=app_user_dev" \
             -e "ConnectionStrings__authenticator=Host=localhost;Port=5432;Database=platform;Username=authenticator;Password=authenticator_dev" \

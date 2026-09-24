@@ -20,28 +20,12 @@ namespace Core.WhiteBoxTests;
 public class T3_SessionCookieTests(WhiteBoxFixture fixture)
 {
     [Fact]
-    public async Task T3_6_Cookie_CarriesUserAndActiveTenantOnly()
-    {
-        // Api is hosted as it is deployed: it must not see migrator's connection string, which CI gives this
-        // test process through the environment — Api's own T0 guard refuses to start if it does. The fixture
-        // read its configuration before any test ran, and the white-box tests run one at a time, so the
-        // variable is withheld for this host only and put back afterwards.
-        const string migratorVariable = "ConnectionStrings__migrator";
-        var migrator = Environment.GetEnvironmentVariable(migratorVariable);
-        Environment.SetEnvironmentVariable(migratorVariable, null);
-        try
-        {
-            await CookieContentAsync();
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(migratorVariable, migrator);
-        }
-    }
+    public Task T3_6_Cookie_CarriesUserAndActiveTenantOnly() =>
+        InProcessApi.WithoutMigratorVariableAsync(CookieContentAsync);
 
     private async Task CookieContentAsync()
     {
-        await using var api = Api();
+        await using var api = InProcessApi.Create();
         using var client = api.CreateClient(new WebApplicationFactoryClientOptions
         {
             BaseAddress = new Uri("https://localhost"),
@@ -105,13 +89,6 @@ public class T3_SessionCookieTests(WhiteBoxFixture fixture)
         Assert.Equal([fixture.W1Membership], memberships);
         Assert.Equal([$"SET LOCAL app.user_id = '{fixture.W1User}'"], recorder.Commands.Where(c => c.Contains("SET LOCAL")).ToList());
     }
-
-    private static WebApplicationFactory<Program> Api() =>
-        new WebApplicationFactory<Program>().WithWebHostBuilder(web =>
-        {
-            foreach (var role in new[] { "app_user", "authenticator", "provisioner" })
-                web.UseSetting($"ConnectionStrings:{role}", WhiteBoxFixture.ConnectionString(role));
-        });
 
     private static (string Value, HashSet<string> Attributes) SessionCookieOf(HttpResponseMessage response)
     {
