@@ -18,6 +18,16 @@ jobs:
       - name: Build
         run: dotnet build PlatformCore.slnx -c Release
 
+      # A fresh migrator password per run: the T0.3 scan searches the Api image
+      # for this exact value. Every holder of the migrator connection string
+      # (the migration tool, the test suites) takes it from the environment.
+      - name: Generate the migrator password
+        run: |
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          echo "MIGRATOR_PASSWORD=$password" >> "$GITHUB_ENV"
+          echo "ConnectionStrings__migrator=Host=localhost;Port=5432;Database=platform;Username=migrator;Password=$password" >> "$GITHUB_ENV"
+
       # Always a fresh container: T0.4 is a clean database, migrated with no manual steps.
       - name: Start PostgreSQL 18 (clean database)
         run: docker compose up -d --wait postgres
@@ -40,8 +50,23 @@ jobs:
       - name: Api holds no migrator connection string (T0.3)
         run: bash ci/check-api-has-no-migrator.sh platform-api:ci
 
+      - name: T0.3 check fails on every planted case (self-test)
+        run: bash ci/check-api-has-no-migrator.selftest.sh platform-api:ci
+
+      # [W] proofs for this implementation only (tests/Core.WhiteBoxTests/README.md).
+      - name: White-box tests
+        run: dotnet test tests/Core.WhiteBoxTests -c Release --no-build --logger "console;verbosity=normal"
+
       - name: Conformance
         run: dotnet test tests/Conformance -c Release --no-build --logger "console;verbosity=normal"
+
+      # The test-only t1_probe table must never outlive the run, so no catalog
+      # check can ever see it.
+      - name: No test residue
+        run: |
+          residue=$(docker compose exec -T postgres psql -U migrator -d platform -Atc "SELECT to_regclass('public.t1_probe')")
+          if [ -n "$residue" ]; then echo "FAIL: t1_probe still exists after the tests."; exit 1; fi
+          echo "PASS: t1_probe does not exist after the tests."
 
       - name: Database logs on failure
         if: failure()

@@ -1,3 +1,6 @@
+using Core.Data;
+using Core.Http;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Api holds exactly three connection strings (PROOF_SPEC T0): app_user,
@@ -20,6 +23,11 @@ foreach (var name in allowedConnections)
         throw new InvalidOperationException($"ConnectionStrings:{name} is not configured.");
 }
 
+builder.Services.AddCoreDataAccess(builder.Configuration.GetConnectionString("app_user")!);
+builder.Services.AddSingleton<ISessionContextAccessor, NoSessionContextAccessor>();
+
 var app = builder.Build();
+
+app.UseMiddleware<UnitOfWorkMiddleware>();
 
 app.Run();

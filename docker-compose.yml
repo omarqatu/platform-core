@@ -6,7 +6,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres_dev
       PLATFORM_DB: platform
-      MIGRATOR_PASSWORD: migrator_dev
+      # CI generates a random value per run (T0.3 searches the Api image for it).
+      MIGRATOR_PASSWORD: ${MIGRATOR_PASSWORD:-migrator_dev}
       APP_USER_PASSWORD: app_user_dev
       AUTHENTICATOR_PASSWORD: authenticator_dev
       JOB_RUNNER_PASSWORD: job_runner_dev

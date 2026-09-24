@@ -39,3 +39,35 @@ names the task it belongs to. An item is removed only by the PR that closes it.
 - **Origin:** T0 (PR #1). Left at PostgreSQL defaults.
 - **What T2 must do:** settle both in Check 6's approved list (§3.6, Check 6:
   "CONNECT and TEMP on the database").
+
+### 4. Re-prove T1.2, T1.3 and T1.6 in Conformance against a real table
+
+- **Origin:** T1 (PR #2), decision 8; PROOF_SPEC v1.1, T1 build. T1.2, T1.3
+  and T1.6 run against `t1_probe`, a test-only table, so today they are
+  harness proofs, not tests that run unmodified against another implementation.
+- **What T2 must do:** once the first real tenant table exists, point T1.2,
+  T1.3 and T1.6 at it in Conformance.
+  Then remove `t1_probe` along with its fixtures (`tests/fixtures/t1_probe.sql`,
+  both `T1ProbeFixture` classes) and the "No test residue" CI step.
+
+### 5. The catalog checks run before any test that creates tables
+
+- **Origin:** T1 (PR #2). The `t1_probe` fixtures create and drop a table in
+  `public` during the test steps.
+- **What T2 must do:** when the real catalog-check step replaces the
+  placeholder, keep it before the white-box and Conformance steps, so it can
+  never see a test table. Until item 4 removes `t1_probe`, the "No test
+  residue" step guards the other side.
+
+## For T3 and T5 — the rest of Test 27 (PLATFORM_CORE v1.10)
+
+### 6. Test 27's memberships and client_scope parts
+
+- **Origin:** T1 (PR #2). T1 covers the first-template part of Test 27 as
+  T1.6 (a reused connection with all five variables set, then COMMIT/ROLLBACK
+  and optionally DISCARD ALL: zero rows, no error).
+- **Still to cover — now acceptance criteria in PROOF_SPEC v1.1:**
+  - **T3.7, memberships:** with `app.user_id` alone, only the caller's own
+    memberships, next to Test 7, whose path it guards.
+  - **T5.8, a table under `client_scope`:** where the first such table
+    appears.
