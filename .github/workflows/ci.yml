@@ -58,20 +58,16 @@ jobs:
       - name: T0.3 check fails on every planted case (self-test)
         run: bash ci/check-api-has-no-migrator.selftest.sh platform-api:ci
 
+      # PROOF_SPEC §7: the seed contract, seeded by migrator before the tests (after the catalog checks).
+      - name: Seed the contract (migrator)
+        run: docker compose exec -T postgres psql -X -q -v ON_ERROR_STOP=1 -U migrator -d platform < tests/seed/seed-contract.sql
+
       # [W] proofs for this implementation only (tests/Core.WhiteBoxTests/README.md).
       - name: White-box tests
         run: dotnet test tests/Core.WhiteBoxTests -c Release --no-build --logger "console;verbosity=normal"
 
       - name: Conformance
         run: dotnet test tests/Conformance -c Release --no-build --logger "console;verbosity=normal"
-
-      # The test-only t1_probe table must never outlive the run, so no catalog
-      # check can ever see it.
-      - name: No test residue
-        run: |
-          residue=$(docker compose exec -T postgres psql -U migrator -d platform -Atc "SELECT to_regclass('public.t1_probe')")
-          if [ -n "$residue" ]; then echo "FAIL: t1_probe still exists after the tests."; exit 1; fi
-          echo "PASS: t1_probe does not exist after the tests."
 
       - name: Database logs on failure
         if: failure()

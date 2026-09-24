@@ -1,49 +1,7 @@
 using System.Data.Common;
-using Core;
-using Core.Data;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Npgsql;
 
 namespace Core.WhiteBoxTests;
-
-public sealed class Probe
-{
-    public Guid Id { get; set; }
-    public Guid TenantId { get; set; }
-    public string Label { get; set; } = "";
-    public int Counter { get; set; }
-}
-
-/// <summary>A test-only context over t1_probe, built with Core's transaction layer.</summary>
-public sealed class ProbeDbContext(DbContextOptions<ProbeDbContext> options) : CoreDbContext(options)
-{
-    public DbSet<Probe> Probes => Set<Probe>();
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder) =>
-        modelBuilder.Entity<Probe>(probe =>
-        {
-            probe.ToTable("t1_probe");
-            probe.Property(p => p.Id).HasColumnName("id");
-            probe.Property(p => p.TenantId).HasColumnName("tenant_id");
-            probe.Property(p => p.Label).HasColumnName("label");
-            probe.Property(p => p.Counter).HasColumnName("counter");
-        });
-
-    public static ProbeDbContext Create(NpgsqlDataSource dataSource, params IInterceptor[] extra)
-    {
-        var options = new DbContextOptionsBuilder<ProbeDbContext>();
-        Configure(options, dataSource, extra);
-        return new ProbeDbContext(options.Options);
-    }
-
-    public static void Configure(DbContextOptionsBuilder options, NpgsqlDataSource dataSource, params IInterceptor[] extra)
-    {
-        options.UseCoreDataAccess(dataSource);
-        if (extra.Length > 0)
-            options.AddInterceptors(extra);
-    }
-}
 
 /// <summary>Records every command's text, without touching it.</summary>
 public sealed class CommandRecorder : DbCommandInterceptor
