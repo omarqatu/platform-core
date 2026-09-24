@@ -1,0 +1,23 @@
+# Development and CI database. Passwords below are for local containers only.
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_dev
+      PLATFORM_DB: platform
+      MIGRATOR_PASSWORD: migrator_dev
+      APP_USER_PASSWORD: app_user_dev
+      AUTHENTICATOR_PASSWORD: authenticator_dev
+      JOB_RUNNER_PASSWORD: job_runner_dev
+      PROVISIONER_PASSWORD: provisioner_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Over TCP: the temporary server that runs the init scripts listens on the socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d platform"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

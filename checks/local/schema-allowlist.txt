@@ -1,0 +1,13 @@
+# Allowlist for check-schema-allowlist (a local repository check — NOT one of
+# PLATFORM_CORE's ten checks; see checks/local/README.md).
+#
+#   schema <name>            a permitted non-system schema
+#   schema <name> exact      ... whose complete contents are listed below
+#   object <schema>.<name>   a permitted object inside an 'exact' schema
+#
+# Changes to this file are a decision for the project owner, made in review.
+
+schema public
+schema migrations_meta exact
+
+object migrations_meta.__EFMigrationsHistory

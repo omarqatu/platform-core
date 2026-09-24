@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build PlatformCore.slnx -c Release
+
+      # Always a fresh container: T0.4 is a clean database, migrated with no manual steps.
+      - name: Start PostgreSQL 18 (clean database)
+        run: docker compose up -d --wait postgres
+
+      - name: Migrate as migrator (T0.4)
+        run: dotnet run --project src/Migrations -c Release --no-build
+
+      - name: Catalog checks
+        run: echo "No catalog checks yet — Checks 1-10 arrive in T2 (PROOF_SPEC T2)."
+
+      # A local repository check, not one of PLATFORM_CORE's ten (checks/local/README.md).
+      - name: Local check — check-schema-allowlist
+        run: |
+          bash checks/local/check-schema-allowlist.sh
+          bash checks/local/check-schema-allowlist.sh --self-test
+
+      - name: Build Api image
+        run: docker build -f src/Api/Dockerfile -t platform-api:ci .
+
+      - name: Api holds no migrator connection string (T0.3)
+        run: bash ci/check-api-has-no-migrator.sh platform-api:ci
+
+      - name: Conformance
+        run: dotnet test tests/Conformance -c Release --no-build --logger "console;verbosity=normal"
+
+      - name: Database logs on failure
+        if: failure()
+        run: docker compose logs postgres
