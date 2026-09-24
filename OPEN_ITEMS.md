@@ -61,16 +61,30 @@ Closed by the T2 PR:
   - **`scope_assignments.granted_by` can be forged.** `scope_assignment_insert`
     checks the tenant and `can_manage_scope` only. A scope manager (Rami) inserted
     an assignment with `granted_by` = another user (Omar): **1 row**.
-  - **`membership_scope.updated_by` cannot be recorded.** The §3.8 grant is
-    `UPDATE (scope_mode)` only, so `app_user` cannot set `updated_by` at all
-    (`permission denied`). An admin's change of `scope_mode` succeeds and leaves
-    `updated_by` **NULL**. The attribution is lost rather than forged. Its only
-    writer is `provisioner` at insert time, whose `WITH CHECK` is the tenant alone.
+  - **`membership_scope.updated_by` and `updated_at` cannot be recorded by the
+    change, and keep their old values.** The §3.8 grant is `UPDATE (scope_mode)`
+    only, so `app_user` cannot set either column (`permission denied`). Their only
+    writer is `provisioner` at insert time, whose `WITH CHECK` is the tenant alone:
+    it wrote `updated_by` = another user (Omar), accepted. Then a scope manager
+    (Nour, Maan's owner, not her own membership) changed `scope_mode`:
+
+    | | Written by provisioner | After Nour's change of `scope_mode` |
+    |---|---|---|
+    | `scope_mode` | `assigned` | `all` |
+    | `updated_by` | `omar` | **`omar`**: the old value stays |
+    | `updated_at` | `2025-01-01` | **`2025-01-01`**: the old value stays |
+
+    So after an admin's change the row states a **false attribution and a false
+    date**: that Omar last changed it, on 2025-01-01. (With the seed contract, whose
+    `updated_by` is NULL, it stays NULL, for the same reason.) Worse than a missing
+    value: a plausible, wrong one.
 - **For the document to decide:** bind `granted_by` to `app.user_id` in
-  `scope_assignment_insert`, as for `invited_by`; and either widen the grant to
-  `UPDATE (scope_mode, updated_by)` with `updated_by = app.user_id` in
-  `membership_scope_admin_update`'s `WITH CHECK`, or declare that the audit log
-  alone attributes scope changes (§7). Then run the new texts in isolation before
+  `scope_assignment_insert`, as for `invited_by`; and for `membership_scope`, either
+  widen the grant to `UPDATE (scope_mode, updated_by, updated_at)` with
+  `updated_by = app.user_id` in `membership_scope_admin_update`'s `WITH CHECK` (and
+  the provisioner's insert bound the same way), or drop the two columns and declare
+  that the audit log alone attributes scope changes (§7). The two columns must not
+  stay as they are: a value nothing keeps current reads as a fact. Then run the new texts in isolation before
   building, as every version since 1.11.
 
 ## For T3 and T5 — the rest of Test 27 (PLATFORM_CORE v1.10)
