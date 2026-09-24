@@ -1,9 +1,9 @@
 # Platform Core Document — Tenancy Layer
 ## A general-purpose SaaS platform — independent greenfield design
 
-**Version:** 1.10 — **Frozen release**
+**Version:** 1.11 — **Frozen release**
 **Date:** 2026-09-24
-**Review history:** Seven architecture reviews + two model reviews (through 1.6), then a **requirement-driven change** in 1.7, then an **eighth external review** that settled 1.8, then a **ninth review** that settled 1.9, then **the first finding from running code**, which settled 1.10. The full changelog is in the appendices.
+**Review history:** Seven architecture reviews + two model reviews (through 1.6), then a **requirement-driven change** in 1.7, then an **eighth external review** that settled 1.8, then a **ninth review** that settled 1.9, then **the first finding from running code**, which settled 1.10, then **testing two assumptions before T2**, which settled 1.11. The full changelog is in the appendices.
 **Nature of this document:** Pure technical analysis, not persuasive writing.
 
 **The freeze decision — and the limits of reopening it:** Freezing 1.6 was the right call about the **category** of findings, not about the document: the seventh review found half its findings were about the text's internal consistency — a category that writing the spec and the code exposes faster and more cheaply than an eighth text review. That decision stands: **any consistency defect or implementation-level item is resolved in the spec or the code, not in a new version.**
@@ -11,6 +11,33 @@
 1.7, 1.8, and 1.9 are not of that category. **1.7** was a change to the scope model driven by a product requirement (Section 4.8). **1.8** fixed a **structural flaw in that model's mechanism**, uncovered by an external review: a nested policy chain that disabled the second axis entirely (3.1, 4.8). **1.9** fixed a **contradiction between a model decision and its mechanism** (scope being used as a substitute for permission) and **a gap that voided the axis's guarantee** (the audit log). All of these sit in the transaction layer and the identity layer — i.e., **before** T0, not after. The governing rule after 1.9: **this is the last text-only revision. The document is reopened only for a finding that survives running the tests and is proven by the code** — the justification is in Section 13. And **1.10 is the first version reopened under this rule**: a finding no text review caught, found by running PostgreSQL 18.6.
 
 The remaining implementation items are explicitly carried forward to the first items of the spec (Section 13).
+
+**Change in 1.11 vs. 1.10 — two more engine assumptions, tested before building:** following the 1.10 lesson itself, and before a single line of T2, two assumptions the document builds on were tested in isolation — on PostgreSQL 18.6:
+
+**(1) Checks 2 and 8 would have failed on every correct table.** The document said a policy's text "matches the template exactly (pg_get_expr after whitespace normalization)." But PostgreSQL does not return the text as written; it returns a re-deparsed form:
+
+| Source | Text |
+|---|---|
+| Template 3.1 (v1.10) | `tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)` |
+| `pg_get_expr(polqual)` | `(tenant_id = ( SELECT (NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid AS "nullif"))` |
+| Equal after whitespace normalization? | **No** — added `::text` casts, parentheses, and an `AS "nullif"` alias |
+| Is the deparse stable? (Create a policy from the output, then deparse it again) | **Yes** |
+
+For `client_scope`, the deparse also includes the table's own name, so it differs from table to table. No whitespace normalization closes this. **The fix: compare deparse against deparse** — the check, running as `migrator` inside a transaction it rolls back, creates every expected policy (from a template or from the manifest) as a reference on **the same** table, and compares the actual `pg_get_expr` against the reference's `pg_get_expr`. PostgreSQL produces the reference itself, so no second text needs maintaining, and using the same table resolves the table name inside `client_scope`. Two alternatives were rejected: storing the deparsed output in the manifest (two texts for one template, brittle across PostgreSQL versions), and normalizing both sides with rules (a partial parser of the expression — exactly what 1.9 left behind when Check 10 moved to `pg_depend`).
+
+**(2) "UPDATE with no SELECT" is true under an unwritten condition.** The test result on `user_password_credentials` as `app_user` with no `SELECT` at all:
+
+| Form | Result |
+|---|---|
+| `UPDATE … SET password_hash = $1 WHERE user_id = $2` (what EF generates) | `permission denied for column user_id` — loud |
+| `UPDATE … SET password_hash = $1` with no `WHERE` and no `RETURNING`, RLS selecting the row | Exactly one row ✅ |
+| And with `SELECT` granted on the `user_id` column to "fix" the first form | Zero rows, **silently** — because `WHERE` also subjects the update to `SELECT` policies |
+
+The document's claim is true and Test 13 can pass — **but in the second form only**. The third form is a trap: "fixing" the loud error with a column grant turns it into a silent blinding, with only the rows-affected guard left in front of it. So the condition is now written into 3.8 and 4.3, Check 6 explicitly forbids any **column-level** `SELECT` on the table, and Test 13 now guards that the first form stays a loud failure.
+
+**And a third assumption held:** `pg_depend` does record policy-expression dependencies (Check 10 is sound), with one detail: the policy's own table appears as a reference, so `refobjid = polrelid` is excluded.
+
+**The pattern, a third time in two days:** three assumptions about PostgreSQL's behavior — `NULLIF` in 1.10, and the deparse and the `WHERE` condition here — all looked self-evident, none were questioned across nine reviews, and all were found by running, not reading. **Testing in isolation before building is now a fixed step in every task, not an exception.**
 
 **Change in 1.10 vs. 1.9 — the fail-safe assumption had been wrong since 1.0:** at the start of T1, before any code was written, an engine behavior the entire transaction layer relies on was tested in isolation — and it failed. It was reproduced on PostgreSQL 18.6 as `app_user`, on a temporary table carrying the verbatim 1.9 `tenant_isolation` text:
 
@@ -387,15 +414,31 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
 -- Check 2 (manifest — amended in 1.7): evaluated on two separate
 --   policy sets: permissive and restrictive.
 --   Outside the manifest:
---     - Permissive: a single tenant_isolation policy whose text
---       matches the standard template exactly (pg_get_expr after
---       whitespace normalization).
+--     - Permissive: a single tenant_isolation policy matching the
+--       standard template **deparse against deparse** (below —
+--       amended in 1.11).
 --     - Restrictive: empty, or client_scope alone with its
 --       standard text (3.1) — mandatory whenever the table
 --       carries scope_ref_id (Check 8).
 --   Inside the manifest: the actual policy set = the manifest's
 --   set exactly (by name, command, roles, permissive/restrictive
 --   class, and text). Missing, extra, or drifted = failure.
+--   (1.11) The text-comparison mechanism — deparse against
+--     deparse, not text against text: pg_get_expr does not return
+--     the text as written (it adds ::text, parentheses, and an
+--     alias), so matching the document's text fails on every
+--     correct table. The check, as migrator inside a transaction it
+--     rolls back at the end: for every expected policy — from a
+--     template or from the manifest file — creates its reference
+--     version under a temporary name on **the same** table, and
+--     compares pg_get_expr of the actual qual and with_check
+--     against those of the reference. The deparse is stable
+--     (proven), and the same table resolves the table name inside
+--     client_scope. The manifest stays plain SQL as written —
+--     PostgreSQL produces the reference.
+--     (The transaction takes an exclusive lock on the table: run
+--      in CI and on a test environment, not on a live production
+--      database.)
 --   (Separating the two sets is substantive, not cosmetic:
 --    permissive policies combine with OR and so widen; restrictive
 --    ones combine with AND and so narrow — mixing them in one
@@ -406,7 +449,9 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
 --     with_check sits inside NULLIF(…, '') before any cast. A bare
 --     occurrence = failure. This guards manifest policies that the
 --     template does not match textually, where the wrapper is easy
---     to forget in a new policy.
+--     to forget in a new policy. (1.11: checked on the deparsed
+--     form, where current_setting comes right after NULLIF( and ''
+--     becomes ''::text — not on the document's text.)
 -- The manifest tables as of 1.8: audit_log, memberships,
 --   invitations, persons, users, membership_auth,
 --   user_password_credentials, tenants, auth_attempts, modules,
@@ -449,7 +494,10 @@ WHERE c.relkind = 'r' AND n.nspname = 'public'
 --     - role memberships: no application role is a member of
 --       migrator or provisioner (prevents SET ROLE — Test 22)
 --   The sharpest points remain: no SELECT for app_user on
---   user_password_credentials, no UPDATE/DELETE for any
+--   user_password_credentials — (1.11) nor on any single column of
+--   it (column_privileges), because granting the user_id column to
+--   "fix" an update with a WHERE turns the loud error into a silent
+--   zero rows (3.8) — no UPDATE/DELETE for any
 --   application role on audit_log, no write access for anyone but
 --   migrator on the global catalogs, and no DELETE on
 --   scope_assignments.
@@ -465,8 +513,9 @@ WHERE c.relkind = 'r' AND n.nspname = 'public'
 
 -- Check 8 (new in 1.7 — second-axis coverage): every table
 --   carrying a scope_ref_id column has a restrictive policy named
---   client_scope, TO app_user, whose text matches the second
---   template (3.1) exactly. Its absence or drift = failure. Same
+--   client_scope, TO app_user, matching the second template (3.1)
+--   deparse against deparse on the same table (Check 2's
+--   mechanism — 1.11). Its absence or drift = failure. Same
 --   logic as Check 1, on the new axis: coverage is the default.
 SELECT c.relname FROM pg_class c
 JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'scope_ref_id'
@@ -496,6 +545,11 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
 --   (16‑a for leakage, 16‑b for blinding).
 --   Rationale: the 1.7 bug was a linear chain, well-formed and
 --   silently blocked — no check from 1..9 sees it.
+--   (1.11) A proven implementation detail: pg_depend records the
+--   policy's own table as a reference (deptype a, with its
+--   columns), so refobjid = polrelid is excluded from chain
+--   extraction — otherwise every policy would show as a chain to
+--   its own table.
 ```
 
 **An explicit limit on Check 10:** `pg_depend` records the tables and functions referenced directly in the expression (1.9: more precise than text parsing and needs no parser), but it does not see what that function or view **reads** internally. For this reason it is textually forbidden to reference a view or a non-`SECURITY INVOKER` function inside a policy expression — with one declared exception and no others: a `SECURITY DEFINER` function dedicated to resolving assignments, if it is later adopted to break the chain or reduce its cost (13).
@@ -532,7 +586,12 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
     is even reached.
 13. Hashes are hidden: SELECT on user_password_credentials with the
     app_user role → fails on the grant; and a password change
-    (UPDATE with no SELECT) affects exactly one row.
+    (UPDATE with no SELECT) affects exactly one row — (1.11) **in
+    the form with no WHERE and no RETURNING**. And the test guards
+    the other direction: the same update with WHERE user_id = …
+    fails **loudly** (permission denied), not with zero rows. Zero
+    rows instead of the error means someone granted SELECT on a
+    column = failure (3.8, Check 6).
 14. The silent critical write: an update to a row that is not
     visible → a rows-affected error, not a silent success (3.5/5).
 15. (1.6) The constraints layer: an invitation in Al-Amin with a
@@ -672,7 +731,7 @@ WHERE c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
 
 **Why `scope_mode` is a table, not a column (design correction in 1.7):** the natural instinct is a `scope_mode` column on `memberships`. And it is **a mistake under this document's model specifically**: column grants are cyclical, not policy-scoped (a column cannot be granted to one policy and withheld from another), and `memberships` carries `membership_self_leave`, which lets a member `UPDATE` their own row (4.5). So adding `scope_mode` to `app_user`'s `UPDATE` grant would have opened, for every member, **a one-command self-escalation from assigned to all** — with no policy to stop it, because the row is theirs and the tenant is theirs. The separate table splits the two surfaces: `memberships.status` remains self-service, while `membership_scope.scope_mode` is an administrative surface with a restrictive policy that excludes the acting member's own row (4.8, Test 17).
 
-Named design points: **`UPDATE` with no `SELECT`** on `user_password_credentials` is intentional and achievable in Postgres — changing the password without any application code ever being able to read the hash at all. **Column grants** on `users` prevent the self-update path from tampering with `person_id`/`user_type`/`status`. The global catalogs sit under RLS with a read policy plus the absence of a write grant — two layers even for what is public.
+Named design points: **`UPDATE` with no `SELECT`** on `user_password_credentials` is intentional and achievable in Postgres — changing the password without any application code ever being able to read the hash at all. **(1.11) Under a condition proven by running it:** the command is written `UPDATE user_password_credentials SET password_hash = $1, updated_at = now()` **with no `WHERE` and no `RETURNING`**, and the `password_self_update` policy is what selects the row. The reason: PostgreSQL requires `SELECT` on every column read in a `WHERE`, so an ordinary EF update (a tracked entity with `WHERE user_id = …`) fails with `permission denied`. And the trap: granting `SELECT` on the `user_id` column to "fix" it also subjects the update to `SELECT` policies — and the table has no `SELECT` policy — so it becomes **zero rows, silently**. Therefore: the path is a raw SQL command, not a tracked EF update; it is a critical write guarded by rows-affected = 1 (3.5/5); Check 6 forbids any column grant on the table; and Test 13 guards both directions. **Column grants** on `users` prevent the self-update path from tampering with `person_id`/`user_type`/`status`. The global catalogs sit under RLS with a read policy plus the absence of a write grant — two layers even for what is public.
 
 ---
 
@@ -805,7 +864,11 @@ CREATE POLICY user_self_update ON users
   WITH CHECK (id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid));
 
 -- Password change — UPDATE with no SELECT (3.8), after verifying
--- the current password via the authenticator surface.
+-- the current password via the authenticator surface. (1.11) As a
+-- raw command with no WHERE and no RETURNING — the policy below is
+-- what selects the row (3.8):
+--   UPDATE user_password_credentials
+--      SET password_hash = $1, updated_at = now();
 CREATE POLICY password_self_update ON user_password_credentials
   FOR UPDATE TO app_user
   USING (user_id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid))
@@ -1278,6 +1341,8 @@ An intermediary registry → (a third option, 1.8) scopable_entities
 
 ## 11. An Honest Estimate — from proof-of-concept to product
 
+**1.11's effect on the estimate:** hours, and not a line of T2 written yet — which is the whole point: had T2 been built on the first assumption, Checks 2 and 8 would have been red on every table from the first run, and the nearest "fix" under pressure is loosening the match — that is, disabling the check that guards the templates. Had it been built on the second, the nearest "fix" for the permission error is a column grant — that is, the silent trap. **An untested assumption costs nothing when it is found; it costs when it is fixed in a hurry.**
+
 **1.10's effect on the estimate:** an hour — a mechanical replacement in 33 places, four texts written out, and one test. The cost is not in the size but in the timing: had it been found after T2, every table would have been built with a wrong template text, and Check 2 matches it literally, so it would not see the error — intersecting here with the 1.8 lesson: **a check that matches the template textually guards the template, not its correctness.**
 
 **1.9's effect on the estimate:** hours to a day: a third context variable, a resolution step, four policies whose condition changes, a read policy for the log, and three tests. The real cost in 1.9 is not code, it is **the decision to stop**: there is no 1.10 from another text review (13).
@@ -1309,6 +1374,8 @@ An intermediary registry → (a third option, 1.8) scopable_entities
 
 | Risk | Status |
 |---|---|
+| **Checks 2 and 8 match the document's text, while pg_get_expr returns a different deparsed form — so they fail on every correct table** | **Closed in 1.11** — deparse-against-deparse comparison on the same table, inside a rolled-back transaction (3.6) |
+| **A password change via an ordinary EF update fails; and "fixing" it with a column grant turns it into silent zero rows** | **Closed in 1.11** — the condition is written (no WHERE, no RETURNING), Check 6 forbids column grants, and Test 13 guards both directions (3.8, 4.3) |
 | **A custom variable reverts to `''`, not `NULL`, after its first setting, so the cast throws on reused connections** | **Closed in 1.10** — `NULLIF` around every context variable in 33 places + enforced in Check 2 + Test 27. **Found by running code, not by review** (header, 3.1) |
 | **Implicit places in the text ("same expression", "a matching policy") that T2 builds literally** | **Closed in 1.10** — all four written out. Any implicit text in a policy is text Check 2 will never match (3.1, 4.6, 4.8) |
 | **A hidden policy chain silently disables an entire mechanism** | **Closed in 1.8** — separating `scope_assignments` policies, a declared chain table with its actor, Check 10, and Test 16‑b/d (1, 4.6, 4.8) |
@@ -1363,6 +1430,8 @@ An intermediary registry → (a third option, 1.8) scopable_entities
 **The freeze decision:** seven reviews de-escalated in severity, from the very core of isolation, to its edges, to the document's internal consistency — and that last category is exposed faster by writing the spec and the code than by an eighth text review. The next review is on **the spec**, and the one after that on **the code**. Any finding from here on is resolved there, and documented there.
 
 **And the reopening rule (1.7, widened in 1.8, and closed in 1.9 — see the lesson below):** the document is reopened for a change in the **model**, or for a **defect that voids an existing mechanism** — not for a correction to the **text**. 1.7 satisfied the first condition (a new scope axis), and 1.8 the second (a hidden chain that disabled that axis entirely). Whatever satisfies neither stays in the spec or the code.
+
+**A procedural lesson from 1.11 — the procedure is now fixed:** three engine assumptions in two days, all looking self-evident, all found by running. So testing in isolation every engine behavior the document assumes is **a mandatory first step in every PROOF_SPEC task**, before any code — not a reaction when the implementer happens upon something odd. And the reopening rule is unchanged: 1.11 was opened by two findings proven by running, not by review.
 
 **A procedural lesson from 1.10 — the rule worked as designed:** the 1.9 decision said the next class of defect is visible only by running code. The first thing run — before a single line of T1 code, a test of an engine behavior the document assumes — found a defect nine reviews had missed. This does not open the door to a tenth text review; it confirms the opposite. **The reopening rule stays as it is**, and 1.10 is its first application, not an exception to it. And the procedure that produced the finding is generalized: **before building on any engine behavior the document assumes, test it in isolation.**
 
@@ -1442,7 +1511,23 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix A — Changelog from 1.9 to 1.10
+## Appendix A — Changelog from 1.10 to 1.11
+
+| Item | 1.10 | 1.11 |
+|---|---|---|
+| Policy matching in Checks 2 and 8 | The document's text after whitespace normalization — fails on every correct table | **Deparse against deparse**: a reference created on the same table inside a rolled-back transaction (3.6) |
+| The `NULLIF` rule in Check 2 | On the text | **On the deparsed form** (3.6) |
+| Check 10 | `pg_depend` | **+ excluding `refobjid = polrelid`** (3.6) |
+| Password change | "UPDATE with no SELECT", unconditioned | **No `WHERE`, no `RETURNING`; a raw command, not an EF update** (3.8, 4.3) |
+| Check 6 on `user_password_credentials` | No `SELECT` on the table | **+ no `SELECT` on any single column** (3.6) |
+| Test 13 | Exactly one row | **+ the `WHERE` form fails loudly, not silently** (3.7) |
+| Testing in isolation before building | A reaction | **A mandatory first step in every task** (13) |
+
+**What did not change:** the model, the three layers, and the text of every policy. 1.11 corrects how they are checked, and one implementation condition.
+
+---
+
+## Appendix B — Changelog from 1.9 to 1.10
 
 | Item | 1.9 | 1.10 |
 |---|---|---|
@@ -1458,7 +1543,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix B — Changelog from 1.8 to 1.9
+## Appendix C — Changelog from 1.8 to 1.9
 
 | Item | 1.8 | 1.9 |
 |---|---|---|
@@ -1477,7 +1562,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix C — Changelog from 1.7 to 1.8
+## Appendix D — Changelog from 1.7 to 1.8
 
 | Item | 1.7 | 1.8 |
 |---|---|---|
@@ -1502,7 +1587,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix D — Changelog from 1.6 to 1.7
+## Appendix E — Changelog from 1.6 to 1.7
 
 | Item | 1.6 | 1.7 |
 |---|---|---|
@@ -1525,7 +1610,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix E — Changelog from 1.5 to 1.6
+## Appendix F — Changelog from 1.5 to 1.6
 
 | Item | 1.5 | 1.6 |
 |---|---|---|
