@@ -29,9 +29,20 @@ public static class Target
 
     public static async Task<NpgsqlConnection> OpenAsync(string role)
     {
-        var connectionString = Config.GetConnectionString(role)
-            ?? throw new InvalidOperationException($"ConnectionStrings:{role} is not configured.");
-        var connection = new NpgsqlConnection(connectionString);
+        var connection = new NpgsqlConnection(ConnectionString(role));
+        await connection.OpenAsync();
+        return connection;
+    }
+
+    public static string ConnectionString(string role) =>
+        Config.GetConnectionString(role)
+        ?? throw new InvalidOperationException($"ConnectionStrings:{role} is not configured.");
+
+    /// <summary>A physical connection no other test has used: pooling off.</summary>
+    public static async Task<NpgsqlConnection> OpenUnpooledAsync(string role)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(ConnectionString(role)) { Pooling = false };
+        var connection = new NpgsqlConnection(builder.ConnectionString);
         await connection.OpenAsync();
         return connection;
     }

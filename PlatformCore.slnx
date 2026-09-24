@@ -7,5 +7,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Conformance/Conformance.csproj" />
+    <Project Path="tests/Core.WhiteBoxTests/Core.WhiteBoxTests.csproj" />
   </Folder>
 </Solution>
