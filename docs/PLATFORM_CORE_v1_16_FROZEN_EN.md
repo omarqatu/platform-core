@@ -1,9 +1,9 @@
 # Platform Core Document — Tenancy Layer
 ## A general-purpose SaaS platform — independent greenfield design
 
-**Version:** 1.15 — **Frozen release**
-**Date:** 2026-09-24
-**Review history:** Seven architecture reviews + two model reviews (through 1.6), then a **requirement-driven change** in 1.7, then an **eighth external review** that settled 1.8, then a **ninth review** that settled 1.9, then **the first finding from running code**, which settled 1.10, then **testing two assumptions before T2**, which settled 1.11, then **two conflicts found by the same procedure**, which settled 1.12, then **a policy draft run before T2**, which settled 1.13, then **running the CI checks as written**, which settled 1.14, then **running a claim about the attribution columns**, which settled 1.15. The full changelog is in the appendices.
+**Version:** 1.16 — **Frozen release**
+**Date:** 2026-09-25
+**Review history:** Seven architecture reviews + two model reviews (through 1.6), then a **requirement-driven change** in 1.7, then an **eighth external review** that settled 1.8, then a **ninth review** that settled 1.9, then **the first finding from running code**, which settled 1.10, then **testing two assumptions before T2**, which settled 1.11, then **two conflicts found by the same procedure**, which settled 1.12, then **a policy draft run before T2**, which settled 1.13, then **running the CI checks as written**, which settled 1.14, then **running a claim about the attribution columns**, which settled 1.15, then **rule 11 at the start of T4**, which settled 1.16. The full changelog is in the appendices.
 **Nature of this document:** Pure technical analysis, not persuasive writing.
 
 **The freeze decision — and the limits of reopening it:** Freezing 1.6 was the right call about the **category** of findings, not about the document: the seventh review found half its findings were about the text's internal consistency — a category that writing the spec and the code exposes faster and more cheaply than an eighth text review. That decision stands: **any consistency defect or implementation-level item is resolved in the spec or the code, not in a new version.**
@@ -11,6 +11,19 @@
 1.7, 1.8, and 1.9 are not of that category. **1.7** was a change to the scope model driven by a product requirement (Section 4.8). **1.8** fixed a **structural flaw in that model's mechanism**, uncovered by an external review: a nested policy chain that disabled the second axis entirely (3.1, 4.8). **1.9** fixed a **contradiction between a model decision and its mechanism** (scope being used as a substitute for permission) and **a gap that voided the axis's guarantee** (the audit log). All of these sit in the transaction layer and the identity layer — i.e., **before** T0, not after. The governing rule after 1.9: **this is the last text-only revision. The document is reopened only for a finding that survives running the tests and is proven by the code** — the justification is in Section 13. And **1.10 is the first version reopened under this rule**: a finding no text review caught, found by running PostgreSQL 18.6.
 
 The remaining implementation items are explicitly carried forward to the first items of the spec (Section 13).
+
+**Change in 1.16 vs. 1.15 — managing members in the database:** at the start of T4, under rule 11, everything the member path builds on was run before any code. It showed that **the most important administrative surface in the system — who admits members, disables them, and grants them roles — was protected by the application alone**, while the database allowed everything:
+
+| Finding | Reproduction on v1.15 |
+|---|---|
+| **F1** A member disabled by a manager re-enables themselves | Sara disables Khaled; Khaled, with `app.user_id` alone, sets his status to `active` → **1 row**. |
+| **F2** Member management has no permission in the database | Khaled (operator) disables Omar (the owner) → **1 row**; deletes his owner role → **1 row**; grants himself owner → **1 row**. Layla (viewer) invites anyone with any role, owner included. The catalog held only `core.scope.manage`. |
+| **C1** Locking the tenant row (spec items a and g) is impossible for `app_user` | Every lock mode on `tenants` → **42501**: the matrix grants `SELECT` only. A column grant without an update policy locks **0 rows, silently**. With no lock: two owners leaving at once → **0 owners**. |
+| **C2** Automatic auditing (7) cannot audit a write with no tenant | `last_login_at` at login → **42501** on `audit_log`. |
+
+It is **the third instance of the same class**: `is_system` in 1.8, scope management in 1.9, and member management here — a sensitive surface protected by the application alone. The fix is the new Section 3.10: a `core.members.manage` permission and a sixth context variable, four policies rewritten, seven new ones, and a return path for a member who left. **All of it written from a draft run three times:** 102 cases in both directions (33 pass on v1.15, 102 on v1.16), seven concurrent races (all ending at zero on v1.15 with no lock, and at one remaining on v1.16), and a real EF path.
+
+**And two findings from running it, not from review:** (1) **a condition on the old state holds only if every UPDATE policy carries it**: PostgreSQL passes the old row through one policy's `USING` and the new row through another's `WITH CHECK`. A manager brought back a member who had left — via the lock policy's `USING` and the member-management policy's `WITH CHECK` — until `status = 'active'` was added to the former. (2) **A member's roles survive their departure**: a return that only adds the new role would bring the old one back with it — so a return replaces the roles and the mode and disables the old assignments, in a binding order.
 
 **Change in 1.15 vs. 1.14 — dropping the attribution columns from the scope surface:** on closing T2, a claim about the two attribution columns in the second axis's tables was run, and each turned out to lie in a different way. On PostgreSQL 18.6, in a rolled-back transaction: `provisioner` wrote a `membership_scope` row as acceptance does, then a scope manager changed `scope_mode`:
 
@@ -378,7 +391,7 @@ scope_assignments.membership_id  →  composite FK toward
 
 | Item | Rule |
 |---|---|
-| The application role | `app_user` — not an owner, not a superuser. Its context: `app.tenant_id` + `app.user_id` + (1.7) `app.membership_id` + `app.scope_all` + (1.9) `app.can_manage_scope` |
+| The application role | `app_user` — not an owner, not a superuser. Its context: `app.tenant_id` + `app.user_id` + (1.7) `app.membership_id` + `app.scope_all` + (1.9) `app.can_manage_scope` + (1.16) `app.can_manage_members` |
 | The authentication role | `authenticator` — resolves credentials + logs attempts (its only write), a separate DataSource (4.3) |
 | The background-job role | `job_runner` — reads active `tenants` only to start the fan-out; processing runs under `app_user`'s context per tenant (8) |
 | The migration role | `migrator` — an owner, migrations only, **a conscious, documented `BYPASSRLS`** (below); and it alone writes the global catalogs (seeding modules/permissions) and the documented archival/pruning procedures |
@@ -432,6 +445,7 @@ The rule: loud above (exposes), silent below (protects).
      c. the membership's permissions: membership_roles →
         role_permissions → permissions (the standard template +
         the global catalog) → SET LOCAL app.can_manage_scope
+        → SET LOCAL app.can_manage_members   (1.16)
    Each step reads only what the variable set before it allows.
    A single join query executed before setting them returns zero,
    so Rule 7 throws on every request (1.9).
@@ -439,6 +453,8 @@ The rule: loud above (exposes), silent below (protects).
    third:
      a. a membership whose mode is 'all'.
      b. the system context and background jobs (8).
+   And app.can_manage_members (1.16) likewise: a permission, not a
+   scope (3.10).
    And app.can_manage_scope is independent of the mode: an
    assigned membership may manage scope, and an all membership may
    not — orthogonal, like role and scope.
@@ -618,7 +634,8 @@ WHERE polrelid = 'scope_assignments'::regclass AND polname = 'client_scope';
 
 -- Check 9 (new in 1.7 — source of the scope): a static code
 --   script rejects any read of app.scope_all, app.membership_id,
---   or app.can_manage_scope (1.9) from a request payload, a
+--   or app.can_manage_scope (1.9) or app.can_manage_members (1.16)
+--   from a request payload, a
 --   header, or a claim, and any setting of them outside the tenant
 --   -selection layer and the background-job layer (3.5/6). The
 --   only source: membership_scope. A scope variable arriving from
@@ -794,7 +811,7 @@ Two alternatives were rejected: (a) limiting the check to tables outside the man
     resolution to a single query fails here before it can be
     merged.
 27. (New in 1.10) Fail-safe on a reused connection: on the **same**
-    connection — a transaction that sets all five context variables
+    connection — a transaction that sets all six (1.16) context variables
     with SET LOCAL, then COMMIT, then DISCARD ALL, then a query with
     no context at all against: a table under the first template, a
     table under client_scope, and memberships (with app.user_id
@@ -833,11 +850,11 @@ Two alternatives were rejected: (a) limiting the check to tables outside the man
 | persons | SELECT | — | **SELECT**, INSERT | — |
 | users | SELECT, UPDATE (columns: last_login_at, language, theme only) | SELECT | **SELECT**, INSERT | — |
 | user_password_credentials | UPDATE (password_hash, updated_at — **1.12**) **with no SELECT** | SELECT | INSERT | — |
-| memberships | SELECT, UPDATE (status) | — | **SELECT**, INSERT | — |
-| membership_roles | SELECT, INSERT, DELETE | — | INSERT | — |
+| memberships | SELECT, UPDATE (status) — **the policies confine the transitions (1.16, 3.10)** | — | **SELECT**, INSERT, **UPDATE (status) — return only (1.16, D9)** | — |
+| membership_roles | SELECT, INSERT, DELETE — **with core.members.manage, never on oneself (1.16)** | — | INSERT, **SELECT, DELETE (1.16 — return only)** | — |
 | membership_auth | SELECT | SELECT | INSERT | — |
-| membership_scope | SELECT, UPDATE (scope_mode) — **and the policy requires `can_manage_scope` and forbids editing one's own membership** (4.8) | — | INSERT | — |
-| scope_assignments | SELECT, INSERT, UPDATE (active) — **no DELETE**: an assignment is history that gets disabled, never erased | — | — | — |
+| membership_scope | SELECT, UPDATE (scope_mode) — **and the policy requires `can_manage_scope` and forbids editing one's own membership** (4.8) | — | INSERT, **SELECT, UPDATE (scope_mode) (1.16 — return only)** | — |
+| scope_assignments | SELECT, INSERT, UPDATE (active) — **no DELETE**: an assignment is history that gets disabled, never erased | — | **SELECT, UPDATE (active) (1.16 — disabling on return only)** | — |
 | invitations | SELECT, INSERT, UPDATE (status) | — | SELECT, UPDATE (status) | — |
 | auth_attempts | — | SELECT, INSERT | — | — |
 | audit_log | SELECT (**conditional on `scope_all` — 1.9, Section 7**), INSERT — **no UPDATE/DELETE for any application role** | — | INSERT | — |
@@ -982,18 +999,27 @@ CREATE POLICY invitations_tenant_read ON invitations
   FOR SELECT TO app_user
   USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
 
+-- (1.16) Both texts rewritten: member management (3.10, D6 and D8).
 CREATE POLICY invitations_insert ON invitations
   FOR INSERT TO app_user
   WITH CHECK (
     tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
     AND invited_by = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid)
+    AND COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND status = 'pending'
     AND (intended_scope_mode = 'assigned'
          OR COALESCE((SELECT NULLIF(current_setting('app.can_manage_scope', true), '')::boolean), false)));
 
 CREATE POLICY invitations_tenant_update ON invitations
   FOR UPDATE TO app_user
-  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
-  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND status = 'pending')
+  WITH CHECK (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND status = 'revoked');
 
 CREATE POLICY audit_log_insert ON audit_log
   FOR INSERT TO app_user
@@ -1015,6 +1041,174 @@ CREATE POLICY permissions_read ON permissions
 - Updating another tenant's row (`invitations_*_update`) yields **zero rows**, not an error — "silent below," with the acceptance and revocation paths under the rows-affected guard.
 - **A policy that 4.2 mentioned was removed:** "tenant-scoped visibility for an admin" on `membership_auth`. The database has no context variable expressing "admin," so it would have been open to every member of the tenant while saying "admin" — text that implies a protection that does not exist is worse than its absence, and nothing consumes it before SSO.
 
+### 3.10 Managing Members in the Database (new in 1.16)
+
+**Why this section:** through 1.15, managing members — disabling, granting and revoking roles, inviting — was protected by the application alone, and the catalog held no permission for the application to check in the first place. The findings and their reproduction are in the document's header. Every text below was run on PostgreSQL 18.6 in both directions, and the text is the executed text.
+
+**D1 — The permission and its templates (data seeded by `migrator`):** `core.members.manage` ("Manage members"), in the `owner` and `admin` templates; existing tenants' system roles are upgraded from the templates — one source of truth (5).
+
+**The sixth variable:** `app.can_manage_members`, resolved in **step c** beside `app.can_manage_scope` — one read, then two `SET LOCAL` commands in that order (3.5/6). System context and background jobs: `false` (8). Every read in any policy uses the 1.10 form (`COALESCE(NULLIF(…)::boolean, false)`), enforced by Check 2. Check 9 adds it to the second-axis variables, with the resolver as its only writer.
+
+**D2 — Membership status, three values, in the constraints layer:**
+
+```sql
+ALTER TABLE memberships ADD CONSTRAINT memberships_status_check
+  CHECK (status IN ('active', 'disabled', 'left'));
+```
+
+**D3 and D4 — Updating a membership:** their texts are in 4.5 (replacing the previous two). A manager moves **another** member between `active` and `disabled` only; `left` is final for them (the consent principle, 0). A member departs `active → left` only, and never re-enables themselves.
+
+**A rule for every UPDATE policy on `memberships` (proven by running it):** PostgreSQL combines permissive UPDATE policies **per phase** — the old row may pass one policy's `USING`, and the new row another's `WITH CHECK`. So a condition on the **old state** (e.g., not `left`) holds only if **every** UPDATE policy on the table carries it in `USING`, and the actor's own conditions are written in `WITH CHECK` as well as `USING`. D3, D4, and D7 are written that way, and the cases run every combination.
+
+**D5 — Writing `membership_roles`:** two restrictive policies split by command (the 1.12 rule), beside `tenant_isolation`, which stays:
+
+```sql
+CREATE POLICY membership_roles_manage_insert ON membership_roles
+  AS RESTRICTIVE FOR INSERT TO app_user
+  WITH CHECK (
+    COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND membership_id <> (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid));
+
+CREATE POLICY membership_roles_manage_delete ON membership_roles
+  AS RESTRICTIVE FOR DELETE TO app_user
+  USING (
+    COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND membership_id <> (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid));
+```
+
+**D6 and D8 — Invitations:** their texts are in 3.9 (replacing the previous two). Creating requires `core.members.manage` and status `pending` only; revoking requires it too, `pending → revoked` only — `app_user` cannot set `accepted` or `expired`.
+
+**D7 — `membership_lock`: the rows items a and g lock, for either manager:**
+
+```sql
+CREATE POLICY membership_lock ON memberships
+  FOR UPDATE TO app_user
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND id <> (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+    AND status = 'active'
+    AND (COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+         OR COALESCE((SELECT NULLIF(current_setting('app.can_manage_scope', true), '')::boolean), false)))
+  WITH CHECK (false);   -- a row lock (FOR UPDATE), never a write
+```
+
+**Why it exists:** under D3, locking another member's row requires the members permission. Item g's actor holds the scope permission; without the members permission, `FOR UPDATE` over the `all` members' rows locked **zero rows with no error**, the other downgrade did not wait, and both succeeded → **zero `all` members**. **Each condition carries weight:** `WITH CHECK (false)` — no write ever passes through it; `id <> app.membership_id` — the actor's own row is lockable only through D4, i.e. while active (closing the escape from disabling: disabled → left → invitation → active); `status = 'active'` — without it, this `USING` combined with D3's `WITH CHECK` brought back a member who had left. **What it changes:** a manager's write that no policy allows, on an active row, is refused **loudly** (42501), not silently.
+
+**Items a and g — the lock and the count (covering departure, a role change, a downgrade, and disabling):**
+
+```
+a. The last active owner — for a departure, removing an owner role, or disabling an owner:
+   SELECT m.id FROM memberships m
+    WHERE m.tenant_id = app.tenant_id AND m.status = 'active'
+      AND EXISTS (owner role, is_system)
+    ORDER BY m.id FOR UPDATE OF m;
+   then, in a separate statement, count the active owners; refuse if none would remain.
+g. The last active `all` membership — for a downgrade, or disabling an `all` member:
+   the same over the active memberships whose mode is 'all'; then count in a separate statement.
+Never lock membership_scope for this: membership_scope_admin_update excludes the actor's own
+row, so the lock skips it silently (run: the race leaves zero `all`).
+```
+
+**A binding code rule (proven by the races):** lock first, in its own statement, `ORDER BY id`; then count **in a separate statement** — under READ COMMITTED it takes a fresh snapshot after the lock is granted, and sees the other transaction's committed change. The lock query itself is **not** re-evaluated after the wait: a guard comparing "rows locked" against a count taken after the lock reports a false mismatch under contention.
+
+**D9 — Returning by a new invitation: `provisioner` re-activates the same row.** Why the same row: `UNIQUE (tenant_id, user_id)` allows no second one. Why the roles and mode are replaced: role links survive a departure, so a return that only adds the new role brings the old one back. The old `membership_auth` row is reused as is.
+
+```sql
+-- New grants for provisioner (3.8):
+GRANT UPDATE (status) ON memberships TO provisioner;
+GRANT SELECT, DELETE ON membership_roles TO provisioner;
+GRANT SELECT, UPDATE (scope_mode) ON membership_scope TO provisioner;
+
+-- left → active only — never disabled (no escape from disabling), and only in app.tenant_id (4.4).
+CREATE POLICY memberships_provisioner_rejoin ON memberships
+  FOR UPDATE TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND status = 'left')
+  WITH CHECK (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND status = 'active');
+
+CREATE POLICY membership_roles_provisioner_select ON membership_roles
+  FOR SELECT TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = membership_roles.membership_id AND m.status = 'left'));
+
+CREATE POLICY membership_roles_provisioner_delete ON membership_roles
+  FOR DELETE TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = membership_roles.membership_id AND m.status = 'left'));
+
+CREATE POLICY membership_scope_provisioner_select ON membership_scope
+  FOR SELECT TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = membership_scope.membership_id AND m.status = 'left'));
+
+CREATE POLICY membership_scope_provisioner_rejoin ON membership_scope
+  FOR UPDATE TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = membership_scope.membership_id AND m.status = 'left'))
+  WITH CHECK (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = membership_scope.membership_id AND m.status = 'left'));
+```
+
+**D10 — Returning: the old assignments are disabled.** A returning member comes back with only what the new invitation grants; their new assignments are given by a scope manager, as for any member. The rows are disabled, never deleted — an assignment is history (4.8).
+
+```sql
+GRANT SELECT, UPDATE (active) ON scope_assignments TO provisioner;
+
+CREATE POLICY scope_assignments_provisioner_select ON scope_assignments
+  FOR SELECT TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = scope_assignments.membership_id AND m.status = 'left'));
+
+CREATE POLICY scope_assignments_provisioner_disable ON scope_assignments
+  FOR UPDATE TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = scope_assignments.membership_id AND m.status = 'left'))
+  WITH CHECK (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = scope_assignments.membership_id AND m.status = 'left')
+    AND NOT active);
+```
+
+**The acceptance order for someone who left, in one transaction (binding — the policies depend on the row still being `left`):**
+
+```
+1. delete the membership's role links          (membership_roles_provisioner_delete)
+2. set its scope mode to the invitation's       (membership_scope_provisioner_rejoin)
+3. disable its assignments                      (scope_assignments_provisioner_disable)
+4. insert the invitation's role                 (membership_roles_provisioner_insert)
+5. re-activate: left → active                   (memberships_provisioner_rejoin) — last
+6. mark the invitation accepted: WHERE status = 'pending' — one row (single-use)
+7. the audit entries (automatic, 7)
+membership_auth: the existing row is reused.
+```
+
+The wrong order (re-activating first) leaves the old roles and assignments active — proven. For someone `disabled` or `active` in that tenant, acceptance is refused.
+
+**Other paths settled with this section:**
+- **Bootstrap:** `POST /provision/tenants`, registered in Development and CI only — the Api refuses to register it in any other environment (the pattern of the `migrator` guard and `Session:RequireHttps`). Public self-registration is out of the proof's scope.
+- **Acceptance with no account:** the token and an email matching the invitation's are enough; the person, user, and credential are created in the acceptance transaction. **Single-use:** updating the invitation `WHERE status = 'pending'` is a critical write expecting one row.
+- **`ExecuteUpdate` and `ExecuteDelete` are forbidden** in application code by a local static check beside `check-schema-allowlist`, except the password command: a bulk command bypasses the change tracker, so automatic auditing never sees it (proven: 1 row updated, 0 audit entries).
+
+**A declared limit:** the hierarchy for granting roles — who may grant `owner` — is deferred. Under this text a manager can grant `owner`; the manager is trusted in the proof.
+
 ---
 
 ## 4. Identity — Person / User / Membership
@@ -1034,7 +1228,7 @@ users(id, person_id, user_type, username UNIQUE,   -- (1.6 correction:
 
 user_password_credentials(user_id PK, password_hash, updated_at)
 
-memberships(id, tenant_id, user_id, status, created_at,
+memberships(id, tenant_id, user_id, status, created_at,   -- status: active | disabled | left (1.16)
             UNIQUE (tenant_id, user_id),
             UNIQUE (tenant_id, id))        -- the base for the composite FK (3.3)
 
@@ -1244,23 +1438,37 @@ CREATE POLICY tenant_visible_to_member ON tenants
 CREATE POLICY membership_tenant_read ON memberships
   FOR SELECT TO app_user
   USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
--- (3) The admin enables/disables memberships in their tenant
---     (a column grant: status only):
+-- (3) (1.16) A member manager moves ANOTHER member between active and
+--     disabled only — with core.members.manage, never their own
+--     membership, never out of left (3.10, D3):
 CREATE POLICY membership_tenant_update ON memberships
   FOR UPDATE TO app_user
-  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
-  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
--- (4) A member departs: disabling their own membership:
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND id <> (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+    AND status IN ('active', 'disabled'))
+  WITH CHECK (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND id <> (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+    AND status IN ('active', 'disabled'));
+-- (4) (1.16) A member departs: active → left only — never re-enabling
+--     themselves (3.10, D4):
 CREATE POLICY membership_self_leave ON memberships
   FOR UPDATE TO app_user
-  USING (user_id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid))
-  WITH CHECK (user_id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid));
+  USING (
+    user_id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid)
+    AND status = 'active')
+  WITH CHECK (
+    user_id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid)
+    AND status = 'left');
 -- (5) Insertion: FOR INSERT TO provisioner only (4.4). No DELETE
 --     for anyone: membership is history that gets disabled, never
 --     erased — the audit trail refers to it.
 ```
 
-Disabling cuts off access to that tenant immediately (a status check at authentication and at tenant selection). The "the last owner cannot leave" rule and its race guard: a spec item (13). Identity deletion for compliance: a layer of the sold product, resolved alongside single-tenant restoration (12).
+Disabling cuts off access to that tenant immediately (a status check at authentication and at tenant selection). The "last owner" rule and its race guard: (1.16) settled — locking the membership rows and counting in a separate statement, covering disabling too (3.10). Identity deletion for compliance: a layer of the sold product, resolved alongside single-tenant restoration (12).
 
 **Why acceptance goes through provisioner, not app_user:** creating a membership touches three scopes at once (a cross-tenant identity + a tenant + a credential) with no valid active-tenant context — this is exactly the definition of "the write that crosses isolation boundaries," confined to provisioner. Going from one path to two is **declared**; silent expansion is the risk, not the number of paths.
 
@@ -1295,6 +1503,9 @@ CREATE POLICY user_visible_via_membership ON users
 | `persons → users → memberships` | app_user in their active tenant | 4.6 + self-visibility, 4.3 |
 | `users → memberships` (1.10 — previously implicit) | app_user in their active tenant | `user_visible_via_membership` (4.6) |
 | `membership_auth → memberships` | app_user for their own membership | 4.2 |
+| `membership_roles → memberships` (1.16) | provisioner — a `left` membership in app.tenant_id | `memberships_provisioner_select` (3.9) |
+| `membership_scope → memberships` (1.16) | provisioner — likewise | `memberships_provisioner_select` (3.9) |
+| `scope_assignments → memberships` (1.16) | provisioner — likewise | `memberships_provisioner_select` (3.9) |
 | `tenants → memberships` | app_user for their own memberships | 4.3 |
 | `<scoped table> → scope_assignments` | **app_user whose mode is assigned** | `scope_assignment_read` (4.8) |
 | **Scope resolution, step b:** `membership_scope` (self branch) | app_user after setting `app.membership_id` | `membership_scope_read` (4.8) — **strictly in the order of 3.5/6** (1.9) |
@@ -1560,6 +1771,11 @@ audit_log(id, tenant_id, actor_id, actor_type, action,
 
 **There are three writers, with explicit policies in the manifest:** `app_user` (with `WITH CHECK (tenant_id = app.tenant_id)`), `provisioner` (both paths' entries), and background jobs pass through as `app_user` in each tenant's context. No fourth writer. (1.13: the texts of both write policies — `audit_log_insert` and `audit_log_provisioner_insert` — are in 3.9.)
 
+**Two declared lists for automatic auditing (1.16):**
+- **The exemption list:** self-service identity writes — `users (last_login_at, language, theme)` via `user_self_update` — are not audited automatically, because `audit_log` is a tenant log and these are not tenant data (proven: auditing them throws 42501). `user_password_credentials` is **never** audited; `auth_attempts` is its own log. **Pre-launch item:** an identity audit log.
+- **The masking list:** `password_hash` and `token_hash` — the column stays in `old_value`/`new_value` with the value `"[masked]"`: the log shows the column was written without revealing it. Dropping the key entirely would suggest it was never written — a silent blinding.
+- **The mechanism** (proven through EF): capture at `SavingChanges`, a second save of the audit entries from `SavedChanges`, and a flag preventing the audit of the audit — in the same transaction, rolled back with it.
+
 **Readers — the read policy is now written (1.9):** through 1.8, reading the log was tenant-scoped, and deferred as a spec item phrased "the preferred decision." That was a misjudgment of severity: the log carries `old_value` and `new_value`, so an `assigned` member could read the **content** of edits to entities not assigned to them — a gap that voids the second axis's guarantee, not an implementation detail. It is resolved here:
 
 ```sql
@@ -1597,6 +1813,7 @@ Every background job:
 5. (1.7) A system context on the second axis: app.scope_all = true
    and app.membership_id unset — the job processes every entity of
    the tenant.
+   (1.16) And app.can_manage_members = false likewise.
    (1.9) And app.can_manage_scope = false: the job sees everything
    and does not manage scope — managing scope is the act of an
    authenticated member, not a system act.
@@ -1696,6 +1913,12 @@ An intermediary registry → (a third option, 1.8) scopable_entities
 
 | Risk | Status |
 |---|---|
+| **Member management protected by the application alone — any member disables the owner or promotes themselves** | **Closed in 1.16** — `core.members.manage` in the database, and no one edits their own roles (3.10) |
+| **A disabled member re-enables themselves, or escapes disabling by leaving and being re-invited** | **Closed in 1.16** — departure is `active → left` only, and the lock never covers the actor's own row or an inactive row (3.10) |
+| **Last-owner / last-`all` races — and locking the tenant row is impossible for `app_user`** | **Closed in 1.16** — membership-row locks + `membership_lock`; seven races end with one remaining (3.10) |
+| **A member returns with their old roles and assignments** | **Closed in 1.16** — return replaces roles and mode and disables assignments, in a binding order (3.10) |
+| **Automatic auditing breaks login, and writes `token_hash`** | **Closed in 1.16** — declared exemption and masking lists (7) |
+| **Role-granting hierarchy: a manager can grant `owner`** | **Declared limit (1.16)** — deferred; the manager is trusted in the proof |
 | **Attribution columns on the scope surface: stale after an update, or forged at insert** | **Closed in 1.15** — dropped; the audit log is the sole source of attribution (4.1, 7) |
 | **Check 8 demands `client_scope` on the very table the template reads — infinite recursion failing every scoped table** | **Closed in 1.14** — a structural exception + a guarding inverse clause + Test 16-d (3.6) |
 | **A grant with no policy under FORCE RLS is dead: silent zero rows or rejection** (the login path and step c among them) | **Closed in 1.13** — 32 policies written and run in both directions (3.9) |
@@ -1776,9 +1999,10 @@ An intermediary registry → (a third option, 1.8) scopable_entities
 **2. Items carried from the document into the first spec items (not into a new version):**
 
 ```
-a.  The "the last owner cannot leave" rule: a constraint trigger or
-    an advisory lock — a purely application-level rule is subject
-    to a race between two concurrent departures.
+a.  (Settled in 1.16 — 3.10) The "last active owner" rule: lock the
+    membership rows ORDER BY id, then count in a separate statement;
+    covers departure, role removal, and disabling. Locking the
+    tenant row is impossible for app_user (proven).
 b.  The auth_attempts retention and pruning policy (usernames and
     IPs accumulate with no cap) — a documented migrator procedure.
 c.  The membership's provider at invitation acceptance: today's
@@ -1794,10 +2018,9 @@ e.  Protecting seeded roles (is_system) from editing — the exact
     — 1.7 items —
 f.  The scope-mode field on invitations: its name, its values, and
     its validation at creation and at acceptance (4.8).
-g.  The last full-scope membership cannot be downgraded: a
-    counterpart to the "last owner cannot leave" rule (item a) on
-    the second axis — a tenant with no remaining all-scope
-    membership becomes unmanageable. The same race guard.
+g.  (Settled in 1.16 — 3.10) The last active all membership: the
+    same lock and count, covering downgrade and disabling; either
+    manager can lock via membership_lock (D7).
 h.  (The core is settled in 1.9 — Section 7) reading audit_log
     requires scope_all. What remains for the spec: a fine-grained
     per-entity read for an assigned member — by adding
@@ -1841,7 +2064,26 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix A — Changelog from 1.14 to 1.15
+## Appendix A — Changelog from 1.15 to 1.16
+
+| Item | 1.15 | 1.16 |
+|---|---|---|
+| Member management | Application-only, with no permission in the catalog | **`core.members.manage` and a sixth variable, in the database** (3.10) |
+| `membership_tenant_update` | Any member, any status | **A member manager, another member, `active` ↔ `disabled` only** (4.5) |
+| `membership_self_leave` | Any status on one's own row | **`active → left` only** (4.5) |
+| `membership_roles` | Writable by any member | **Two restrictive policies: the members permission, never on oneself** (3.10) |
+| Invitations | Any member invites and revokes, any status | **With the members permission; created `pending`, revoked `pending → revoked`** (3.9) |
+| Items a and g | Tenant-row lock (impossible) | **Membership-row locks + `membership_lock`; covering disabling** (3.10) |
+| Returning after leaving | Impossible (the unique constraint) | **`provisioner` re-activates the row in a binding order** (3.10) |
+| Membership statuses | Undefined | **`active` / `disabled` / `left` in the constraints** (4.1) |
+| Automatic auditing | No lists | **Declared exemption and masking lists** (7) |
+| `provisioner` grants | — | **+ UPDATE (status), SELECT/DELETE on roles, SELECT/UPDATE on mode and assignments — for return only** (3.8) |
+
+**What did not change:** the model, the text of every policy not listed above, and `app_user`'s grants.
+
+---
+
+## Appendix B — Changelog from 1.14 to 1.15
 
 | Item | 1.14 | 1.15 |
 |---|---|---|
@@ -1852,7 +2094,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix B — Changelog from 1.13 to 1.14
+## Appendix C — Changelog from 1.13 to 1.14
 
 | Item | 1.13 | 1.14 |
 |---|---|---|
@@ -1862,7 +2104,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix C — Changelog from 1.12 to 1.13
+## Appendix D — Changelog from 1.12 to 1.13
 
 | Item | 1.12 | 1.13 |
 |---|---|---|
@@ -1881,7 +2123,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix D — Changelog from 1.11 to 1.12
+## Appendix E — Changelog from 1.11 to 1.12
 
 | Item | 1.11 | 1.12 |
 |---|---|---|
@@ -1895,7 +2137,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix E — Changelog from 1.10 to 1.11
+## Appendix F — Changelog from 1.10 to 1.11
 
 | Item | 1.10 | 1.11 |
 |---|---|---|
@@ -1911,7 +2153,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix F — Changelog from 1.9 to 1.10
+## Appendix G — Changelog from 1.9 to 1.10
 
 | Item | 1.9 | 1.10 |
 |---|---|---|
@@ -1927,7 +2169,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix G — Changelog from 1.8 to 1.9
+## Appendix H — Changelog from 1.8 to 1.9
 
 | Item | 1.8 | 1.9 |
 |---|---|---|
@@ -1946,7 +2188,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix H — Changelog from 1.7 to 1.8
+## Appendix I — Changelog from 1.7 to 1.8
 
 | Item | 1.7 | 1.8 |
 |---|---|---|
@@ -1971,7 +2213,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix I — Changelog from 1.6 to 1.7
+## Appendix J — Changelog from 1.6 to 1.7
 
 | Item | 1.6 | 1.7 |
 |---|---|---|
@@ -1994,7 +2236,7 @@ m.  The precise meaning of visible_count in the API contract: after
 
 ---
 
-## Appendix J — Changelog from 1.5 to 1.6
+## Appendix K — Changelog from 1.5 to 1.6
 
 | Item | 1.5 | 1.6 |
 |---|---|---|

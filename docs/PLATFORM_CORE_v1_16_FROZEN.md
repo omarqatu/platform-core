@@ -1,9 +1,9 @@
 # وثيقة نواة المنصّة — طبقة تعدّد الجهات (Tenancy)
 ## منصّة SaaS عامة — تصميم greenfield مستقل
 
-**الإصدار:** 1.15 — **النسخة المجمّدة**
-**تاريخ:** 2026-09-24
-**سجل المراجعات:** سبع مراجعات معمارية + مراجعتا نموذج (حتى 1.6)، ثم **تعديل متطلَّب** في 1.7، ثم **مراجعة خارجية ثامنة** حسمت 1.8، ثم **مراجعة تاسعة** حسمت 1.9، ثم **أول اكتشاف من كود مشغَّل** حسم 1.10، ثم **اختبار افتراضين قبل T2** حسم 1.11، ثم **تعارضان كشفهما نفس الإجراء** حسما 1.12، ثم **مسودة policies مشغَّلة قبل T2** حسمت 1.13، ثم **تشغيل فحوص CI كما كُتبت** حسم 1.14، ثم **تشغيل ادعاء عن أعمدة النسبة** حسم 1.15. سجل التغيير الكامل في الملاحق.
+**الإصدار:** 1.16 — **النسخة المجمّدة**
+**تاريخ:** 2026-09-25
+**سجل المراجعات:** سبع مراجعات معمارية + مراجعتا نموذج (حتى 1.6)، ثم **تعديل متطلَّب** في 1.7، ثم **مراجعة خارجية ثامنة** حسمت 1.8، ثم **مراجعة تاسعة** حسمت 1.9، ثم **أول اكتشاف من كود مشغَّل** حسم 1.10، ثم **اختبار افتراضين قبل T2** حسم 1.11، ثم **تعارضان كشفهما نفس الإجراء** حسما 1.12، ثم **مسودة policies مشغَّلة قبل T2** حسمت 1.13، ثم **تشغيل فحوص CI كما كُتبت** حسم 1.14، ثم **تشغيل ادعاء عن أعمدة النسبة** حسم 1.15، ثم **القاعدة 11 عند بدء T4** حسمت 1.16. سجل التغيير الكامل في الملاحق.
 **طبيعة الوثيقة:** تحليل تقني خالص، لا غرض إقناع.
 
 **قرار التجميد — وحدود إعادة الفتح:** تجميد 1.6 كان قراراً صحيحاً عن **صنف** الاكتشافات لا عن الوثيقة: المراجعة السابعة وجدت نصف اكتشافاتها في اتساق النصّ مع نفسه، وهذا صنف تكشفه كتابة المواصفة والكود أسرع وأرخص من مراجعة نصّ ثامنة. ذلك القرار قائم: **أي خلل اتساق أو بند تنفيذي يُحسم في المواصفة أو الكود، لا في نسخة جديدة.**
@@ -11,6 +11,19 @@
 1.7 و1.8 و1.9 ليست من ذلك الصنف. **1.7** تغيير في نموذج النطاق فرضه متطلَّب منتج (القسم 4.8). و**1.8** إصلاح **خلل بنائي في آلية ذلك النموذج** كشفته مراجعة خارجية: سلسلة policies متداخلة عطّلت المحور الثاني بالكامل (3.1، 4.8). و**1.9** إصلاح **تناقض بين قرار نموذج وآليته** (النطاق يُستعمل بديلاً عن الصلاحية) و**ثغرة تُبطل ضمان المحور** (سجل التدقيق). موضعها كلها طبقة المعاملة وطبقة الهوية — أي **قبل** T0 لا بعده. القاعدة الحاكمة بعد 1.9: **هذه آخر نسخة نصّية. لا تُفتح الوثيقة إلا لاكتشاف ينجو من تشغيل الاختبارات ويُثبته الكود** — المبرّر في 13. و**1.10 أول نسخة تُفتح بهذه القاعدة**: اكتشاف لم يجده نصّ، وجده تشغيل PostgreSQL 18.6.
 
 البنود التنفيذية المتبقية تبقى منقولة صراحةً إلى أول بنود المواصفة (القسم 13).
+
+**تغيير 1.16 عن 1.15 — إدارة الأعضاء في القاعدة:** عند بدء T4، ووفق القاعدة 11، شُغّل كل ما يبني عليه مسار الأعضاء قبل أي كود. فظهر أن **أهمّ سطح إداري في النظام — من يُدخل الأعضاء ويعطّلهم ويمنحهم الأدوار — محميّ في التطبيق وحده**، والقاعدة تسمح بكل شيء:
+
+| الاكتشاف | إعادة الإنتاج على v1.15 |
+|---|---|
+| **F1** عضو عطّله المدير يعيد تفعيل نفسه | سارة تعطّل خالد؛ خالد بـ `app.user_id` وحده يضبط حالته `active` → **صفّ واحد**. |
+| **F2** إدارة الأعضاء بلا صلاحية في القاعدة | خالد (operator) يعطّل عمر (المالك) → **صفّ**؛ يحذف دور مالكه → **صفّ**؛ يمنح نفسه دور المالك → **صفّ**. وليلى (viewer) تدعو أي أحد بأي دور، ومنه المالك. والكتالوج لا يحوي إلا `core.scope.manage`. |
+| **C1** قفل صفّ الجهة (بندا المواصفة أ وز) مستحيل على `app_user` | كل أنماط القفل على `tenants` → **42501**: المصفوفة تمنح `SELECT` وحده. ومنح عمودي بلا policy تحديث يقفل **صفر صفوف بصمت**. وبلا قفل: مالكان يغادران معاً → **صفر مالكين**. |
+| **C2** التدقيق التلقائي (7) لا يدقّق كتابة بلا جهة | `last_login_at` عند الدخول → **42501** على `audit_log`. |
+
+وهو **النمط الثالث من نفس الصنف**: `is_system` في 1.8، وإدارة النطاق في 1.9، وإدارة الأعضاء هنا — سطح حسّاس محميّ تطبيقياً وحده. والإصلاح في القسم 3.10 الجديد: صلاحية `core.members.manage` ومتغيّر سياق سادس، وإعادة كتابة أربع سياسات، وسبع سياسات جديدة، ومسار عودة العضو الذي غادر. **كُتب كله من مسودة مشغَّلة ثلاث مرات:** 102 حالة في الاتجاهين (33 تنجح على v1.15، و102 على v1.16)، وسبعة سباقات متزامنة (كلها تنتهي بصفر على v1.15 بلا قفل، وبعضو واحد متبقٍّ على v1.16)، ومسار EF حقيقي.
+
+**واكتشافان من التشغيل نفسه لا من المراجعة:** (1) **شرط على الحالة القديمة لا يصمد إلا إن حملته كل سياسات UPDATE**: PostgreSQL يمرّر الصفّ عبر `USING` سياسة، والصفّ الجديد عبر `WITH CHECK` سياسة أخرى. فقد أعاد مديرٌ عضواً غادر، عبر `USING` من سياسة القفل و`WITH CHECK` من سياسة إدارة الأعضاء، حتى أُضيف `status = 'active'` إلى الأولى. (2) **أدوار العضو تبقى بعد مغادرته**: عودة تضيف الدور الجديد وحده كانت ستعيد القديم معه — فالعودة تستبدل الأدوار والنمط وتعطّل الإسنادات القديمة، بترتيب ملزم.
 
 **تغيير 1.15 عن 1.14 — حذف أعمدة النسبة من سطح النطاق:** عند إغلاق T2، شُغّل ادعاء عن عمودَي النسبة في جدولَي المحور الثاني، فتبيّن أن كليهما يكذب بطريقة مختلفة. على PostgreSQL 18.6، في معاملة أُلغيت: كتب `provisioner` صفّ `membership_scope` كما يفعل القبول، ثم غيّرت مديرة نطاق `scope_mode`:
 
@@ -358,7 +371,7 @@ scope_assignments.membership_id  →  FK مركّب نحو memberships (tenant_i
 
 | العنصر | القاعدة |
 |---|---|
-| دور التطبيق | `app_user` — غير مالك، غير superuser. سياقه: `app.tenant_id` + `app.user_id` + (1.7) `app.membership_id` + `app.scope_all` + (1.9) `app.can_manage_scope` |
+| دور التطبيق | `app_user` — غير مالك، غير superuser. سياقه: `app.tenant_id` + `app.user_id` + (1.7) `app.membership_id` + `app.scope_all` + (1.9) `app.can_manage_scope` + (1.16) `app.can_manage_members` |
 | دور المصادقة | `authenticator` — حلّ الاعتمادات + سجل المحاولات (الكتابة الوحيدة)، DataSource منفصل (4.3) |
 | دور الشغل الخلفي | `job_runner` — قراءة `tenants` النشطة لبدء الـ fan-out فقط؛ المعالجة بسياق `app_user` لكل جهة (8) |
 | دور الترحيلات | `migrator` — مالك، migrations فقط، **BYPASSRLS واعٍ موثّق** (أدناه)؛ ويملك وحده كتابة الكتالوجات العامة (زرع modules/permissions) وإجراءات الأرشفة والتشذيب الموثّقة |
@@ -406,11 +419,13 @@ scope_assignments.membership_id  →  FK مركّب نحو memberships (tenant_i
      ج. صلاحيات العضوية: membership_roles → role_permissions
         → permissions (القالب القياسي + الكتالوج العام)
         → SET LOCAL app.can_manage_scope
+        → SET LOCAL app.can_manage_members   (1.16)
    كل خطوة لا تقرأ إلا ما ضُبط متغيّره قبلها. استعلام ربط واحد
    قبل الضبط يعود صفراً فتصرخ القاعدة 7 على كل طلب (1.9).
    app.scope_all = true مسموح لسياقين لا ثالث لهما:
      أ. عضوية نمطها 'all'.
      ب. سياق النظام والشغل الخلفي (8).
+   و app.can_manage_members (1.16) مثله: صلاحية لا نطاق (3.10).
    و app.can_manage_scope مستقلّ عن النمط: عضوية assigned قد تدير
    النطاق، وعضوية all قد لا تديره — متعامدان كالدور والنطاق.
    وفي كل الأحوال: app.tenant_id لا يُتجاوز في أي سياق كان.
@@ -558,6 +573,7 @@ WHERE polrelid = 'scope_assignments'::regclass AND polname = 'client_scope';
 
 -- فحص 9 (جديد في 1.7 — مصدر النطاق): سكربت ثابت على الكود يرفض أي
 --   قراءة لـ app.scope_all أو app.membership_id أو app.can_manage_scope
+--   أو app.can_manage_members (1.16)
 --   (1.9) من حمولة طلب أو رأس
 --   أو claim، وأي ضبط لهما خارج طبقة اختيار الجهة وطبقة الشغل الخلفي
 --   (3.5/6). المصدر الوحيد: membership_scope. متغيّر نطاق يأتي من
@@ -688,7 +704,7 @@ WHERE polrelid = 'scope_assignments'::regclass AND polname = 'client_scope';
     (3.5/6 أ‑ب‑ج) → ينجح. اختبار حارس: أي تغيير يعيد الحلّ لاستعلام
     واحد يفشل هنا قبل الدمج.
 27. (جديد 1.10) الفشل الآمن على اتصال مُعاد: على **نفس** الاتصال —
-    معاملة تضبط كل متغيّرات السياق الخمسة بـ SET LOCAL ثم COMMIT،
+    معاملة تضبط كل متغيّرات السياق الستة (1.16) بـ SET LOCAL ثم COMMIT،
     ثم DISCARD ALL، ثم استعلام بلا أي سياق على: جدول بالقالب الأول،
     وجدول بـ client_scope، وmemberships (بـ app.user_id وحده —
     مسار اختيار الجهة) → صفر صفوف في الأولَين، وعضويات الذات فقط في
@@ -724,11 +740,11 @@ WHERE polrelid = 'scope_assignments'::regclass AND polname = 'client_scope';
 | persons | SELECT | — | **SELECT**، INSERT | — |
 | users | SELECT، UPDATE (أعمدة: last_login_at, language, theme فقط) | SELECT | **SELECT**، INSERT | — |
 | user_password_credentials | UPDATE (password_hash, updated_at — **1.12**) **بلا SELECT** | SELECT | INSERT | — |
-| memberships | SELECT، UPDATE (status) | — | **SELECT**، INSERT | — |
-| membership_roles | SELECT، INSERT، DELETE | — | INSERT | — |
+| memberships | SELECT، UPDATE (status) — **والسياسات تحصر الانتقالات (1.16، 3.10)** | — | **SELECT**، INSERT، **UPDATE (status) — العودة وحدها (1.16، D9)** | — |
+| membership_roles | SELECT، INSERT، DELETE — **بصلاحية core.members.manage، لا على النفس (1.16)** | — | INSERT، **SELECT، DELETE (1.16 — العودة وحدها)** | — |
 | membership_auth | SELECT | SELECT | INSERT | — |
-| membership_scope | SELECT، UPDATE (scope_mode) — **والـ policy تشترط `can_manage_scope` وتمنع تعديل عضوية النفس** (4.8) | — | INSERT | — |
-| scope_assignments | SELECT، INSERT، UPDATE (active) — **لا DELETE**: الإسناد تاريخ يُعطَّل ولا يُمحى | — | — | — |
+| membership_scope | SELECT، UPDATE (scope_mode) — **والـ policy تشترط `can_manage_scope` وتمنع تعديل عضوية النفس** (4.8) | — | INSERT، **SELECT، UPDATE (scope_mode) (1.16 — العودة وحدها)** | — |
+| scope_assignments | SELECT، INSERT، UPDATE (active) — **لا DELETE**: الإسناد تاريخ يُعطَّل ولا يُمحى | — | **SELECT، UPDATE (active) (1.16 — تعطيل عند العودة وحده)** | — |
 | invitations | SELECT، INSERT، UPDATE (status) | — | SELECT، UPDATE (status) | — |
 | auth_attempts | — | SELECT، INSERT | — | — |
 | audit_log | SELECT (**بشرط `scope_all` — 1.9، القسم 7**)، INSERT — **لا UPDATE/DELETE لأي دور تطبيقي** | — | INSERT | — |
@@ -873,18 +889,27 @@ CREATE POLICY invitations_tenant_read ON invitations
   FOR SELECT TO app_user
   USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
 
+-- (1.16) النصّان أُعيد كتابتهما: إدارة الأعضاء (3.10، D6 وD8).
 CREATE POLICY invitations_insert ON invitations
   FOR INSERT TO app_user
   WITH CHECK (
     tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
     AND invited_by = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid)
+    AND COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND status = 'pending'
     AND (intended_scope_mode = 'assigned'
          OR COALESCE((SELECT NULLIF(current_setting('app.can_manage_scope', true), '')::boolean), false)));
 
 CREATE POLICY invitations_tenant_update ON invitations
   FOR UPDATE TO app_user
-  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
-  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND status = 'pending')
+  WITH CHECK (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND status = 'revoked');
 
 CREATE POLICY audit_log_insert ON audit_log
   FOR INSERT TO app_user
@@ -906,6 +931,174 @@ CREATE POLICY permissions_read ON permissions
 - تحديث صفّ جهة أخرى (`invitations_*_update`) يعطي **صفر صفوف** لا خطأ — «صامت تحت»، ومسارا القبول والإلغاء تحت حارس rows-affected.
 - **حُذفت** policy كانت 4.2 تذكرها: «رؤية بنطاق الجهة للأدمن» على `membership_auth`. القاعدة لا تملك متغيّر سياق يعبّر عن «أدمن»، فكانت ستُفتح لكل عضو في الجهة وهي تقول «أدمن» — نصّ يوهم بحماية غير موجودة أسوأ من غيابه، ولا مستهلك لها قبل SSO.
 
+### 3.10 إدارة الأعضاء في القاعدة (جديد 1.16)
+
+**لماذا هذا القسم:** حتى 1.15 كانت إدارة الأعضاء — التعطيل، ومنح الأدوار وسحبها، والدعوة — محميّة في التطبيق وحده، ولم يكن في الكتالوج صلاحية يفحصها التطبيق أصلاً. الاكتشافات وإعادة إنتاجها في رأس الوثيقة. كل نصّ أدناه شُغّل على PostgreSQL 18.6 في الاتجاهين، والنصّ هو المشغَّل.
+
+**D1 — الصلاحية والقوالب (بيانات يزرعها `migrator`):** `core.members.manage` («إدارة الأعضاء»)، في قالبَي `owner` و`admin`، وتُرقّى بها أدوار الجهات القائمة النظامية من القوالب — مصدر حقيقة واحد (5).
+
+**المتغيّر السادس:** `app.can_manage_members`، يُحلّ في **الخطوة ج** مع `app.can_manage_scope` — قراءة واحدة، ثم أمرا `SET LOCAL` بهذا الترتيب (3.5/6). وسياق النظام والشغل الخلفي: `false` (8). وقراءته في أي policy بصيغة 1.10 (`COALESCE(NULLIF(…)::boolean, false)`)، وفحص 2 يفرضها. وفحص 9 يضمّه إلى متغيّرات المحور الثاني، والمحلِّل كاتبه الوحيد.
+
+**D2 — حالة العضوية، ثلاث قيم، في طبقة القيود:**
+
+```sql
+ALTER TABLE memberships ADD CONSTRAINT memberships_status_check
+  CHECK (status IN ('active', 'disabled', 'left'));
+```
+
+**D3 وD4 — تحديث العضوية:** نصّاهما في 4.5 (مكان النصّين السابقين). المدير ينقل عضواً **آخر** بين `active` و`disabled` فقط؛ و`left` نهائية بالنسبة له (مبدأ الرضا، 0). والعضو يغادر `active → left` فقط، ولا يعيد تفعيل نفسه.
+
+**قاعدة لكل سياسة UPDATE على `memberships` (أُثبتت بالتشغيل):** PostgreSQL يجمع سياسات UPDATE المتاحة **لكل مرحلة على حدة** — الصفّ القديم قد يمرّ عبر `USING` سياسة، والجديد عبر `WITH CHECK` سياسة أخرى. فشرط على **الحالة القديمة** (مثل: ليس `left`) لا يصمد إلا إن حمله `USING` **كل** سياسة UPDATE على الجدول، وشروط الفاعل نفسه تُكتب في `WITH CHECK` كما في `USING`. D3 وD4 وD7 مكتوبة كذلك، والحالات تشغّل كل تركيبة.
+
+**D5 — كتابة `membership_roles`:** مقيِّدتان مفصولتان بالأمر (قاعدة 1.12)، بجانب `tenant_isolation` الباقية:
+
+```sql
+CREATE POLICY membership_roles_manage_insert ON membership_roles
+  AS RESTRICTIVE FOR INSERT TO app_user
+  WITH CHECK (
+    COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND membership_id <> (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid));
+
+CREATE POLICY membership_roles_manage_delete ON membership_roles
+  AS RESTRICTIVE FOR DELETE TO app_user
+  USING (
+    COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND membership_id <> (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid));
+```
+
+**D6 وD8 — الدعوات:** نصّاهما في 3.9 (مكان السابقين). الإنشاء بـ `core.members.manage` وبحالة `pending` وحدها؛ والإلغاء بها، `pending → revoked` وحده — لا تعيين `accepted` ولا `expired` من `app_user`.
+
+**D7 — `membership_lock`: الصفوف التي يقفلها البندان أ وز، لأيٍّ من المديرَين:**
+
+```sql
+CREATE POLICY membership_lock ON memberships
+  FOR UPDATE TO app_user
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND id <> (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+    AND status = 'active'
+    AND (COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+         OR COALESCE((SELECT NULLIF(current_setting('app.can_manage_scope', true), '')::boolean), false)))
+  WITH CHECK (false);   -- قفل صفّ (FOR UPDATE)، لا كتابة أبداً
+```
+
+**لماذا وُجدت:** بـ D3، قفل صفّ عضو آخر يتطلب صلاحية الأعضاء. ومنفّذ البند ز يحمل صلاحية النطاق؛ فبدونها كان `FOR UPDATE` على صفوف أعضاء `all` يقفل **صفراً بلا خطأ**، ولا ينتظر التخفيض الآخر، وينجح الاثنان → **صفر أعضاء `all`**. **وكل شرط فيها يحمل وزناً:** `WITH CHECK (false)` — لا تمرّ كتابة عبرها أبداً؛ `id <> app.membership_id` — صفّ الفاعل لا يُقفل إلا عبر D4، أي وهو نشط (يسدّ الإفلات من التعطيل: معطَّل → غادر → دعوة → نشط)؛ `status = 'active'` — بدونه أعاد `USING` هذه مع `WITH CHECK` من D3 عضواً غادر. **وما تغيّره:** كتابة مدير لا تسمح بها أي سياسة على صفّ نشط تُرفض **صاخبةً** (42501) لا صامتة.
+
+**البندان أ وز — القفل والعدّ (يشملان المغادرة، وتغيير الدور، والتخفيض، والتعطيل):**
+
+```
+أ. آخر مالك نشط — عند مغادرة، أو إزالة دور مالك، أو تعطيل مالك:
+   SELECT m.id FROM memberships m
+    WHERE m.tenant_id = app.tenant_id AND m.status = 'active'
+      AND EXISTS (دور مالك، is_system)
+    ORDER BY m.id FOR UPDATE OF m;
+   ثم، بأمر منفصل، عدّ المالكين النشطين؛ رفض إن لم يبقَ أحد.
+ز. آخر عضوية all نشطة — عند تخفيض، أو تعطيل عضو all:
+   الشيء نفسه على العضويات النشطة التي نمطها 'all'؛ ثم العدّ بأمر منفصل.
+لا يُقفل membership_scope لهذا أبداً: membership_scope_admin_update تستثني صفّ
+الفاعل، فيتخطّاه القفل بصمت (شُغّل: السباق يترك صفر all).
+```
+
+**قاعدة كود ملزمة (أثبتتها السباقات):** القفل أولاً بأمر مستقل و`ORDER BY id`، ثم العدّ **بأمر منفصل** — تحت READ COMMITTED يأخذ لقطة جديدة بعد منح القفل، فيرى تغيير المعاملة الأخرى الملتزم. واستعلام القفل نفسه **لا يُعاد تقييمه** بعد الانتظار: حارس يقارن «الصفوف المقفلة» بعدٍّ بعد القفل يعطي تعارضاً كاذباً تحت التزاحم.
+
+**D9 — العودة بدعوة جديدة: `provisioner` يعيد تفعيل الصفّ نفسه.** لماذا الصفّ نفسه: `UNIQUE (tenant_id, user_id)` لا يسمح بثانية. ولماذا تُستبدل الأدوار والنمط: روابط الأدوار تبقى بعد المغادرة، فعودة تضيف الدور الجديد وحده تعيد القديم معه. و`membership_auth` القديم يُعاد استخدامه كما هو.
+
+```sql
+-- منح جديدة لـ provisioner (3.8):
+GRANT UPDATE (status) ON memberships TO provisioner;
+GRANT SELECT, DELETE ON membership_roles TO provisioner;
+GRANT SELECT, UPDATE (scope_mode) ON membership_scope TO provisioner;
+
+-- left → active وحده — لا disabled (لا إفلات من التعطيل)، وفي app.tenant_id وحدها (4.4).
+CREATE POLICY memberships_provisioner_rejoin ON memberships
+  FOR UPDATE TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND status = 'left')
+  WITH CHECK (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND status = 'active');
+
+CREATE POLICY membership_roles_provisioner_select ON membership_roles
+  FOR SELECT TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = membership_roles.membership_id AND m.status = 'left'));
+
+CREATE POLICY membership_roles_provisioner_delete ON membership_roles
+  FOR DELETE TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = membership_roles.membership_id AND m.status = 'left'));
+
+CREATE POLICY membership_scope_provisioner_select ON membership_scope
+  FOR SELECT TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = membership_scope.membership_id AND m.status = 'left'));
+
+CREATE POLICY membership_scope_provisioner_rejoin ON membership_scope
+  FOR UPDATE TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = membership_scope.membership_id AND m.status = 'left'))
+  WITH CHECK (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = membership_scope.membership_id AND m.status = 'left'));
+```
+
+**D10 — العودة: الإسنادات القديمة تُعطَّل.** العائد يعود بما تمنحه الدعوة الجديدة وحدها؛ إسناداته الجديدة يمنحها مدير نطاق كأي عضو. والصفوف تُعطَّل لا تُحذف — الإسناد تاريخ (4.8).
+
+```sql
+GRANT SELECT, UPDATE (active) ON scope_assignments TO provisioner;
+
+CREATE POLICY scope_assignments_provisioner_select ON scope_assignments
+  FOR SELECT TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = scope_assignments.membership_id AND m.status = 'left'));
+
+CREATE POLICY scope_assignments_provisioner_disable ON scope_assignments
+  FOR UPDATE TO provisioner
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = scope_assignments.membership_id AND m.status = 'left'))
+  WITH CHECK (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM memberships m
+                WHERE m.id = scope_assignments.membership_id AND m.status = 'left')
+    AND NOT active);
+```
+
+**ترتيب القبول لمن غادر، في معاملة واحدة (ملزم — السياسات تعتمد على بقاء الصفّ `left`):**
+
+```
+1. حذف روابط أدوار العضوية            (membership_roles_provisioner_delete)
+2. ضبط نمط النطاق إلى نمط الدعوة        (membership_scope_provisioner_rejoin)
+3. تعطيل إسناداتها                      (scope_assignments_provisioner_disable)
+4. إدراج دور الدعوة                     (membership_roles_provisioner_insert)
+5. إعادة التفعيل left → active          (memberships_provisioner_rejoin) — الأخير
+6. تعليم الدعوة مقبولة: WHERE status = 'pending' — صفّ واحد (لمرة واحدة)
+7. قيود التدقيق (تلقائية، 7)
+membership_auth: الصفّ القائم يُعاد استخدامه.
+```
+
+الترتيب الخاطئ (إعادة التفعيل أولاً) يُبقي الأدوار القديمة والإسنادات القديمة نشطة — أُثبت. ولمن هو `disabled` أو `active` في تلك الجهة: القبول يُرفض.
+
+**مسارات أخرى حُسمت مع القسم:**
+- **bootstrap:** `POST /provision/tenants`، مسجّلة في Development وCI وحدهما — الـ Api يرفض تسجيلها في أي بيئة أخرى (نمط حارس `migrator` و`Session:RequireHttps`). التسجيل الذاتي العام خارج البرهان.
+- **القبول بلا حساب:** الـ token وبريد مطابق لبريد الدعوة يكفيان؛ الشخص والمستخدم والاعتماد تُنشأ في معاملة القبول. **لمرة واحدة:** تحديث الدعوة `WHERE status = 'pending'` كتابة حرجة تتوقع صفّاً واحداً.
+- **`ExecuteUpdate` و`ExecuteDelete` ممنوعتان** في كود التطبيق بفحص ساكن محلي بجانب `check-schema-allowlist`، عدا أمر كلمة المرور: الأمر الجماعي يتجاوز متتبّع التغييرات فلا يراه التدقيق التلقائي (أُثبت: صفّ محدَّث، صفر قيود تدقيق).
+
+**حدّ معلن:** هرمية منح الأدوار — من يحقّ له منح `owner` — مؤجّلة. بهذا النصّ يستطيع المدير منح `owner`؛ المدير موثوق في البرهان.
+
 ---
 
 ## 4. الهوية — Person / User / Membership
@@ -921,7 +1114,7 @@ users(id, person_id, user_type, username UNIQUE,   -- (تصحيح 1.6: القي�
 
 user_password_credentials(user_id PK, password_hash, updated_at)
 
-memberships(id, tenant_id, user_id, status, created_at,
+memberships(id, tenant_id, user_id, status, created_at,   -- status: active | disabled | left (1.16)
             UNIQUE (tenant_id, user_id),
             UNIQUE (tenant_id, id))        -- أساس FK المركّب (3.3)
 
@@ -1103,21 +1296,34 @@ CREATE POLICY tenant_visible_to_member ON tenants
 CREATE POLICY membership_tenant_read ON memberships
   FOR SELECT TO app_user
   USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
--- (3) الأدمن يعطّل/يفعّل عضويات جهته (grant الأعمدة: status فقط):
+-- (3) (1.16) مدير الأعضاء ينقل عضواً آخر بين active وdisabled فقط —
+--     بصلاحية core.members.manage، ولا على عضويته هو، ولا من left (3.10، D3):
 CREATE POLICY membership_tenant_update ON memberships
   FOR UPDATE TO app_user
-  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
-  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
--- (4) العضو يغادر: تعطيل عضويته هو:
+  USING (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND id <> (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+    AND status IN ('active', 'disabled'))
+  WITH CHECK (
+    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    AND COALESCE((SELECT NULLIF(current_setting('app.can_manage_members', true), '')::boolean), false)
+    AND id <> (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+    AND status IN ('active', 'disabled'));
+-- (4) (1.16) العضو يغادر: active → left فقط — لا يعيد تفعيل نفسه (3.10، D4):
 CREATE POLICY membership_self_leave ON memberships
   FOR UPDATE TO app_user
-  USING (user_id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid))
-  WITH CHECK (user_id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid));
+  USING (
+    user_id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid)
+    AND status = 'active')
+  WITH CHECK (
+    user_id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid)
+    AND status = 'left');
 -- (5) الإدخال: FOR INSERT TO provisioner فقط (4.4). لا DELETE لأحد:
 --     العضوية تاريخ يُعطَّل ولا يُمحى — التدقيق يشير إليها.
 ```
 
-التعطيل يقطع الدخول لتلك الجهة فوراً (فحص status في المصادقة واختيار الجهة). قاعدة «آخر owner لا يغادر» وحارس سباقها: بند مواصفة (13). حذف الهوية للامتثال: طبقة المنتج المُباع، يُحسم مع استعادة الجهة (12).
+التعطيل يقطع الدخول لتلك الجهة فوراً (فحص status في المصادقة واختيار الجهة). قاعدة «آخر مالك» وحارس سباقها: (1.16) محسومة — قفل صفوف العضويات والعدّ بأمر منفصل، وتشمل التعطيل (3.10). حذف الهوية للامتثال: طبقة المنتج المُباع، يُحسم مع استعادة الجهة (12).
 
 **لماذا القبول عبر provisioner لا app_user:** إنشاء العضوية يمسّ ثلاثة نطاقات دفعة واحدة (هوية عابرة + جهة + اعتماد) بلا سياق جهة نشطة صالح — هو تعريف «الكتابة العابرة للعزل» المحصورة في provisioner. التوسيع من مسار لمسارين **معلَنٌ**؛ التوسيع الصامت هو الخطر، لا عدد المسارات.
 
@@ -1150,6 +1356,9 @@ CREATE POLICY user_visible_via_membership ON users
 | `persons → users → memberships` | app_user في جهته النشطة | 4.6 + الرؤية الذاتية 4.3 |
 | `users → memberships` (1.10 — كان مُضمراً) | app_user في جهته النشطة | `user_visible_via_membership` (4.6) |
 | `membership_auth → memberships` | app_user لعضويته هو | 4.2 |
+| `membership_roles → memberships` (1.16) | provisioner — عضوية left في app.tenant_id | `memberships_provisioner_select` (3.9) |
+| `membership_scope → memberships` (1.16) | provisioner — كذلك | `memberships_provisioner_select` (3.9) |
+| `scope_assignments → memberships` (1.16) | provisioner — كذلك | `memberships_provisioner_select` (3.9) |
 | `tenants → memberships` | app_user لعضوياته | 4.3 |
 | `<جدول مُنطَّق> → scope_assignments` | **app_user نمطه assigned** | `scope_assignment_read` (4.8) |
 | **حلّ النطاق ب:** `membership_scope` (فرع الذات) | app_user بعد ضبط `app.membership_id` | `membership_scope_read` (4.8) — **بالترتيب 3.5/6 حصراً** (1.9) |
@@ -1399,6 +1608,11 @@ audit_log(id, tenant_id, actor_id, actor_type, action,
 
 **الكتّاب ثلاثة، بpolicies صريحة في الـ manifest:** `app_user` (بـ `WITH CHECK (tenant_id = app.tenant_id)`)، و`provisioner` (سجلا المسارين)، والشغل الخلفي يمرّ مرور `app_user` في سياق كل جهة. لا كاتب رابع. (1.13: نصّا سياستَي الكتابة — `audit_log_insert` و`audit_log_provisioner_insert` — في 3.9.)
 
+**قائمتان معلنتان للتدقيق التلقائي (1.16):**
+- **قائمة الاستثناء:** كتابات الهوية الذاتية — `users (last_login_at, language, theme)` عبر `user_self_update` — لا تُدقَّق تلقائياً، لأن `audit_log` سجلّ جهة وهذه ليست بيانات جهة (أُثبت: تدقيقها يرمي 42501). و`user_password_credentials` **لا يُدقَّق أبداً**؛ و`auth_attempts` سجلّ نفسه. **بند قبل الإطلاق:** سجلّ تدقيق للهوية.
+- **قائمة الحجب:** `password_hash` و`token_hash` — العمود يبقى في `old_value`/`new_value` وقيمته `"[masked]"`: السجل يُظهر أن العمود كُتب دون أن يكشفه. حذف المفتاح كلياً كان سيوهم بأنه لم يُكتب — حجب صامت.
+- **الآلية** (أُثبتت بـ EF): الالتقاط عند `SavingChanges`، وحفظ ثانٍ لقيود التدقيق من `SavedChanges`، وعلم يمنع تدقيق التدقيق — في المعاملة نفسها، تُلغى معها.
+
 **القرّاء — سياسة القراءة مكتوبة (1.9):** حتى 1.8 كانت قراءة السجل بنطاق الجهة، ومؤجَّلة كبند مواصفة بصيغة «القرار المرجَّح». وكان ذلك تقديراً خاطئاً للخطورة: السجل يحمل `old_value` و`new_value`، فالعضو `assigned` كان يقرأ **محتوى** تعديلات كيانات غير مُسنَدة إليه — ثغرة تُبطل ضمان المحور الثاني لا تفصيل تنفيذي. فحُسمت هنا:
 
 ```sql
@@ -1433,6 +1647,7 @@ CREATE POLICY audit_read ON audit_log
    (الاستثناءان الوحيدان: مسارا provisioner، 4.4).
 5. (1.7) سياق نظام على المحور الثاني: app.scope_all = true
    وapp.membership_id غير مضبوط — الـ job يعالج كل كيانات الجهة.
+   (1.16) وapp.can_manage_members = false كذلك.
    (1.9) وapp.can_manage_scope = false: الـ job يرى كل شيء ولا يدير
    النطاق — إدارة النطاق فعل عضو مصادَق، لا فعل نظام.
    هذا أحد سياقَي scope_all المعلنَين (3.5/6) لا ثالث لهما.
@@ -1525,6 +1740,12 @@ CREATE POLICY audit_read ON audit_log
 
 | الخطر | الحال |
 |---|---|
+| **إدارة الأعضاء محميّة في التطبيق وحده — أي عضو يعطّل المالك أو يرقّي نفسه** | **سُدّ في 1.16** — `core.members.manage` في القاعدة، ولا أحد يعدّل أدواره هو (3.10) |
+| **عضو معطَّل يعيد تفعيل نفسه، أو يفلت من التعطيل بالمغادرة ثم الدعوة** | **سُدّ في 1.16** — المغادرة `active → left` وحدها، والقفل لا يمرّ على صفّ الفاعل ولا صفّ غير نشط (3.10) |
+| **سباق آخر مالك / آخر `all` — وقفل صفّ الجهة مستحيل على `app_user`** | **سُدّ في 1.16** — قفل صفوف العضويات + `membership_lock`؛ سبعة سباقات تنتهي بعضو متبقٍّ (3.10) |
+| **عضو يعود بأدواره وإسناداته القديمة** | **سُدّ في 1.16** — العودة تستبدل الأدوار والنمط وتعطّل الإسنادات بترتيب ملزم (3.10) |
+| **التدقيق التلقائي يكسر الدخول، ويكتب `token_hash`** | **سُدّ في 1.16** — قائمتا استثناء وحجب معلنتان (7) |
+| **هرمية منح الأدوار: المدير يمنح `owner`** | **حدّ معلن (1.16)** — مؤجّل؛ المدير موثوق في البرهان |
 | **أعمدة نسبة على سطح النطاق: تبقى قديمة بعد التعديل، أو تُزوَّر عند الإدراج** | **سُدّ في 1.15** — حُذفت؛ التدقيق مصدر النسبة الوحيد (4.1، 7) |
 | **فحص 8 يطالب بـ `client_scope` على الجدول الذي يقرؤه القالب — تكرار لا نهائي يُفشل كل جدول مُنطَّق** | **سُدّ في 1.14** — استثناء بنيوي + شقّ عكسي حارس + اختبار 16‑د (3.6) |
 | **منح بلا policy تحت FORCE RLS — ميّت: صفر صفوف صامت أو رفض** (مسار الدخول والخطوة ج منها) | **سُدّ في 1.13** — 32 policy مكتوبة ومشغّلة في الاتجاهين (3.9) |
@@ -1605,8 +1826,9 @@ CREATE POLICY audit_read ON audit_log
 **2. بنود منقولة من الوثيقة إلى أول بنود المواصفة (لا إلى نسخة جديدة):**
 
 ```
-أ.  قاعدة «آخر owner لا يغادر»: constraint trigger أو advisory lock —
-    القاعدة التطبيقية الصرفة قابلة لسباق مغادرتين متزامنتين.
+أ.  (حُسم في 1.16 — 3.10) قاعدة «آخر مالك نشط»: قفل صفوف العضويات
+    بـ ORDER BY id ثم العدّ بأمر منفصل؛ تشمل المغادرة وإزالة الدور
+    والتعطيل. قفل صفّ الجهة مستحيل على app_user (أُثبت).
 ب.  سياسة احتفاظ auth_attempts وتشذيبها (أسماء دخول وIPs تتراكم
     بلا سقف) — إجراء migrator موثّق.
 ج.  provider العضوية عند قبول الدعوة: الافتراضي 'password' اليوم،
@@ -1619,9 +1841,9 @@ CREATE POLICY audit_read ON audit_log
     — بنود 1.7 —
 و.  حقل نمط النطاق على invitations: اسمه، قيمه، والتحقق منه عند
     الإنشاء وعند القبول (4.8).
-ز.  آخر عضوية بنطاق كامل لا تُخفَّض: نظير قاعدة «آخر owner لا
-    يغادر» (بند أ) على المحور الثاني — جهة بلا عضوية scope_all
-    واحدة تصير غير قابلة للإدارة. نفس حارس السباق.
+ز.  (حُسم في 1.16 — 3.10) آخر عضوية all نشطة: نفس القفل والعدّ،
+    ويشمل التخفيض والتعطيل؛ والقفل لأيٍّ من المديرَين عبر
+    membership_lock (D7).
 ح.  (حُسم الأساس في 1.9 — القسم 7) قراءة audit_log تستلزم scope_all.
     الباقي للمواصفة: قراءة دقيقة لكل كيان لعضو assigned — بإضافة
     scope_ref_id لأحداث الموديولات المُنطَّقة وسياسة على غرار
@@ -1654,7 +1876,26 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق أ — سجل ما تغيّر من 1.14 إلى 1.15
+## ملحق أ — سجل ما تغيّر من 1.15 إلى 1.16
+
+| البند | 1.15 | 1.16 |
+|---|---|---|
+| إدارة الأعضاء | تطبيقية وحدها، بلا صلاحية في الكتالوج | **`core.members.manage` ومتغيّر سادس، في القاعدة** (3.10) |
+| `membership_tenant_update` | أي عضو، أي حالة | **مدير أعضاء، عضو آخر، `active` ↔ `disabled` وحدهما** (4.5) |
+| `membership_self_leave` | أي حالة على صفّ النفس | **`active → left` وحده** (4.5) |
+| `membership_roles` | كتابة لأي عضو | **مقيِّدتان: صلاحية الأعضاء، ولا على النفس** (3.10) |
+| الدعوات | أي عضو يدعو ويلغي، بأي حالة | **بصلاحية الأعضاء؛ إنشاء `pending`، إلغاء `pending → revoked`** (3.9) |
+| البندان أ وز | قفل صفّ الجهة (مستحيل) | **قفل صفوف العضويات + `membership_lock`؛ يشملان التعطيل** (3.10) |
+| العودة بعد المغادرة | مستحيلة (القيد الفريد) | **`provisioner` يعيد تفعيل الصفّ بترتيب ملزم** (3.10) |
+| حالات العضوية | غير معرّفة | **`active` / `disabled` / `left` في القيود** (4.1) |
+| التدقيق التلقائي | بلا قوائم | **قائمتا استثناء وحجب معلنتان** (7) |
+| منح `provisioner` | — | **+ UPDATE (status)، وSELECT/DELETE على الأدوار، وSELECT/UPDATE على النمط والإسنادات — للعودة وحدها** (3.8) |
+
+**ما لم يتغيّر:** النموذج، ونصوص كل سياسة لم تُذكر أعلاه، ومنح `app_user`.
+
+---
+
+## ملحق ب — سجل ما تغيّر من 1.14 إلى 1.15
 
 | البند | 1.14 | 1.15 |
 |---|---|---|
@@ -1665,7 +1906,7 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق ب — سجل ما تغيّر من 1.13 إلى 1.14
+## ملحق ج — سجل ما تغيّر من 1.13 إلى 1.14
 
 | البند | 1.13 | 1.14 |
 |---|---|---|
@@ -1675,7 +1916,7 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق ج — سجل ما تغيّر من 1.12 إلى 1.13
+## ملحق د — سجل ما تغيّر من 1.12 إلى 1.13
 
 | البند | 1.12 | 1.13 |
 |---|---|---|
@@ -1694,7 +1935,7 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق د — سجل ما تغيّر من 1.11 إلى 1.12
+## ملحق هـ — سجل ما تغيّر من 1.11 إلى 1.12
 
 | البند | 1.11 | 1.12 |
 |---|---|---|
@@ -1708,7 +1949,7 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق هـ — سجل ما تغيّر من 1.10 إلى 1.11
+## ملحق و — سجل ما تغيّر من 1.10 إلى 1.11
 
 | البند | 1.10 | 1.11 |
 |---|---|---|
@@ -1724,7 +1965,7 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق و — سجل ما تغيّر من 1.9 إلى 1.10
+## ملحق ز — سجل ما تغيّر من 1.9 إلى 1.10
 
 | البند | 1.9 | 1.10 |
 |---|---|---|
@@ -1740,7 +1981,7 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق ز — سجل ما تغيّر من 1.8 إلى 1.9
+## ملحق ح — سجل ما تغيّر من 1.8 إلى 1.9
 
 | البند | 1.8 | 1.9 |
 |---|---|---|
@@ -1759,7 +2000,7 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق ح — سجل ما تغيّر من 1.7 إلى 1.8
+## ملحق ط — سجل ما تغيّر من 1.7 إلى 1.8
 
 | البند | 1.7 | 1.8 |
 |---|---|---|
@@ -1784,7 +2025,7 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق ط — سجل ما تغيّر من 1.6 إلى 1.7
+## ملحق ي — سجل ما تغيّر من 1.6 إلى 1.7
 
 | البند | 1.6 | 1.7 |
 |---|---|---|
@@ -1807,7 +2048,7 @@ CREATE POLICY audit_read ON audit_log
 
 ---
 
-## ملحق ي — سجل ما تغيّر من 1.5 إلى 1.6
+## ملحق ك — سجل ما تغيّر من 1.5 إلى 1.6
 
 | البند | 1.5 | 1.6 |
 |---|---|---|
