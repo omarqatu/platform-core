@@ -65,7 +65,13 @@ public class CoreDbContext : DbContext
         modelBuilder.Entity<UserPasswordCredential>().ToTable("user_password_credentials").HasKey(x => x.UserId);
         modelBuilder.Entity<Membership>().ToTable("memberships");
         modelBuilder.Entity<MembershipRole>().ToTable("membership_roles");
-        modelBuilder.Entity<Invitation>().ToTable("invitations");
+        // Single-use (3.10): accepting or revoking updates WHERE status = the status read — 'pending' — so a
+        // second acceptance or a revocation racing it writes zero rows, and EF's concurrency check makes that loud.
+        modelBuilder.Entity<Invitation>(invitation =>
+        {
+            invitation.ToTable("invitations");
+            invitation.Property(x => x.Status).IsConcurrencyToken();
+        });
         modelBuilder.Entity<AuthAttempt>().ToTable("auth_attempts");
         modelBuilder.Entity<MembershipScope>().ToTable("membership_scope");
         modelBuilder.Entity<ScopeAssignment>().ToTable("scope_assignments");

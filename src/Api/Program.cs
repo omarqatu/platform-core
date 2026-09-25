@@ -4,6 +4,7 @@ using Api.Endpoints;
 using Core.Data;
 using Core.Http;
 using Core.Identity;
+using Core.Provisioning;
 using Microsoft.AspNetCore.Authentication.Cookies;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -44,6 +45,10 @@ builder.Services.AddCoreDataAccess(builder.Configuration.GetConnectionString("ap
 var authenticatorDataSource = CoreDataAccess.CreateDataSource(builder.Configuration.GetConnectionString("authenticator")!);
 builder.Services.AddDbContext<AuthenticatorDbContext>(options => options.UseCoreDataAccess(authenticatorDataSource));
 
+// The provisioner's two paths (4.4/2): its own data source and role — never SET ROLE on an app_user connection.
+var provisionerDataSource = CoreDataAccess.CreateDataSource(builder.Configuration.GetConnectionString("provisioner")!);
+builder.Services.AddDbContext<ProvisionerDbContext>(options => options.UseCoreDataAccess(provisionerDataSource));
+
 // The session: an HTTP-only cookie carrying user_id and the active tenant only (PROOF_SPEC T3).
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<ISessionContextAccessor, CookieSessionAccessor>();
@@ -81,8 +86,12 @@ app.UseMiddleware<UnitOfWorkMiddleware>();
 app.MapAuthEndpoints();
 app.MapTenantEndpoints();
 app.MapScopeEndpoints();
+app.MapAcceptance();
+// Bootstrap: registered in Development and CI only; in any other environment the route does not exist (T4.17).
+app.MapBootstrap(app.Environment.EnvironmentName);
 
 app.Lifetime.ApplicationStopped.Register(authenticatorDataSource.Dispose);
+app.Lifetime.ApplicationStopped.Register(provisionerDataSource.Dispose);
 app.Run();
 
 public partial class Program;

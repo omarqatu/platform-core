@@ -15,11 +15,11 @@ namespace Core.Data;
 public static class CriticalWrite
 {
     /// <summary>A tracked critical write: every modified row must be written, or this guard's error.</summary>
-    public static async Task SaveAsync(DbContext db, string description, CancellationToken cancellationToken)
+    public static async Task<int> SaveAsync(DbContext db, string description, CancellationToken cancellationToken)
     {
         try
         {
-            await db.SaveChangesAsync(cancellationToken);
+            return await db.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException error)
         {
