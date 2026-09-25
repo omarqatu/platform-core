@@ -14,6 +14,7 @@ share.
 | Check | What it enforces | Added |
 |---|---|---|
 | `check-schema-allowlist` | The only non-system schemas are those in `schema-allowlist.txt` (`public`, `migrations_meta`), and `migrations_meta` contains only `__EFMigrationsHistory`. Drift is reported in both directions: anything extra, and anything allowlisted but missing. | T0 (PR #1); runs beside Checks 1–10 since T2 |
+| `check-no-bulk-writes` | No `ExecuteUpdate`/`ExecuteDelete` call in `src/` except the paths in `bulk-writes-allowlist.txt` (empty). | T4 — PLATFORM_CORE v1.16 §3.10, PROOF_SPEC v1.3 T4.16 |
 
 ## check-schema-allowlist
 
@@ -40,3 +41,32 @@ is rolled back, and fails unless the check reports both. CI runs both modes.
 
 **Changing the allowlist** is a project-owner decision made in review, like the
 manifest.
+
+## check-no-bulk-writes
+
+**Why it exists:** auditing is automatic (PLATFORM_CORE v1.16 §7): the audit
+interceptor captures tracked changes at `SavingChanges`. A bulk command —
+`ExecuteUpdate` or `ExecuteDelete` — goes straight to the database and bypasses
+the change tracker, so it would write with no audit entry (proven in the
+document: 1 row updated, 0 audit entries). §3.10 forbids both in application
+code; this check enforces it.
+
+**What it inspects:** every `.cs` file under `src/` (not `bin/` or `obj/`) for a
+call of `ExecuteUpdate`, `ExecuteUpdateAsync`, `ExecuteDelete` or
+`ExecuteDeleteAsync`. Tests are not application code and are not scanned.
+
+**The declared exception** is the password command (§3.8). It is a raw SQL
+command, not an EF bulk command, so it never matches, and the allowlist is
+empty. Adding a path to `bulk-writes-allowlist.txt` is a project-owner decision.
+
+**Running it** (repository root; no database needed):
+
+```bash
+checks/local/check-no-bulk-writes.sh
+checks/local/check-no-bulk-writes.sh --self-test
+```
+
+`--self-test` copies `src/` to a temporary directory, plants one
+`ExecuteUpdateAsync` and one `ExecuteDelete` call there, and fails unless the
+check reports exactly those two. The source tree is never edited. CI runs both
+modes.

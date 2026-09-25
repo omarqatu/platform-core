@@ -37,27 +37,26 @@ public static class ScopeEndpoints
         });
 
         scope.MapPut("/scope/memberships/{membershipId:guid}/mode", async (Guid membershipId, ScopeModeRequest body,
-            HttpContext http, CoreDbContext db, ISessionContextAccessor session, CancellationToken ct) =>
+            CoreDbContext db, ISessionContextAccessor session, CancellationToken ct) =>
         {
             if (db.Scope is null)
                 return NoActiveTenant();
             if (body.ScopeMode is not ("all" or "assigned"))
                 return Results.Json(new { error = "invalid_value" }, statusCode: StatusCodes.Status400BadRequest);
 
-            await ScopeAdministration.ChangeModeAsync(db, session.Current, http.Connection.RemoteIpAddress?.ToString(),
-                membershipId, body.ScopeMode, ct);
+            await ScopeAdministration.ChangeModeAsync(db, session.Current, membershipId, body.ScopeMode, ct);
             return Results.NoContent();
         });
 
         scope.MapPut("/scope/memberships/{membershipId:guid}/assignments/{scopeRefId:guid}", async (Guid membershipId,
-            Guid scopeRefId, AssignmentRequest body, HttpContext http, CoreDbContext db,
+            Guid scopeRefId, AssignmentRequest body, CoreDbContext db,
             ISessionContextAccessor session, CancellationToken ct) =>
         {
             if (db.Scope is null)
                 return NoActiveTenant();
 
-            await ScopeAdministration.SetAssignmentAsync(db, session.Current, http.Connection.RemoteIpAddress?.ToString(),
-                membershipId, scopeRefId, body.Active, body.Reason, body.AssignmentRole, ct);
+            await ScopeAdministration.SetAssignmentAsync(db, session.Current, membershipId, scopeRefId, body.Active, body.Reason,
+                body.AssignmentRole, ct);
             return Results.NoContent();
         });
     }

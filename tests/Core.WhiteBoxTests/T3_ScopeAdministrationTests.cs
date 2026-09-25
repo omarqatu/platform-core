@@ -28,7 +28,7 @@ public class T3_ScopeAdministrationTests(WhiteBoxFixture fixture)
         var error = await Assert.ThrowsAsync<NotPermittedException>(() => UnitOfWork.RunAsync(db, session, (c, ct) =>
         {
             recorder.Clear();
-            return ScopeAdministration.ChangeModeAsync(c, session, null, layla, "assigned", ct);
+            return ScopeAdministration.ChangeModeAsync(c, session, layla, "assigned", ct);
         }));
 
         Assert.Equal("core.scope.manage", error.Permission);
@@ -47,7 +47,7 @@ public class T3_ScopeAdministrationTests(WhiteBoxFixture fixture)
         await Assert.ThrowsAsync<NotPermittedException>(() => UnitOfWork.RunAsync(db, session, (c, ct) =>
         {
             recorder.Clear();
-            return ScopeAdministration.SetAssignmentAsync(c, session, null, layla, ClientC, true, "x", null, ct);
+            return ScopeAdministration.SetAssignmentAsync(c, session, layla, ClientC, true, "x", null, ct);
         }));
 
         Assert.Empty(recorder.Commands);
@@ -62,7 +62,7 @@ public class T3_ScopeAdministrationTests(WhiteBoxFixture fixture)
         var session = new SessionContext(khaled, alAmin);
 
         var error = await Assert.ThrowsAsync<CriticalWriteException>(() => UnitOfWork.RunAsync(db, session, (c, ct) =>
-            ScopeAdministration.WriteModeAsync(c, session, null, layla, "assigned", ct)));
+            ScopeAdministration.WriteModeAsync(c, session, layla, "assigned", ct)));
 
         Assert.Equal(0, error.Affected);
         Assert.Equal(1, await fixture.CountAsMigratorAsync(
@@ -78,7 +78,7 @@ public class T3_ScopeAdministrationTests(WhiteBoxFixture fixture)
         var session = new SessionContext(khaled, alAmin);
 
         var error = await Assert.ThrowsAnyAsync<Exception>(() => UnitOfWork.RunAsync(db, session, (c, ct) =>
-            ScopeAdministration.WriteAssignmentAsync(c, session, null, layla, ClientC, true, "x", null, ct)));
+            ScopeAdministration.WriteAssignmentAsync(c, session, layla, ClientC, true, "x", null, ct)));
 
         Assert.Contains(Chain(error), e => e is PostgresException { SqlState: PostgresErrorCodes.InsufficientPrivilege });
         Assert.Equal(0, await fixture.CountAsMigratorAsync(

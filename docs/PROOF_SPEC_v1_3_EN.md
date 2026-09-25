@@ -1,8 +1,8 @@
-# PROOF_SPEC v1.2 — Core Proof-of-Concept Specification
+# PROOF_SPEC v1.3 — Core Proof-of-Concept Specification
 ## Implementation tasks + implementation-independent acceptance criteria
 
-**Governing reference:** `PLATFORM_CORE_v1_15_FROZEN.md` — every section, test, or check number in this spec refers to it.
-**Version:** 1.2 — **Date:** 2026-09-24
+**Governing reference:** `PLATFORM_CORE_v1_16_FROZEN.md` — every section, test, or check number in this spec refers to it.
+**Version:** 1.3 — **Date:** 2026-09-25
 **Implementer:** Claude Code (wherever the text says "the implementer"; it was Codex in 1.0–1.1).
 **Stack:** .NET (latest LTS) + EF Core + Npgsql + PostgreSQL 18 — settled (the document, Section 0).
 
@@ -71,7 +71,7 @@ This spec performs two functions in a single text:
 | **T2** | The core schema: the three layers + the ten CI checks | T1 | 1, 2, 6, 8, 10, 12, 13, 15, 18 (FK part), 21 (core part), 23, **28** |
 | **T2b** | (1.2) Migration dropping the four attribution columns (v1.15) | T2 | 16‑d, 17, 24 (re-run) |
 | **T3** | Login and tenant selection + second-axis resolution | T2b | **26 first**, 7, 11 (partial), **18 (second part)**, 20, 24‑c, 27 (memberships) |
-| **T4** | Bootstrap + the invite-and-accept cycle + departure | T3 | 10, 11, 18, **28c (full bootstrap)**, spec items a, c, d, f, g |
+| **T4** | Bootstrap + the invite-and-accept cycle + departure + **member management and return (the document, 3.10)** | T3 | 10, 11, 18, **28c (full bootstrap)**, spec items a, c, d, f, g |
 | **T5** | The first scoped module (a minimal subscriptions module) | T4 | 16, 17, 19, **21 (scope_ref_id part)**, 24, 25, 27 (client_scope) |
 | **T6** | The cross-tenant unified view | T5 | 3 (via fan-out), 19 (merged) |
 | **T7** | Background jobs | T5 | System context (8/5) |
@@ -213,11 +213,11 @@ Three separate reads, not a single join. The absence of a `membership_scope` row
 
 | Item | Decision |
 |---|---|
-| **a.** "The last owner cannot leave" | In the departure or role-change transaction: `SELECT … FROM tenants WHERE id = … FOR UPDATE` first, then count active owners. Locking the tenant row serializes two concurrent departures. **Not** an advisory lock (it does not show up in ordinary lock logs, and is harder to diagnose). |
+| **a.** The last active owner | **(Amended 1.3 — locking the tenant row is impossible for `app_user`, proven.)** In the transaction of a departure, owner-role removal, or disabling an owner: lock the active owners' membership rows `ORDER BY id FOR UPDATE OF m` in its own statement, then count them **in a separate statement**; refuse if none would remain (the document, 3.10). **Not** an advisory lock. |
 | **c.** The acceptance provider | `'password'` is fixed in the acceptance path's contract. Its source becomes a tenant setting once SSO arrives — out of scope for the proof. |
 | **d.** `invited_by` | `WITH CHECK (invited_by = app.user_id)` on creating an invitation, in addition to the tenant condition. |
 | **f.** The invitation's scope mode | The column has been in the schema since T2 (v1.13). Validation at creation is **in the database**, via `invitations_insert` (the document, 3.9) — T4 builds the path on top of it; and it is copied as-is into `membership_scope` at acceptance. |
-| **g.** The last `all`-scope membership cannot be downgraded | The same mechanism as item a: lock the tenant row, then count active `all` memberships before the downgrade. |
+| **g.** The last active `all` membership | **(Amended 1.3)** The same mechanism as item a over active memberships whose mode is `all`, on a downgrade or disabling; either manager locks via `membership_lock` (the document, 3.10, D7). Never lock `membership_scope` for this. |
 
 **Acceptance criteria:**
 | # | Criterion | Type |
@@ -226,13 +226,19 @@ Three separate reads, not a single join. The absence of a `membership_scope` row
 | T4.2 | Test 11: an invitation to an existing email and to a non-existent one → identical responses | [B] |
 | T4.3 | Accepting an invitation with an authenticated email ≠ the invitation's email → rejected, even with a valid token | [B] |
 | T4.4 | A successful acceptance → membership + `membership_auth` + `membership_scope` + the invitation updated + an audit entry, **atomically**: killing the transaction midway → none of it exists | [B] |
-| T4.5 | Two concurrent departures of the last two owners → one succeeds and one fails, never both | [B] |
-| T4.6 | Two concurrent downgrades of the last two `all` memberships → the same result | [B] |
+| T4.5 | (Amended 1.3) Item-a races: two concurrent departures of the last two owners; a manager disabling an owner while the other leaves; two concurrent disablings → in each, one active owner remains, never both succeed | [B] |
+| T4.6 | (Amended 1.3) Item-g races: two concurrent downgrades; a scope manager **without the members permission** downgrading while another downgrades; a disabling and a downgrade; two disablings → in each, one active `all` membership remains | [B] |
 | T4.7 | An invitation with `intended_scope_mode = 'all'` from a member with no `can_manage_scope` → fails | [B] |
 | T4.8 | (amended 1.2) bootstrap → a tenant + **its roles and role permissions from the templates** + a first `owner` member with scope `all` + an audit entry, in a single transaction, with `provisioner` setting `app.tenant_id` to the new tenant first (the document, 3.9) | [B] |
 | T4.9 | (1.2) Bootstrap's template-derived inserts are critical writes: roles created = templates, under rows-affected; without read access to the templates → a loud error, not a silent zero | [W] |
 | T4.10 | (1.2) Test 28c on the full path: bootstrap and invitation acceptance through real EF commands → **zero commands containing RETURNING** | [W] |
 | T4.11 | (1.2) The acceptance request carries the target tenant id alongside the token, and `provisioner` sets `app.tenant_id` from it before reading the invitation; a tenant id not matching the token's tenant → no invitation (zero rows) → a loud rejection | [B] |
+| T4.12 | (1.3) Member management in the database, via direct SQL, not the API: a member without `core.members.manage` cannot disable another, grant or delete a role, invite, or revoke an invitation; no one edits their own roles; a disabled member can neither re-enable themselves nor leave; a manager cannot bring back someone who left; invitations are created `pending` and revoked `pending → revoked` only (the document, 3.10) | [B] |
+| T4.13 | (1.3) The second layer: the API's member-management endpoints check `can_manage_members` explicitly before the database (Section 5); refusal is seen from the application with no database command, and from the database alone when the application is bypassed | [B] |
+| T4.14 | (1.3) Return: a member who left accepts a new invitation → the same row is `active`, with only the invitation's roles and mode, no old active assignment, and the same `membership_auth`; the wrong order is seen to leave the old ones (the document, 3.10, D9 and D10). A disabled or active member accepting an invitation → refused | [B] |
+| T4.15 | (1.3) Automatic auditing (the document, 7): every write in its transaction; self-service identity writes exempt (login succeeds with no error and no entry); `user_password_credentials` never audited; `password_hash` and `token_hash` valued `"[masked]"` | [W] |
+| T4.16 | (1.3) A local static check: no `ExecuteUpdate`/`ExecuteDelete` in application code except the password command, with a self-test on a plant | [W] |
+| T4.17 | (1.3) `POST /provision/tenants` registered in Development and CI only; the Api refuses to register it in Production and Staging (seen failing when the guard is removed) | [W] |
 
 ---
 
@@ -365,7 +371,7 @@ Billing, public self-registration, SSO, identity deletion for compliance, single
 4. **`[W]` tests:** an equivalent, written proof is submitted. Example: T1.1 accepts any mechanism that makes access outside a transaction **fail explicitly** — not one that makes it silent.
 5. **The ten CI checks:** run directly against its schema; the manifest and the chain table are **its own**, and are compared against the document manually, once.
 
-**What counts as a categorical failure regardless of everything else:** any failure in Tests 1, 2, 3, 15, 16‑a, 16‑b, 21, 25, 27 — because these are leakage or blinding of the isolation mechanism itself, not of a feature. (1.1: 27 added — an implementation that throws on a reused connection has no deterministic fail-safe, which every layer above it relies on.)
+**What counts as a categorical failure regardless of everything else:** any failure in Tests 1, 2, 3, 15, 16‑a, 16‑b, 21, 25, 27, **and criteria T4.12 and T4.5 (1.3: self-escalation of privilege, and a tenant with no owner)** — because these are leakage or blinding of the isolation mechanism itself, not of a feature. (1.1: 27 added — an implementation that throws on a reused connection has no deterministic fail-safe, which every layer above it relies on.)
 
 **An explicit limit on the comparison:** the other implementation passing every test proves that it **satisfies the written contract**, not that it is free of flaws. The tests check what occurred to their author (the document, 3.7). And the standard for judging both implementations remains the same — including our own.
 
@@ -389,6 +395,8 @@ Persons and memberships:
 Al-Amin's clients:  A, B, C, D   — 5 subscriptions each
 Maan's clients:     X, Y          — 3 subscriptions each
 ```
+
+**Seed passwords (1.3):** each user's is `<username>-seed-password`, stored as a real hash in the implementation's format. **Test values only**: the seed refuses to run on a non-clean database, and never runs outside development and CI.
 
 **The intended coverage:** Omar covers two different scopes across tenants (T6.1). Layla covers a `viewer` with scope `all` and no management permission (Test 24‑a). Rami covers a scope manager with scope `assigned` (24‑b). Khaled covers the standard consultant case. C and D are not assigned to anyone under `assigned` — they reveal any leakage.
 

@@ -7,6 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The white-box tests set the audit context of a transaction they open by hand (T2 Test 28c, T4.15). -->
+    <InternalsVisibleTo Include="Core.WhiteBoxTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 

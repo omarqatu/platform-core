@@ -165,8 +165,8 @@ public class T1_TransactionLayerTests(WhiteBoxFixture fixture)
     }
 
     // ---- T1 build — variables: independent SET LOCAL statements, app.user_id then app.tenant_id.
-    // (T3, decided by the project owner) then the three second-axis variables in the order of 3.5/6 —
-    // exactly five SET LOCAL, in that order, for a real member of W1.
+    // (T3, decided by the project owner) then the second-axis variables in the order of 3.5/6 —
+    // exactly six SET LOCAL (v1.16: app.can_manage_members last), in that order, for a real member of W1.
 
     [Fact]
     public async Task UnitOfWork_SetsUserThenTenant_AsSeparateStatements_BeforeAnyAccess()
@@ -182,17 +182,18 @@ public class T1_TransactionLayerTests(WhiteBoxFixture fixture)
         Assert.Equal(userId.ToString(), user);
         Assert.Equal(fixture.W1.ToString(), tenant);
         var setLocals = recorder.Commands.Where(text => text.Contains("SET LOCAL")).ToList();
-        Assert.Equal(5, setLocals.Count);
+        Assert.Equal(6, setLocals.Count);
         Assert.Equal($"SET LOCAL app.user_id = '{userId}'", setLocals[0]);
         Assert.Equal($"SET LOCAL app.tenant_id = '{fixture.W1}'", setLocals[1]);
         Assert.Equal($"SET LOCAL app.membership_id = '{fixture.W1Membership}'", setLocals[2]);
         Assert.Equal("SET LOCAL app.scope_all = 'true'", setLocals[3]);
         Assert.Equal("SET LOCAL app.can_manage_scope = 'false'", setLocals[4]);
-        // user and tenant first; all five before the work's first access.
+        Assert.Equal("SET LOCAL app.can_manage_members = 'false'", setLocals[5]);
+        // user and tenant first; all six before the work's first access.
         var commands = recorder.Commands.ToList();
         Assert.Equal(commands[0], setLocals[0]);
         Assert.Equal(commands[1], setLocals[1]);
-        Assert.True(commands.IndexOf(setLocals[4]) < commands.FindIndex(text => text.Contains("current_setting")));
+        Assert.True(commands.IndexOf(setLocals[5]) < commands.FindIndex(text => text.Contains("current_setting")));
     }
 
     [Fact]

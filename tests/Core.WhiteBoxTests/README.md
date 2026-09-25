@@ -4,7 +4,7 @@ This project proves the tests marked **[W]** in PROOF_SPEC. When another
 implementation is evaluated against the spec, this project is not run; an
 equivalent proof is submitted in its place, as §6 describes.
 
-It references `Core` directly, and since T3 `Api` (hosted in-process for T3.6). That is a conscious exception
+It references `Core` directly, and since T3 `Api` (hosted in-process for T3.6, and in T4 for T4.15 and T4.17). That is a conscious exception
 `Conformance` stays independent of `Core` (PROOF_SPEC §0 and §6), and it applies
 to this project only. `Conformance` still reaches the system through SQL and HTTP
 alone, and it still holds every [B] test.
@@ -17,11 +17,16 @@ alone, and it still holds every [B] test.
 | `UnitOfWork_*`, `Middleware_*`, `Pool_*` | The T1 build items: every request → one transaction; `SET LOCAL` order; state reset on return to the pool; T1.3 and Test 27 repeated through Core's own layer |
 | `Test23b_*` | Test 23-b (PLATFORM_CORE v1.14 §3.7): editing a system role through the layer above → an explicit error from the rows-affected guard, while the database below stays silent |
 | `Test28a_*`, `Test28b_*`, `Test28c_*` | Test 28 [W] (v1.14 §3.7), an acceptance criterion of T2 under rule 8: (a) no DEFAULT, keys `app_id`, NOT NULL timestamps `app_ts`, each query seen failing on a planted table; (b) every EF property `ValueGenerated.Never`; (c) a forgotten key or timestamp → `23514`, nothing saved, and no `RETURNING` for any of the 19 entity types |
-| `Test26_*` | T3.1 — Test 26 (v1.15 §3.7): a single join before `app.membership_id` → zero rows and Rule 7 throws; the order a-b-c → succeeds with each member's values; the guard: exactly three reads, each followed by its `SET LOCAL`, in order; a membership with no scope row → the resolver throws |
+| `Test26_*` | T3.1 — Test 26 (v1.15 §3.7): a single join before `app.membership_id` → zero rows and Rule 7 throws; the order a-b-c → succeeds with each member's values; the guard: exactly three reads, each followed by its `SET LOCAL` — step c's two (v1.16) — 7 commands in order; a membership with no scope row → the resolver throws |
 | `T3_6_*` | T3.6: the session cookie, decrypted with the Api's own ticket format, carries `user_id` (after login) and `user_id` + `tenant_id` (after selection) — no scope, no permission; HTTP-only, Secure, SameSite=Strict. Api hosted in-process |
 | `Layer1_*`, `Layer2_*` | Decision 36 (amended): scope administration in two layers, each alone — the application refuses without `core.scope.manage` before any command reaches the database; with that check bypassed, the database refuses on its own (an update → zero rows → the rows-affected guard; an insert → `42501`) |
 | `RequireHttpsFalse_*`, `AllowedCombinations_*` | Decision 33 (amended): Api refuses to start with `Session:RequireHttps=false` outside an environment named Development or CI; starts otherwise |
 | `UnitOfWork_UserWithoutTenant_*` | The tenant-selection path through the unit of work: `app.user_id` alone, no second-axis variable, own memberships only |
+| `T4_9_*` | T4.9: bootstrap's template reads — no read grant → `42501` before any write; zero templates → `RoleTemplatesUnavailableException`, not a tenant with no roles; the real path creates roles = templates and their permissions |
+| `T4_10_*` | T4.10 — Test 28c on the full path: bootstrap, a new-account acceptance, a departure and a return through the real EF commands → every table written, zero commands containing `RETURNING` |
+| `T4_13_*` | T4.13, the [W] half (the owner's decision): every member-management operation refused for lack of `core.members.manage` with no command sent after the unit of work's own |
+| `T4_17_*` | T4.17: `POST /provision/tenants` absent in Production and Staging (404, no route), present in Development and CI; the same detector finds the route when the guard is replaced by one that admits everything |
+| `T4_AutomaticAuditTests` | T4.15 (v1.16 §7): every tracked write audited in its own transaction (read back before commit, rolled back with it, no audit of the audit); a write with no tenant to audit under → loud before any command; login's `last_login_at` exempt (no error, no entry); `user_password_credentials` never audited; `token_hash` kept, valued `"[masked]"` |
 
 Since T2 the tests run on the real schema, through Core's EF model, against two tenants of their
 own (W1, W2) that the fixture creates as migrator and deletes afterwards (`WhiteBoxFixture`). Since T3

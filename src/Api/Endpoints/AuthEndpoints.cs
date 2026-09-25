@@ -31,11 +31,13 @@ public static class AuthEndpoints
             if (userId is not { } user)
                 return Results.Json(new { error = "invalid_credentials" }, statusCode: StatusCodes.Status401Unauthorized);
 
-            await UnitOfWork.RunAsync(db, new SessionContext(user, null), (c, token) =>
-                CriticalWrite.ExpectRowsAsync(
-                    c.Users.Where(u => u.Id == user)
-                        .ExecuteUpdateAsync(set => set.SetProperty(u => u.LastLoginAt, DateTime.UtcNow), token),
-                    1, "users.last_login_at"), ct);
+            // A tracked update of the actor's own row: exempt from automatic auditing (7, self-service identity).
+            await UnitOfWork.RunAsync(db, new SessionContext(user, null), async (c, token) =>
+            {
+                var row = CriticalWrite.Require(await c.Users.SingleOrDefaultAsync(u => u.Id == user, token), "users.last_login_at");
+                row.LastLoginAt = DateTime.UtcNow;
+                await CriticalWrite.SaveAsync(c, "users.last_login_at", token);
+            }, ct);
 
             await http.SignInAsync(SessionCookie.Scheme, SessionCookie.Principal(user, null));
             return Results.NoContent();

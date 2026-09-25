@@ -18,6 +18,13 @@ jobs:
       - name: Build
         run: dotnet build PlatformCore.slnx -c Release
 
+      # PROOF_SPEC v1.3 T4.16: no ExecuteUpdate/ExecuteDelete in application code — the automatic audit (PLATFORM_CORE 7)
+      # sees tracked writes only. A local check with a name, not one of the ten (checks/local/README.md); needs no database.
+      - name: Local check — check-no-bulk-writes, and its self-test
+        run: |
+          bash checks/local/check-no-bulk-writes.sh
+          bash checks/local/check-no-bulk-writes.sh --self-test
+
       # A fresh migrator password per run: the T0.3 scan searches the Api image
       # for this exact value. Every holder of the migrator connection string
       # (the migration tool, the test suites) takes it from the environment.

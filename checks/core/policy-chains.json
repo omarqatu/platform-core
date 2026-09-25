@@ -1,11 +1,14 @@
 {
-  "_comment": "The declared policy chains (PLATFORM_CORE v1.14 §4.6; §3.6 Check 10). A policy on `table` may read only the tables in `reads`, and each table it reads must carry a read policy (SELECT or ALL, permissive) covering the chain's `actor`. `<scoped table>` stands for every table carrying client_scope. The resolution steps (3.5/6 b, c) are not policy expressions, so pg_depend has no edge for them; their read policies are still required.",
+  "_comment": "The declared policy chains (PLATFORM_CORE v1.16 §4.6, §3.10; §3.6 Check 10). A policy on `table` may read only the tables in `reads`, and each table it reads must carry a read policy (SELECT or ALL, permissive) covering the chain's `actor`. `<scoped table>` stands for every table carrying client_scope. The resolution steps (3.5/6 b, c) are not policy expressions, so pg_depend has no edge for them; their read policies are still required.",
   "chains": [
     { "table": "persons",            "reads": ["users", "memberships"], "actor": "app_user", "covered_by": { "users": ["user_self_read", "user_visible_via_membership"], "memberships": ["membership_self", "membership_tenant_read"] }, "document": "§4.6: persons → users → memberships" },
     { "table": "users",              "reads": ["memberships"],          "actor": "app_user", "covered_by": { "memberships": ["membership_tenant_read"] }, "document": "§4.6: users → memberships" },
     { "table": "membership_auth",    "reads": ["memberships"],          "actor": "app_user", "covered_by": { "memberships": ["membership_self"] }, "document": "§4.6: membership_auth → memberships" },
     { "table": "tenants",            "reads": ["memberships"],          "actor": "app_user", "covered_by": { "memberships": ["membership_self"] }, "document": "§4.6: tenants → memberships" },
-    { "table": "<scoped table>",     "reads": ["scope_assignments"],    "actor": "app_user", "covered_by": { "scope_assignments": ["scope_assignment_read"] }, "document": "§4.6: <scoped table> → scope_assignments" }
+    { "table": "<scoped table>",     "reads": ["scope_assignments"],    "actor": "app_user", "covered_by": { "scope_assignments": ["scope_assignment_read"] }, "document": "§4.6: <scoped table> → scope_assignments" },
+    { "table": "membership_roles",   "reads": ["memberships"],          "actor": "provisioner", "covered_by": { "memberships": ["memberships_provisioner_select"] }, "document": "v1.16 §3.10 D9: membership_roles → memberships (a member who left)" },
+    { "table": "membership_scope",   "reads": ["memberships"],          "actor": "provisioner", "covered_by": { "memberships": ["memberships_provisioner_select"] }, "document": "v1.16 §3.10 D9: membership_scope → memberships (a member who left)" },
+    { "table": "scope_assignments",  "reads": ["memberships"],          "actor": "provisioner", "covered_by": { "memberships": ["memberships_provisioner_select"] }, "document": "v1.16 §3.10 D10: scope_assignments → memberships (a member who left)" }
   ],
   "resolution": [
     { "step": "b", "reads": ["membership_scope"], "actor": "app_user", "covered_by": { "membership_scope": ["membership_scope_read"] }, "document": "§4.6, 3.5/6-b" },

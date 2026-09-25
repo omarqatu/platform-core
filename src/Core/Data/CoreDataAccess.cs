@@ -20,11 +20,11 @@ public static class CoreDataAccess
         return builder.Build();
     }
 
-    /// <summary>Applies the transaction layer to any context built on CoreDbContext.</summary>
+    /// <summary>Applies the transaction layer and automatic auditing (7) to any context built on CoreDbContext.</summary>
     public static DbContextOptionsBuilder UseCoreDataAccess(this DbContextOptionsBuilder options, NpgsqlDataSource dataSource) =>
         options
             .UseNpgsql(dataSource)
-            .AddInterceptors(TransactionRequiredInterceptor.Instance);
+            .AddInterceptors(TransactionRequiredInterceptor.Instance, AutomaticAuditInterceptor.Instance);
 
     public static IServiceCollection AddCoreDataAccess(this IServiceCollection services, string appUserConnectionString)
     {

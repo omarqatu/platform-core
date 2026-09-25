@@ -12,11 +12,12 @@ public class T3_Test26(WhiteBoxFixture fixture)
 {
     public static TheoryData<string> Usernames => new() { "khaled", "sara", "rami" };
 
-    public static TheoryData<string, string, bool, bool> Members => new()
+    // (v1.16) The fourth value: core.members.manage — in the owner and admin templates (§3.10, D1).
+    public static TheoryData<string, string, bool, bool, bool> Members => new()
     {
-        { "khaled", "assigned", false, false },
-        { "sara",   "all",      true,  true },
-        { "rami",   "assigned", false, true },
+        { "khaled", "assigned", false, false, false },
+        { "sara",   "all",      true,  true,  true },
+        { "rami",   "assigned", false, true,  false },
     };
 
     // Resolution with a single join query, before app.membership_id is set → zero rows, so Rule 7 throws:
@@ -56,7 +57,7 @@ public class T3_Test26(WhiteBoxFixture fixture)
     // The mandatory order (§3.5/6, steps a-b-c) → succeeds, with each member's real values.
     [Theory]
     [MemberData(nameof(Members))]
-    public async Task Test26_ThreeSteps_Succeed(string username, string mode, bool scopeAll, bool canManage)
+    public async Task Test26_ThreeSteps_Succeed(string username, string mode, bool scopeAll, bool canManage, bool canManageMembers)
     {
         var (user, tenant) = await UserAndAlAminAsync(username);
         var expectedMembership = await MembershipAsync(username);
@@ -68,16 +69,17 @@ public class T3_Test26(WhiteBoxFixture fixture)
             var r = await ScopeResolver.ResolveAsync(c, user, tenant, ct);
             var s = await c.Database.SqlQueryRaw<string>(
                 "SELECT current_setting('app.membership_id', true) || '|' || current_setting('app.scope_all', true) || '|' || " +
-                "current_setting('app.can_manage_scope', true) AS \"Value\"").SingleAsync(ct);
+                "current_setting('app.can_manage_scope', true) || '|' || current_setting('app.can_manage_members', true) AS \"Value\"").SingleAsync(ct);
             return (r, s);
         });
 
-        Assert.Equal(new ResolvedScope(expectedMembership, scopeAll, canManage), resolved);
-        Assert.Equal($"{expectedMembership}|{(scopeAll ? "true" : "false")}|{(canManage ? "true" : "false")}", settings);
+        Assert.Equal(new ResolvedScope(expectedMembership, scopeAll, canManage, canManageMembers), resolved);
+        Assert.Equal($"{expectedMembership}|{(scopeAll ? "true" : "false")}|{(canManage ? "true" : "false")}|{(canManageMembers ? "true" : "false")}", settings);
         Assert.Equal(mode == "all", resolved.ScopeAll);
     }
 
-    // The guard: three separate reads, each followed by the SET LOCAL it allows, in the order a-b-c. Any change
+    // The guard: three separate reads, each followed by the SET LOCAL it allows, in the order a-b-c — step c one
+    // read, then its two SET LOCAL (v1.16: exactly 7 commands, decided by the project owner). Any change
     // that reverts resolution to a single query fails here before it can be merged.
     [Fact]
     public async Task Test26_Guard_ThreeReadsInOrder_EachFollowedByItsSetLocal()
@@ -94,7 +96,7 @@ public class T3_Test26(WhiteBoxFixture fixture)
         });
 
         var commands = recorder.Commands;
-        Assert.Equal(6, commands.Count);
+        Assert.Equal(7, commands.Count);
         Assert.Contains("FROM memberships", commands[0]);
         Assert.DoesNotContain("membership_scope", commands[0]);
         Assert.StartsWith("SET LOCAL app.membership_id = ", commands[1]);
@@ -103,6 +105,7 @@ public class T3_Test26(WhiteBoxFixture fixture)
         Assert.Contains("FROM membership_roles", commands[4]);
         Assert.Contains("permissions", commands[4]);
         Assert.StartsWith("SET LOCAL app.can_manage_scope = ", commands[5]);
+        Assert.StartsWith("SET LOCAL app.can_manage_members = ", commands[6]);
     }
 
     // Rule 7 through the resolver: a membership with no membership_scope row → the resolver throws

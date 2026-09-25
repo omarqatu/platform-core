@@ -36,8 +36,8 @@ public class T1_FailSafeTests
 
     public enum Ending { Commit, Rollback }
 
-    // T1.6 [B] (PROOF_SPEC 1.1) — Test 27, first-template part: on the same connection, all five context
-    // variables set with SET LOCAL, the transaction ends (COMMIT or ROLLBACK), optionally DISCARD ALL, then
+    // T1.6 [B] (PROOF_SPEC 1.1) — Test 27, first-template part: on the same connection, all six context
+    // variables set with SET LOCAL (v1.16: app.can_manage_members added, decided by the project owner), the transaction ends (COMMIT or ROLLBACK), optionally DISCARD ALL, then
     // a query with no context → zero rows and no error.
     // (Test 27's memberships part is T3.7 and its client_scope part T5.8.)
     [Theory]
@@ -57,6 +57,7 @@ public class T1_FailSafeTests
             await SetLocalAsync(connection, first, "app.membership_id", (await Seed.MembershipAsync("sara", Seed.AlAmin)).ToString());
             await SetLocalAsync(connection, first, "app.scope_all", "true");
             await SetLocalAsync(connection, first, "app.can_manage_scope", "true");
+            await SetLocalAsync(connection, first, "app.can_manage_members", "true");
             Assert.NotEmpty(await VisibleTenantsAsync(connection, first));
 
             if (ending == Ending.Commit) await first.CommitAsync();

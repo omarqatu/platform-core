@@ -44,6 +44,19 @@ public class CoreDbContext : DbContext
     /// </summary>
     public ResolvedScope? Scope { get; internal set; }
 
+    /// <summary>
+    /// The tenant and actor this transaction's writes are audited under (7), or null outside one. Set by
+    /// UnitOfWork and by the provisioner paths; never carried past the transaction.
+    /// </summary>
+    public AuditContext? Audit { get; internal set; }
+
+    /// <summary>The caller's address, recorded on the audit entries (7). Set by the request pipeline.</summary>
+    public string? ClientAddress { get; set; }
+
+    // The automatic audit's state between SavingChanges and SavedChanges, and its recursion flag (7).
+    internal List<AuditEntry>? PendingAudit { get; set; }
+    internal bool SavingAudit { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Tenant>().ToTable("tenants");
@@ -52,7 +65,13 @@ public class CoreDbContext : DbContext
         modelBuilder.Entity<UserPasswordCredential>().ToTable("user_password_credentials").HasKey(x => x.UserId);
         modelBuilder.Entity<Membership>().ToTable("memberships");
         modelBuilder.Entity<MembershipRole>().ToTable("membership_roles");
-        modelBuilder.Entity<Invitation>().ToTable("invitations");
+        // Single-use (3.10): accepting or revoking updates WHERE status = the status read — 'pending' — so a
+        // second acceptance or a revocation racing it writes zero rows, and EF's concurrency check makes that loud.
+        modelBuilder.Entity<Invitation>(invitation =>
+        {
+            invitation.ToTable("invitations");
+            invitation.Property(x => x.Status).IsConcurrencyToken();
+        });
         modelBuilder.Entity<AuthAttempt>().ToTable("auth_attempts");
         modelBuilder.Entity<MembershipScope>().ToTable("membership_scope");
         modelBuilder.Entity<ScopeAssignment>().ToTable("scope_assignments");

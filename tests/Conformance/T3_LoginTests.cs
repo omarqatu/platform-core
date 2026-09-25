@@ -75,7 +75,7 @@ public class T3_LoginTests
         Assert.Equal("not_a_member", (await browser.JsonAsync(response)).GetProperty("error").GetString());
     }
 
-    // ---- T3.7 [B] — Test 27, the memberships part: on the same connection, all five variables set, the
+    // ---- T3.7 [B] — Test 27, the memberships part: on the same connection, all six variables set (v1.16), the
     // transaction ends (COMMIT or ROLLBACK), optionally DISCARD ALL, then app.user_id alone (the
     // tenant-selection path) → the caller's own memberships only, with no error.
 
@@ -98,6 +98,7 @@ public class T3_LoginTests
             await SetLocalAsync(connection, first, "app.membership_id", (await Seed.MembershipAsync("sara", Seed.AlAmin)).ToString());
             await SetLocalAsync(connection, first, "app.scope_all", "true");
             await SetLocalAsync(connection, first, "app.can_manage_scope", "true");
+            await SetLocalAsync(connection, first, "app.can_manage_members", "true");
             Assert.NotEmpty(await MembershipOwnersAsync(connection, first));
 
             if (ending == Ending.Commit) await first.CommitAsync();
