@@ -6,6 +6,8 @@ using Core.Http;
 using Core.Identity;
 using Core.Provisioning;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Modules.Subscriptions;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,6 +42,9 @@ if (!requireHttps && !plainHttpEnvironments.Contains(builder.Environment.Environ
         $"this environment is '{builder.Environment.EnvironmentName}'.");
 
 builder.Services.AddCoreDataAccess(builder.Configuration.GetConnectionString("app_user")!);
+// The subscriptions module (PROOF_SPEC T5): its own context, on the same app_user data source and transaction layer.
+builder.Services.AddDbContext<SubscriptionsDbContext>((services, options) =>
+    options.UseCoreDataAccess(services.GetRequiredService<NpgsqlDataSource>()));
 
 // The authenticator path (4.3-a/1): its own data source and role, never registered as the app_user one.
 var authenticatorDataSource = CoreDataAccess.CreateDataSource(builder.Configuration.GetConnectionString("authenticator")!);
@@ -87,6 +92,8 @@ app.MapAuthEndpoints();
 app.MapTenantEndpoints();
 app.MapScopeEndpoints();
 app.MapMemberEndpoints();
+app.MapAuditEndpoints();
+app.MapSubscriptionEndpoints();
 app.MapAcceptance();
 // Bootstrap: registered in Development and CI only; in any other environment the route does not exist (T4.17).
 app.MapBootstrap(app.Environment.EnvironmentName);

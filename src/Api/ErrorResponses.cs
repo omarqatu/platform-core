@@ -50,7 +50,7 @@ public sealed class ErrorResponses(RequestDelegate next, ILogger<ErrorResponses>
                 case Core.Provisioning.RoleTemplatesUnavailableException:
                     return (StatusCodes.Status500InternalServerError, "role_templates_unavailable");
                 // The application layer's explicit permission check (5), before any write.
-                case Endpoints.NotPermittedException:
+                case NotPermittedException:
                     return (StatusCodes.Status403Forbidden, "not_permitted");
                 // The rows-affected guard (3.5/5): the row is not writable under this context.
                 case CriticalWriteException:
@@ -59,6 +59,9 @@ public sealed class ErrorResponses(RequestDelegate next, ILogger<ErrorResponses>
                     return (StatusCodes.Status403Forbidden, "not_permitted");
                 case PostgresException { SqlState: PostgresErrorCodes.CheckViolation }:
                     return (StatusCodes.Status400BadRequest, "invalid_value");
+                // A reference to another tenant's row, or to none: the composite FK (3.3) — never a leak of which.
+                case PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation }:
+                    return (StatusCodes.Status400BadRequest, "invalid_reference");
                 case PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }:
                     return (StatusCodes.Status409Conflict, "conflict");
             }
