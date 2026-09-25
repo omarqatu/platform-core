@@ -139,7 +139,28 @@ Closed by the T3 PR:
   read with no need. Then a migration drops both, with the manifest, `grants.json` and Checks 2,
   3 and 6 updated, after the text is run in isolation (PROOF_SPEC rule 11).
 
+### 19. Every policy inside a sql block
+
+- **Origin:** T4, found while generating the manifest from v1.16 (`checks/core/generate-manifest.py`).
+- **The finding:** the extractor reads every `CREATE POLICY` inside a ```sql block of the document's body — 62 in
+  v1.16, each written once. Five policies the manifest holds are stated **outside** one, so the extractor does not
+  see them: `tenants_for_jobs` (§8, inside a plain block) and `tenant_isolation` stated explicitly for
+  `membership_roles`, `role_permissions`, `roles`, `tenant_modules` (1.13's decision 1). The generator keeps them
+  and reports them, but they are the only entries not generated from the text.
+- **For the document:** write those five as `CREATE POLICY` statements inside sql blocks, so the whole manifest is
+  extracted from the text.
+
 ## For the next version of PROOF_SPEC — not for the code
+
+### 20. T4.13: split into its [B] and [W] parts
+
+- **Origin:** T4, decided by the project owner.
+- **The discrepancy:** T4.13 is tagged [B], but one of its parts — "refusal is seen from the application with no
+  database command" — is not observable from outside the implementation.
+- **As built:** the refusal from the API is [B] (Conformance, 403); the absence of any database command is [W]
+  (`Core.WhiteBoxTests`, the command recorder, as in T3).
+- **For PROOF_SPEC:** state T4.13 as two criteria, one [B] and one [W].
+
 
 ### 15. The seed contract names the seed users' passwords, as test values only
 
