@@ -75,6 +75,8 @@ Closed by the T4 PR:
 
 ### 22. Invitation delivery — a launch condition
 
+- **Accepted by the project owner as recorded (T4, before merge).**
+
 - **Origin:** T4. The document says the invitation message carries the token (§4.5/2) and names no channel; the
   proof sends no message.
 - **As built:** `POST /members/invitations` returns the token to the inviter, with `expires_at` — the same response
@@ -149,6 +151,8 @@ Closed by the T4 PR:
 
 ### 21. Item g's count reads membership_scope, which a members-only manager cannot see
 
+- **Accepted by the project owner as recorded (T4, before merge).**
+
 - **Origin:** T4, found building item g (§3.10) for disabling an `all` member.
 - **The finding (run on PostgreSQL 18):** item g counts the active memberships whose mode is `all` through
   `membership_scope`. `membership_scope_read` shows a member only their own row unless they hold
@@ -174,12 +178,26 @@ Closed by the T4 PR:
   `T4_6_AnAllMemberLeaving_WhileAnotherIsDowngraded`, seen failing without item g on departure and without the lock.
 - **Found with it (run on PostgreSQL 18):** a leaver without `core.scope.manage` counts and locks their own row
   alone — Layla (Al-Amin, viewer, `all`) counts 1 `all` membership where there are 3, and `membership_lock` admits
-  no row of hers to lock, since it needs a manager permission. Item g would refuse her as "the last one" falsely,
-  and could not hold the others against a race. As built: an `all` member without the scope permission is refused
-  departure loudly (`not_permitted`, `core.scope.manage`), never counted blind. Item 21's fix does not reach her
-  (she holds neither permission).
-- **For the document:** add departure to item g's text, and decide how an `all` member with no manager permission
-  leaves — the lock and the count as they are cannot see the others.
+  no row of hers to lock, since it needs a manager permission.
+- **Decided by the project owner (T4, before merge): consent prevails (§0).** A member holding neither
+  `core.scope.manage` nor `core.members.manage` always leaves; item g on departure applies only to a holder of one
+  of the two. Layla (viewer, `all`) leaves → succeeds — even as the last `all` membership
+  (`T4_Departure_TheLastAllMember_WithNoManagerPermission_Leaves`: zero `all` left, the owners remain). The
+  managers' races stay as they are. Until item 21 is settled, a manager holding `core.members.manage` alone, `all`,
+  is refused departure loudly: item g would count blind.
+- **For the document:** add departure to item g's text, for holders of either manager permission, and the consent
+  rule for everyone else.
+
+### 24. The owner's scope is always 'all' — item a would then cover item g
+
+- **Origin:** T4, proposed by the project owner.
+- **The proposal:** fix an owner's scope mode at `all` (bootstrap already gives the first owner `all`). An active
+  owner is then always an active `all` membership, so item a — at least one active owner — guarantees item g — at
+  least one active `all` membership — and the consent decision of item 23 can never leave a tenant with no one who
+  sees everything.
+- **For the document:** state it, with what enforces it (e.g. an `owner` invitation only with `intended_scope_mode
+  = 'all'`, no downgrade of an owner, granting `owner` only to an `all` member), each run in isolation both ways on
+  PostgreSQL 18 before adoption (PROOF_SPEC rule 11).
 
 ## For the next version of PROOF_SPEC — not for the code
 

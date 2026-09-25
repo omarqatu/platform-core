@@ -138,18 +138,18 @@ public static class MemberAdministration
     }
 
     /// <summary>
-    /// A member departs (D4): their own membership, active → left. An owner takes item a; an 'all' member takes item g
-    /// (decided by the project owner in T4: the last active 'all' membership cannot leave either). Item g needs the
-    /// other members' scope rows, readable only with the scope permission (membership_scope_read), and their rows
-    /// lockable only through membership_lock: a leaver without core.scope.manage would count and lock themselves
-    /// alone — so they are refused, loudly, never guarded blind (OPEN_ITEMS 23).
+    /// A member departs (D4): their own membership, active → left. An owner takes item a. An 'all' member holding a
+    /// manager permission takes item g (decided by the project owner in T4): the last active 'all' membership among
+    /// them cannot leave. A member holding neither core.scope.manage nor core.members.manage always leaves — consent
+    /// prevails (0): item g does not reach them (OPEN_ITEMS 23). A manager holding core.members.manage alone cannot
+    /// read the others' scope rows, so item g would count blind: refused loudly until OPEN_ITEMS 21 is settled.
     /// </summary>
     public static async Task LeaveAsync(CoreDbContext db, CancellationToken ct)
     {
         var scope = db.Scope ?? throw new InvalidOperationException("No scope is resolved: no active tenant.");
         var membership = CriticalWrite.Require(await db.Memberships.SingleOrDefaultAsync(m => m.Id == scope.MembershipId, ct), "memberships.status left");
         await LastMemberGuards.RequireAnotherOwnerAsync(db, membership.Id, ct);
-        if (scope.ScopeAll)
+        if (scope.ScopeAll && (scope.CanManageScope || scope.CanManageMembers))
         {
             if (!scope.CanManageScope)
                 throw new NotPermittedException(ScopeResolver.ManageScope);

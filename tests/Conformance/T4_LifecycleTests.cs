@@ -408,9 +408,9 @@ public class T4_LifecycleTests
         Assert.Equal("disabled", await World.StatusOfAsync(disabled.MembershipId));
     }
 
-    // ---- Item g on departure (decided by the project owner in T4): the last active 'all' membership cannot leave —
-    // the same lock and count. A second owner with mode 'assigned' keeps item a out of it. And an 'all' member who
-    // cannot read the others' scope rows (no core.scope.manage) is refused loudly, never counted blind (OPEN_ITEMS 23).
+    // ---- Item g on departure (decided by the project owner in T4): the last active 'all' membership among the
+    // holders of a manager permission cannot leave — the same lock and count. A second owner with mode 'assigned'
+    // keeps item a out of it. A member holding neither permission always leaves: consent prevails (§0, OPEN_ITEMS 23).
 
     [Fact]
     public async Task T4_Departure_TheLastAllMembership_Refused()
@@ -431,18 +431,42 @@ public class T4_LifecycleTests
         Assert.Equal("left", await World.StatusOfAsync(world.Owner.MembershipId));
     }
 
+    // The owner's case: Layla's — a viewer, 'all', no manager permission — leaves, and succeeds, even as the last
+    // 'all' member but one whose count she cannot see. And a manager holding core.members.manage alone, 'all', is
+    // refused loudly: item g would count blind (OPEN_ITEMS 21).
     [Fact]
-    public async Task T4_Departure_AnAllMemberWithoutTheScopePermission_RefusedLoudly()
+    public async Task T4_Departure_AnAllMemberWithNoManagerPermission_AlwaysLeaves()
     {
-        using var world = await World.BootstrapAsync("t4-leave-blind");
-        using var viewer = await world.JoinAsync("t4-leave-blind-viewer", "viewer", "all");
+        using var world = await World.BootstrapAsync("t4-leave-consent");
+        using var viewer = await world.JoinAsync("t4-leave-consent-viewer", "viewer", "all");
+        using var membersOnly = await world.JoinAsync("t4-leave-consent-mo", await world.CustomRoleAsync("core.members.manage"), "all");
 
-        var response = await viewer.Browser.Client.PostAsync("/me/leave", null);
+        var left = await viewer.Browser.Client.PostAsync("/me/leave", null);
+        var refused = await membersOnly.Browser.Client.PostAsync("/me/leave", null);
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Equal("not_permitted", (await viewer.Browser.JsonAsync(response)).GetProperty("error").GetString());
-        Assert.Equal("active", await World.StatusOfAsync(viewer.MembershipId));
-        Assert.Equal(2, await world.ActiveAllAsync());
+        Assert.Equal(HttpStatusCode.NoContent, left.StatusCode);
+        Assert.Equal("left", await World.StatusOfAsync(viewer.MembershipId));
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Equal("not_permitted", (await membersOnly.Browser.JsonAsync(refused)).GetProperty("error").GetString());
+        Assert.Equal("active", await World.StatusOfAsync(membersOnly.MembershipId));
+    }
+
+    // Consent prevails even over the last 'all' membership: a member with no manager permission, the only 'all' one
+    // left (the owner downgraded by a second owner's hand), leaves; the tenant keeps its owners.
+    [Fact]
+    public async Task T4_Departure_TheLastAllMember_WithNoManagerPermission_Leaves()
+    {
+        using var world = await World.BootstrapAsync("t4-leave-consent-last");
+        using var owner2 = await world.JoinAsync("t4-leave-consent-owner2", "owner", "assigned");
+        using var viewer = await world.JoinAsync("t4-leave-consent-last-viewer", "viewer", "all");
+        Assert.Equal(HttpStatusCode.NoContent, (await owner2.Browser.PutAsync(
+            $"/scope/memberships/{world.Owner.MembershipId}/mode", new { scope_mode = "assigned" })).Status);
+        Assert.Equal(1, await world.ActiveAllAsync());
+
+        Assert.Equal(HttpStatusCode.NoContent, (await viewer.Browser.Client.PostAsync("/me/leave", null)).StatusCode);
+
+        Assert.Equal(0, await world.ActiveAllAsync());
+        Assert.Equal(2, await world.ActiveOwnersAsync());
     }
 
     // ---- helpers
