@@ -64,7 +64,7 @@ public sealed class Session : IAsyncDisposable
     }
 
     public static async Task<Session> OpenAsync(string role, Guid? user = null, Guid? tenant = null,
-        Guid? membership = null, bool? scopeAll = null, bool? canManageScope = null)
+        Guid? membership = null, bool? scopeAll = null, bool? canManageScope = null, bool? canManageMembers = null)
     {
         var connection = await Target.OpenAsync(role);
         var transaction = await connection.BeginTransactionAsync();
@@ -74,6 +74,8 @@ public sealed class Session : IAsyncDisposable
         if (membership is { } m) await session.SetAsync("app.membership_id", m.ToString());
         if (scopeAll is { } s) await session.SetAsync("app.scope_all", s ? "true" : "false");
         if (canManageScope is { } c) await session.SetAsync("app.can_manage_scope", c ? "true" : "false");
+        // (v1.16 §3.10) The sixth variable, set in step c after app.can_manage_scope.
+        if (canManageMembers is { } mm) await session.SetAsync("app.can_manage_members", mm ? "true" : "false");
         return session;
     }
 

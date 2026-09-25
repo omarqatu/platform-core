@@ -103,8 +103,11 @@ public class T2_DocumentTests
         var alAmin = await Seed.TenantAsync(Seed.AlAmin);
         var sara = await Seed.UserAsync("sara");
         var maanOwner = await Seed.RoleAsync(Seed.Maan, "owner");
+        // (v1.16) Sara's resolved context has six variables: as an admin she holds core.members.manage, which
+        // invitations_insert and membership_roles_manage_insert now require before the FK is reached.
         await using var session = await Session.OpenAsync(Target.AppUser, user: sara, tenant: alAmin,
-            membership: await Seed.MembershipAsync("sara", Seed.AlAmin), scopeAll: true, canManageScope: true);
+            membership: await Seed.MembershipAsync("sara", Seed.AlAmin), scopeAll: true, canManageScope: true,
+            canManageMembers: true);
 
         Assert.Equal("23503", await session.SqlStateOfAsync(
             "INSERT INTO invitations (id, tenant_id, email, role_id, token_hash, status, invited_by, expires_at, created_at, intended_scope_mode) " +

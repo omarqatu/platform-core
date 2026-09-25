@@ -1,5 +1,5 @@
 {
-  "_comment": "The approved privilege surface (PLATFORM_CORE v1.14 §3.8 matrix; §3.6 Check 6). Check 6 compares the catalog against this file in both directions: anything missing or extra is a failure. Only the application roles and PUBLIC are compared; migrator is the owner.",
+  "_comment": "The approved privilege surface (PLATFORM_CORE v1.16 §3.8 matrix; §3.6 Check 6). Check 6 compares the catalog against this file in both directions: anything missing or extra is a failure. Only the application roles and PUBLIC are compared; migrator is the owner.",
   "roles": ["app_user", "authenticator", "job_runner", "provisioner"],
   "tables": {
     "tenants":                   { "app_user": ["SELECT"], "provisioner": ["INSERT"], "job_runner": ["SELECT"] },
@@ -7,10 +7,10 @@
     "users":                     { "app_user": ["SELECT"], "authenticator": ["SELECT"], "provisioner": ["SELECT", "INSERT"] },
     "user_password_credentials": { "authenticator": ["SELECT"], "provisioner": ["INSERT"] },
     "memberships":               { "app_user": ["SELECT"], "provisioner": ["SELECT", "INSERT"] },
-    "membership_roles":          { "app_user": ["SELECT", "INSERT", "DELETE"], "provisioner": ["INSERT"] },
+    "membership_roles":          { "app_user": ["SELECT", "INSERT", "DELETE"], "provisioner": ["SELECT", "INSERT", "DELETE"] },
     "membership_auth":           { "app_user": ["SELECT"], "authenticator": ["SELECT"], "provisioner": ["INSERT"] },
-    "membership_scope":          { "app_user": ["SELECT"], "provisioner": ["INSERT"] },
-    "scope_assignments":         { "app_user": ["SELECT", "INSERT"] },
+    "membership_scope":          { "app_user": ["SELECT"], "provisioner": ["SELECT", "INSERT"] },
+    "scope_assignments":         { "app_user": ["SELECT", "INSERT"], "provisioner": ["SELECT"] },
     "invitations":               { "app_user": ["SELECT", "INSERT"], "provisioner": ["SELECT"] },
     "auth_attempts":             { "authenticator": ["SELECT", "INSERT"] },
     "audit_log":                 { "app_user": ["SELECT", "INSERT"], "provisioner": ["INSERT"] },
@@ -25,9 +25,9 @@
   "columns": {
     "users":                     { "app_user": { "UPDATE": ["last_login_at", "language", "theme"] } },
     "user_password_credentials": { "app_user": { "UPDATE": ["password_hash", "updated_at"] } },
-    "memberships":               { "app_user": { "UPDATE": ["status"] } },
-    "membership_scope":          { "app_user": { "UPDATE": ["scope_mode"] } },
-    "scope_assignments":         { "app_user": { "UPDATE": ["active"] } },
+    "memberships":               { "app_user": { "UPDATE": ["status"] }, "provisioner": { "UPDATE": ["status"] } },
+    "membership_scope":          { "app_user": { "UPDATE": ["scope_mode"] }, "provisioner": { "UPDATE": ["scope_mode"] } },
+    "scope_assignments":         { "app_user": { "UPDATE": ["active"] }, "provisioner": { "UPDATE": ["active"] } },
     "invitations":               { "app_user": { "UPDATE": ["status"] }, "provisioner": { "UPDATE": ["status"] } },
     "tenant_modules":            { "app_user": { "UPDATE": ["is_active"] } }
   },
