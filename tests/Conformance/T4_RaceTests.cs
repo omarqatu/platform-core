@@ -74,6 +74,18 @@ public class T4_RaceTests
             () => Mode(scopeManager, world.Owner, "assigned"));
     });
 
+    // (Decided by the project owner in T4: item g covers departure too.) An 'all' member leaves while the other is
+    // downgraded by a scope manager.
+    [Fact]
+    public Task T4_6_AnAllMemberLeaving_WhileAnotherIsDowngraded() => RoundsAsync("t4-6-leave", async world =>
+    {
+        using var x = await world.JoinAsync("x", "admin", "all");
+        using var scopeManager = await world.JoinAsync("r", await world.CustomRoleAsync("core.scope.manage"), "assigned");
+        await RaceAsync(world.ActiveAllAsync,
+            () => x.Browser.Client.PostAsync("/me/leave", null),
+            () => Mode(scopeManager, world.Owner, "assigned"));
+    });
+
     [Fact]
     public Task T4_6_TwoDisablings() => RoundsAsync("t4-6-disable", async world =>
     {

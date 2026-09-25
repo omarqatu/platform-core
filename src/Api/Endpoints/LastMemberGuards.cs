@@ -33,7 +33,7 @@ public static class LastMemberGuards
     public static Task RequireAnotherOwnerAsync(CoreDbContext db, Guid membershipId, CancellationToken ct) =>
         RequireAnotherAsync(db, IsOwner, membershipId, "last_owner", ct);
 
-    /// <summary>Item g — a downgrade to 'assigned', or disabling an 'all' member.</summary>
+    /// <summary>Item g — a downgrade to 'assigned', disabling an 'all' member, or an 'all' member's departure.</summary>
     public static Task RequireAnotherAllAsync(CoreDbContext db, Guid membershipId, CancellationToken ct) =>
         RequireAnotherAsync(db, IsAll, membershipId, "last_all_member", ct);
 

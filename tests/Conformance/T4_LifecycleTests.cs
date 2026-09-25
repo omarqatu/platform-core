@@ -408,6 +408,43 @@ public class T4_LifecycleTests
         Assert.Equal("disabled", await World.StatusOfAsync(disabled.MembershipId));
     }
 
+    // ---- Item g on departure (decided by the project owner in T4): the last active 'all' membership cannot leave —
+    // the same lock and count. A second owner with mode 'assigned' keeps item a out of it. And an 'all' member who
+    // cannot read the others' scope rows (no core.scope.manage) is refused loudly, never counted blind (OPEN_ITEMS 23).
+
+    [Fact]
+    public async Task T4_Departure_TheLastAllMembership_Refused()
+    {
+        using var world = await World.BootstrapAsync("t4-leave-g");
+        using var owner2 = await world.JoinAsync("t4-leave-g-owner2", "owner", "assigned");
+
+        var response = await world.Owner.Browser.Client.PostAsync("/me/leave", null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("last_all_member", (await world.Owner.Browser.JsonAsync(response)).GetProperty("error").GetString());
+        Assert.Equal("active", await World.StatusOfAsync(world.Owner.MembershipId));
+        Assert.Equal(1, await world.ActiveAllAsync());
+
+        // With another 'all' member, the same departure succeeds.
+        using var x = await world.JoinAsync("t4-leave-g-x", "admin", "all");
+        Assert.Equal(HttpStatusCode.NoContent, (await world.Owner.Browser.Client.PostAsync("/me/leave", null)).StatusCode);
+        Assert.Equal("left", await World.StatusOfAsync(world.Owner.MembershipId));
+    }
+
+    [Fact]
+    public async Task T4_Departure_AnAllMemberWithoutTheScopePermission_RefusedLoudly()
+    {
+        using var world = await World.BootstrapAsync("t4-leave-blind");
+        using var viewer = await world.JoinAsync("t4-leave-blind-viewer", "viewer", "all");
+
+        var response = await viewer.Browser.Client.PostAsync("/me/leave", null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("not_permitted", (await viewer.Browser.JsonAsync(response)).GetProperty("error").GetString());
+        Assert.Equal("active", await World.StatusOfAsync(viewer.MembershipId));
+        Assert.Equal(2, await world.ActiveAllAsync());
+    }
+
     // ---- helpers
 
     private static Task<Session> ManagerSessionAsync(World world, Member manager) =>

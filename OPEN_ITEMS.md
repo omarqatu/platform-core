@@ -73,15 +73,18 @@ Closed by the T4 PR:
 
 ## Before launch — outside the proof
 
-### 22. Invitation delivery
+### 22. Invitation delivery — a launch condition
 
 - **Origin:** T4. The document says the invitation message carries the token (§4.5/2) and names no channel; the
   proof sends no message.
 - **As built:** `POST /members/invitations` returns the token to the inviter, with `expires_at` — the same response
   whether a person with the email exists or not (Test 11). The lifetime is 7 days (`MemberAdministration`), a value
   the document does not set.
-- **Before launch:** the token goes to the invitee by a message, never back to the inviter, and the lifetime is a
-  decision of the document.
+- **Condition before launch (the project owner's, explicit):** the token appears in **no** API response, and is
+  sent **by email alone**, to the invitation's address. Otherwise the decision that "the token and a matching email
+  are enough" (§3.10, acceptance with no account) falls: a manager holding the token could accept in the invitee's
+  name — creating the account with the invitee's email — and bring someone into the tenant without their consent.
+  The lifetime also becomes a decision of the document.
 
 ### 16. Login attempt limiting (§4.3-a/2)
 
@@ -156,8 +159,27 @@ Closed by the T4 PR:
 - **As built:** disabling an active member reads their scope row first; unreadable → refused loudly
   (`not_permitted`, `core.scope.manage`), never guarded silently. A members-only manager can therefore not disable
   anyone.
-- **For the document:** decide how item g is counted for such a manager — e.g. a read of `membership_scope`
-  admitted by `core.members.manage` too, or disabling an `all` member requiring the scope permission — and state it.
+- **The proposed fix (the project owner's):** widen `membership_scope_read` to admit `app.can_manage_members` beside
+  `app.can_manage_scope` — a read, not a write: `membership_scope_admin_update` stays the scope permission's alone.
+  Before it is adopted: run it in isolation both ways on PostgreSQL 18 (PROOF_SPEC rule 11) — the members-only
+  manager then counts every `all` member — and re-run Check 2 and the manifest. Then the loud refusal above goes.
+
+### 23. Item g's text is incomplete: it must cover departure
+
+- **Origin:** T4, decided by the project owner.
+- **The gap:** §3.10 lists item g for "a downgrade, or disabling an `all` member" — not a departure. The last active
+  `all` membership could therefore leave, leaving the tenant with no one who sees everything.
+- **As built:** a departure takes item g too — the same lock and count (`MemberAdministration.LeaveAsync`), after
+  item a. Covered by `T4_Departure_TheLastAllMembership_Refused` and the race
+  `T4_6_AnAllMemberLeaving_WhileAnotherIsDowngraded`, seen failing without item g on departure and without the lock.
+- **Found with it (run on PostgreSQL 18):** a leaver without `core.scope.manage` counts and locks their own row
+  alone — Layla (Al-Amin, viewer, `all`) counts 1 `all` membership where there are 3, and `membership_lock` admits
+  no row of hers to lock, since it needs a manager permission. Item g would refuse her as "the last one" falsely,
+  and could not hold the others against a race. As built: an `all` member without the scope permission is refused
+  departure loudly (`not_permitted`, `core.scope.manage`), never counted blind. Item 21's fix does not reach her
+  (she holds neither permission).
+- **For the document:** add departure to item g's text, and decide how an `all` member with no manager permission
+  leaves — the lock and the count as they are cannot see the others.
 
 ## For the next version of PROOF_SPEC — not for the code
 
