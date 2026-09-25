@@ -44,6 +44,9 @@ public sealed class ErrorResponses(RequestDelegate next, ILogger<ErrorResponses>
                         "account_exists" => StatusCodes.Status409Conflict,
                         _ => StatusCodes.Status403Forbidden,
                     }, refused.Code);
+                // Items a and g (3.10): the change would leave no active owner / no active 'all' membership.
+                case Endpoints.LastMemberException last:
+                    return (StatusCodes.Status409Conflict, last.Code);
                 case Core.Provisioning.RoleTemplatesUnavailableException:
                     return (StatusCodes.Status500InternalServerError, "role_templates_unavailable");
                 // The application layer's explicit permission check (5), before any write.

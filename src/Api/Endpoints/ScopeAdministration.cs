@@ -51,14 +51,18 @@ public static class ScopeAdministration
 
     /// <summary>
     /// The second layer alone: a critical write (3.5/5) — the policy's silent zero rows (another tenant, no
-    /// core.scope.manage, or the actor's own membership, 4.8) become an explicit error. A tracked update, so the
-    /// automatic audit records it (7).
+    /// core.scope.manage, or the actor's own membership, 4.8) become an explicit error. A downgrade takes item g
+    /// (3.10). A tracked update, so the automatic audit records it (7).
     /// </summary>
     public static async Task WriteModeAsync(CoreDbContext db, SessionContext session, Guid membershipId, string scopeMode,
         CancellationToken ct)
     {
         var row = CriticalWrite.Require(
             await db.MembershipScopes.SingleOrDefaultAsync(s => s.MembershipId == membershipId, ct), "membership_scope.scope_mode");
+        // Item g (3.10): a downgrade must leave an active 'all' membership — the lock through membership_lock (the
+        // scope permission suffices), then the count.
+        if (row.ScopeMode == "all" && scopeMode != "all")
+            await LastMemberGuards.RequireAnotherAllAsync(db, membershipId, ct);
         row.ScopeMode = scopeMode;
         await CriticalWrite.SaveAsync(db, "membership_scope.scope_mode", ct);
     }

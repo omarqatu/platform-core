@@ -86,6 +86,7 @@ app.UseMiddleware<UnitOfWorkMiddleware>();
 app.MapAuthEndpoints();
 app.MapTenantEndpoints();
 app.MapScopeEndpoints();
+app.MapMemberEndpoints();
 app.MapAcceptance();
 // Bootstrap: registered in Development and CI only; in any other environment the route does not exist (T4.17).
 app.MapBootstrap(app.Environment.EnvironmentName);
