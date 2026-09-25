@@ -1,7 +1,7 @@
 -- The seed contract (PROOF_SPEC v1.2 §7), seeded by migrator before every Conformance run.
 -- T2 seeds the core part: tenants, persons, memberships with their roles, scopes and assignments.
--- The clients A–D, X, Y and their subscriptions are module rows, added by T5 — their ids are fixed
--- here because the assignments already point at them (scope_ref_id is an opaque id, §3.3, 9).
+-- T5 adds the module rows: the clients A–D, X, Y and their subscriptions — their ids were fixed from T2
+-- because the assignments point at them (scope_ref_id is an opaque id in the core, §3.3, 9).
 -- Conformance finds everything by name (tenant name, username), never by these ids.
 -- Keys and timestamps are written explicitly (PLATFORM_CORE v1.14 §2). Run on a clean database.
 --
@@ -100,6 +100,16 @@ BEGIN
       FROM unnest(rec.clients) c;
   END LOOP;
 
+  -- (T5) The module rows: Al-Amin's clients A–D, 5 subscriptions each; Maan's X, Y, 3 each (§7). A client's
+  -- scope_ref_id is its own id (the synonym, 0008_subscriptions.sql).
+  INSERT INTO clients (id, tenant_id, scope_ref_id, name, created_at) VALUES
+    (client_a, t_alamin, client_a, 'A', now()), (client_b, t_alamin, client_b, 'B', now()),
+    (client_c, t_alamin, client_c, 'C', now()), (client_d, t_alamin, client_d, 'D', now()),
+    (client_x, t_maan, client_x, 'X', now()), (client_y, t_maan, client_y, 'Y', now());
+  INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at)
+    SELECT uuidv7(), c.tenant_id, c.id, c.name || ' service ' || n, DATE '2027-01-01' + n, now()
+    FROM clients c CROSS JOIN LATERAL generate_series(1, CASE WHEN c.tenant_id = t_maan THEN 3 ELSE 5 END) n;
+
   -- Row-count confirmation (§3.4, condition 2).
   IF (SELECT count(*) FROM tenants) <> 3
      OR (SELECT count(*) FROM persons) <> 6
@@ -107,15 +117,18 @@ BEGIN
      OR (SELECT count(*) FROM roles) <> 13
      OR (SELECT count(*) FROM membership_roles) <> 8
      OR (SELECT count(*) FROM membership_scope) <> 7
-     OR (SELECT count(*) FROM scope_assignments) <> 3 THEN
-    RAISE EXCEPTION 'seed contract row counts are wrong: tenants %, persons %, memberships %, roles %, membership_roles %, membership_scope %, scope_assignments %',
+     OR (SELECT count(*) FROM scope_assignments) <> 3
+     OR (SELECT count(*) FROM clients) <> 6
+     OR (SELECT count(*) FROM subscriptions) <> 26 THEN
+    RAISE EXCEPTION 'seed contract row counts are wrong: tenants %, persons %, memberships %, roles %, membership_roles %, membership_scope %, scope_assignments %, clients %, subscriptions %',
       (SELECT count(*) FROM tenants), (SELECT count(*) FROM persons), (SELECT count(*) FROM memberships),
       (SELECT count(*) FROM roles), (SELECT count(*) FROM membership_roles), (SELECT count(*) FROM membership_scope),
-      (SELECT count(*) FROM scope_assignments);
+      (SELECT count(*) FROM scope_assignments), (SELECT count(*) FROM clients), (SELECT count(*) FROM subscriptions);
   END IF;
 END
 $seed$;
 
 SELECT 'seed contract: ' || (SELECT count(*) FROM tenants) || ' tenants, ' || (SELECT count(*) FROM persons) || ' persons, '
        || (SELECT count(*) FROM memberships) || ' memberships, ' || (SELECT count(*) FROM roles) || ' roles, '
-       || (SELECT count(*) FROM scope_assignments) || ' assignments' AS seeded;
+       || (SELECT count(*) FROM scope_assignments) || ' assignments, ' || (SELECT count(*) FROM clients) || ' clients, '
+       || (SELECT count(*) FROM subscriptions) || ' subscriptions' AS seeded;
