@@ -4,7 +4,7 @@ This project proves the tests marked **[W]** in PROOF_SPEC. When another
 implementation is evaluated against the spec, this project is not run; an
 equivalent proof is submitted in its place, as §6 describes.
 
-It references `Core` directly, and since T3 `Api` (hosted in-process for T3.6). That is a conscious exception
+It references `Core` directly, and since T3 `Api` (hosted in-process for T3.6, and in T4 for T4.15 and T4.17). That is a conscious exception
 `Conformance` stays independent of `Core` (PROOF_SPEC §0 and §6), and it applies
 to this project only. `Conformance` still reaches the system through SQL and HTTP
 alone, and it still holds every [B] test.
@@ -22,6 +22,10 @@ alone, and it still holds every [B] test.
 | `Layer1_*`, `Layer2_*` | Decision 36 (amended): scope administration in two layers, each alone — the application refuses without `core.scope.manage` before any command reaches the database; with that check bypassed, the database refuses on its own (an update → zero rows → the rows-affected guard; an insert → `42501`) |
 | `RequireHttpsFalse_*`, `AllowedCombinations_*` | Decision 33 (amended): Api refuses to start with `Session:RequireHttps=false` outside an environment named Development or CI; starts otherwise |
 | `UnitOfWork_UserWithoutTenant_*` | The tenant-selection path through the unit of work: `app.user_id` alone, no second-axis variable, own memberships only |
+| `T4_9_*` | T4.9: bootstrap's template reads — no read grant → `42501` before any write; zero templates → `RoleTemplatesUnavailableException`, not a tenant with no roles; the real path creates roles = templates and their permissions |
+| `T4_10_*` | T4.10 — Test 28c on the full path: bootstrap, a new-account acceptance, a departure and a return through the real EF commands → every table written, zero commands containing `RETURNING` |
+| `T4_13_*` | T4.13, the [W] half (the owner's decision): every member-management operation refused for lack of `core.members.manage` with no command sent after the unit of work's own |
+| `T4_17_*` | T4.17: `POST /provision/tenants` absent in Production and Staging (404, no route), present in Development and CI; the same detector finds the route when the guard is replaced by one that admits everything |
 | `T4_AutomaticAuditTests` | T4.15 (v1.16 §7): every tracked write audited in its own transaction (read back before commit, rolled back with it, no audit of the audit); a write with no tenant to audit under → loud before any command; login's `last_login_at` exempt (no error, no entry); `user_password_credentials` never audited; `token_hash` kept, valued `"[masked]"` |
 
 Since T2 the tests run on the real schema, through Core's EF model, against two tenants of their

@@ -31,16 +31,12 @@ Closed by the T3 PR:
   own memberships only, with no error, after COMMIT or ROLLBACK, with or without DISCARD ALL.
   The `client_scope` part stays open below, for T5.
 
-## For T4 — the rest of Test 28 (c)
-
-### 8. Zero RETURNING across a full bootstrap
-
-- **Origin:** T2 (PR #3), decision 20. T2 inserts every one of the 19 entity types
-  through EF with no RETURNING; the bootstrap path itself is built in T4.
-- **What T4 must do:** run the full bootstrap (a new tenant, its roles and role
-  permissions from the templates, the first member as owner with scope `all`,
-  the audit entry) through the real EF commands, and assert that no command
-  contains RETURNING (PLATFORM_CORE §3.7 Test 28 c).
+Closed by the T4 PR:
+- **8.** Zero RETURNING across the full paths (T4.10): bootstrap, a new-account acceptance and a return, through
+  the real EF commands with a command recorder — every table they write, and no command containing RETURNING.
+- **17.** Automatic auditing (T4.15): `AutomaticAuditInterceptor` captures at `SavingChanges` and writes the entries
+  by a second save from `SavedChanges`, in the same transaction, under a recursion flag; T3's explicit audit rows are
+  gone, and `ExecuteUpdate`/`ExecuteDelete` are forbidden in `src/` by `check-no-bulk-writes` (T4.16).
 
 ## For T5 — the scope_ref_id part of Test 21
 
@@ -75,19 +71,17 @@ Closed by the T3 PR:
   subscriptions; the tenant's other clients after lowering the mode), with no re-login
   (§3.7 Test 20).
 
-## For T4 — automatic auditing in the same transaction
-
-### 17. Every write audited in its own transaction, by the mechanism §7 prescribes
-
-- **Origin:** T3, decided by the project owner. T3's two administrative endpoints add their
-  audit rows explicitly, in the request's transaction.
-- **What T4 must do:** the automatic mechanism of §7 — at `SavingChanges`, then a second save of
-  the audit rows in the same transaction once the new entities' ids exist, with a flag that keeps
-  the interceptor from intercepting the audit save itself — so that "a write with no corresponding
-  log entry is structurally impossible", starting with T4's own paths (bootstrap, invitation,
-  acceptance, departure) and replacing T3's explicit rows.
-
 ## Before launch — outside the proof
+
+### 22. Invitation delivery
+
+- **Origin:** T4. The document says the invitation message carries the token (§4.5/2) and names no channel; the
+  proof sends no message.
+- **As built:** `POST /members/invitations` returns the token to the inviter, with `expires_at` — the same response
+  whether a person with the email exists or not (Test 11). The lifetime is 7 days (`MemberAdministration`), a value
+  the document does not set.
+- **Before launch:** the token goes to the invitee by a message, never back to the inviter, and the lifetime is a
+  decision of the document.
 
 ### 16. Login attempt limiting (§4.3-a/2)
 
@@ -149,6 +143,21 @@ Closed by the T3 PR:
   and reports them, but they are the only entries not generated from the text.
 - **For the document:** write those five as `CREATE POLICY` statements inside sql blocks, so the whole manifest is
   extracted from the text.
+
+### 21. Item g's count reads membership_scope, which a members-only manager cannot see
+
+- **Origin:** T4, found building item g (§3.10) for disabling an `all` member.
+- **The finding (run on PostgreSQL 18):** item g counts the active memberships whose mode is `all` through
+  `membership_scope`. `membership_scope_read` shows a member only their own row unless they hold
+  `core.scope.manage`. A manager holding `core.members.manage` **without** `core.scope.manage` therefore counts
+  **0** `all` members where there are 4 (Al-Amin, as Khaled with only `app.can_manage_members = true`), and the
+  lock over them locks 0 rows — with no error. The owner and admin templates hold both permissions, so it bites
+  only a custom role with the members permission alone.
+- **As built:** disabling an active member reads their scope row first; unreadable → refused loudly
+  (`not_permitted`, `core.scope.manage`), never guarded silently. A members-only manager can therefore not disable
+  anyone.
+- **For the document:** decide how item g is counted for such a manager — e.g. a read of `membership_scope`
+  admitted by `core.members.manage` too, or disabling an `all` member requiring the scope permission — and state it.
 
 ## For the next version of PROOF_SPEC — not for the code
 
