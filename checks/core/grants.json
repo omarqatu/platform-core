@@ -20,7 +20,9 @@
     "modules":                   { "app_user": ["SELECT"], "provisioner": ["SELECT"] },
     "permissions":               { "app_user": ["SELECT"], "provisioner": ["SELECT"] },
     "role_templates":            { "provisioner": ["SELECT"] },
-    "role_template_permissions": { "provisioner": ["SELECT"] }
+    "role_template_permissions": { "provisioner": ["SELECT"] },
+    "clients":                   { "app_user": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
+    "subscriptions":             { "app_user": ["SELECT", "INSERT", "UPDATE", "DELETE"] }
   },
   "columns": {
     "users":                     { "app_user": { "UPDATE": ["last_login_at", "language", "theme"] } },

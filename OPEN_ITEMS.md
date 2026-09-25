@@ -38,38 +38,31 @@ Closed by the T4 PR:
   by a second save from `SavedChanges`, in the same transaction, under a recursion flag; T3's explicit audit rows are
   gone, and `ExecuteUpdate`/`ExecuteDelete` are forbidden in `src/` by `check-no-bulk-writes` (T4.16).
 
-## For T5 — the scope_ref_id part of Test 21
+Closed by the T5 PR:
+- **6, the client_scope part** (T5.8): on a reused connection where all six variables were set, a query with no
+  context on `subscriptions` and `clients` → zero rows, no error, after COMMIT or ROLLBACK, with or without
+  DISCARD ALL.
+- **9.** Test 21, the `scope_ref_id` part (T5.9): a subscription's `scope_ref_id` changed to another tenant's client →
+  `23503` from the module's composite FK, as migrator and as `app_user`.
+- **13.** Test 20, the visible rows: a revoked assignment and a lowered mode during a live session → the next
+  request lists zero subscriptions of that client, with no re-login.
 
-### 9. Changing scope_ref_id to another tenant's entity → rejected by the composite FK
+## For the real subscriptions module — outside the proof
 
-- **Origin:** T2 (PR #3), decision 20. The core's `scope_assignments.scope_ref_id`
-  has no FK, the declared gap (PLATFORM_CORE §3.3, 9), so T2 covers Test 21's other
-  columns only.
-- **What T5 must do:** once the module's composite FK exists
-  (`subscriptions (tenant_id, scope_ref_id) → clients (tenant_id, id)`), an UPDATE of
-  `scope_ref_id` to another tenant's client → rejected by the constraint
-  (§3.7 Test 21).
+### 25. Module activation per tenant is not checked
 
-## For T5 — the rest of Test 27 (PLATFORM_CORE v1.10)
+- **Origin:** T5, decided by the project owner (rule 10: the bare minimum).
+- **As built:** the module's endpoints check the caller's permission (5) and the scope beneath, not whether the
+  module is active for the tenant (`tenant_modules.is_active`, §5); no tenant has a `tenant_modules` row.
+- **For the real module:** each endpoint refuses when the module is not active for the tenant, and bootstrap (or an
+  activation path) writes `tenant_modules`.
 
-### 6. Test 27's client_scope part
+### 26. Spec item i — what disabling an assignment does beyond visibility
 
-- **Origin:** T1 (PR #2). T1 covers the first-template part of Test 27 as T1.6; T3 covers
-  the memberships part as T3.7 (closed above).
-- **Still to cover — T5.8, a table under `client_scope`:** where the first such table
-  appears.
-
-## For T5 — the visible-rows part of Test 20
-
-### 13. A revoked assignment, or a lowered mode → the next request sees zero rows of that entity
-
-- **Origin:** T3, accepted by the project owner. T3.3 proves propagation to the **next
-  request, with no re-login**, on what T3 can observe: the resolved mode (`all` →
-  `assigned`) and the member's own active assignments (B gone after its revocation).
-- **What T5 must do:** with the first scoped table, the same two changes during a live
-  session → the next request returns zero rows of the entity (the revoked client's
-  subscriptions; the tenant's other clients after lowering the mode), with no re-login
-  (§3.7 Test 20).
+- **Origin:** PROOF_SPEC v1.3 T5, spec item i.
+- **In the proof:** disabling an assignment only cuts off visibility (Test 20 above); the proof has no tasks or
+  notifications for it to affect.
+- **For the real module:** decide its other effects (open tasks, notifications, ownership of in-flight work).
 
 ## Before launch — outside the proof
 

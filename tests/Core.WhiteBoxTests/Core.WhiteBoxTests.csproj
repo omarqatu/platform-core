@@ -34,6 +34,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Core\Core.csproj" />
     <ProjectReference Include="..\..\src\Api\Api.csproj" />
+    <ProjectReference Include="..\..\src\Modules.Subscriptions\Modules.Subscriptions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

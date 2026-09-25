@@ -27,6 +27,7 @@ alone, and it still holds every [B] test.
 | `T4_13_*` | T4.13, the [W] half (the owner's decision): every member-management operation refused for lack of `core.members.manage` with no command sent after the unit of work's own |
 | `T4_17_*` | T4.17: `POST /provision/tenants` absent in Production and Staging (404, no route), present in Development and CI; the same detector finds the route when the guard is replaced by one that admits everything |
 | `T4_AutomaticAuditTests` | T4.15 (v1.16 §7): every tracked write audited in its own transaction (read back before commit, rolled back with it, no audit of the audit); a write with no tenant to audit under → loud before any command; login's `last_login_at` exempt (no error, no entry); `user_password_credentials` never audited; `token_hash` kept, valued `"[masked]"` |
+| `T5_ModuleModelTests` | Test 28 (b, c) on the first module's model (T5): `SubscriptionsDbContext` extends the core's — all 21 entity types `ValueGenerated.Never`; the module's inserts send no `RETURNING` and are audited automatically |
 
 Since T2 the tests run on the real schema, through Core's EF model, against two tenants of their
 own (W1, W2) that the fixture creates as migrator and deletes afterwards (`WhiteBoxFixture`). Since T3

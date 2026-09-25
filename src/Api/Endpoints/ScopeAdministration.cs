@@ -4,13 +4,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Api.Endpoints;
 
-/// <summary>The application layer refused an action the caller holds no permission for (5).</summary>
-public sealed class NotPermittedException(string permission)
-    : InvalidOperationException($"The caller does not hold {permission} (PLATFORM_CORE 5).")
-{
-    public string Permission { get; } = permission;
-}
-
 /// <summary>
 /// The two administrative surfaces of 4.8 — a member's mode and a member's assignment — in two layers:
 /// <list type="number">

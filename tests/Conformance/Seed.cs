@@ -26,6 +26,10 @@ public static class Seed
     public static Task<Guid> RoleAsync(string tenant, string code) =>
         ScalarAsync("SELECT r.id FROM roles r JOIN tenants t ON t.id = r.tenant_id WHERE t.name = @a AND r.code = @b", tenant, code);
 
+    /// <summary>(T5) A module client of the seed contract, by tenant and client name (§7: A–D, X, Y).</summary>
+    public static Task<Guid> ClientAsync(string tenant, string name) =>
+        ScalarAsync("SELECT c.id FROM clients c JOIN tenants t ON t.id = c.tenant_id WHERE t.name = @a AND c.name = @b", tenant, name);
+
     public static async Task<long> CountAsMigratorAsync(string sql, params (string Name, object Value)[] parameters)
     {
         await using var connection = await Target.OpenAsync(Target.Migrator);

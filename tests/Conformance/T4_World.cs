@@ -75,6 +75,18 @@ public sealed class World : IDisposable
         return code;
     }
 
+    /// <summary>
+    /// (T5) A client of the subscriptions module in this tenant — setup as migrator, like the seed's own clients (the
+    /// module has no client-creation endpoint). A client's scope_ref_id is its own id.
+    /// </summary>
+    public async Task<Guid> ClientAsync(string name)
+    {
+        var id = Guid.CreateVersion7();
+        await ExecuteAsMigratorAsync("INSERT INTO clients (id, tenant_id, scope_ref_id, name, created_at) VALUES (@id, @t, @id, @n, now())",
+            ("id", id), ("t", TenantId), ("n", name));
+        return id;
+    }
+
     public async Task<(HttpResponseMessage Response, Guid InvitationId, string Token)> InviteAsync(Member by, string email, string roleCode,
         string mode)
     {
