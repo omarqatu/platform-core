@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Core.Data;
 
 /// <summary>The second-axis variables of one transaction, resolved from the database (PLATFORM_CORE §3.5/6).</summary>
-public sealed record ResolvedScope(Guid MembershipId, bool ScopeAll, bool CanManageScope);
+public sealed record ResolvedScope(Guid MembershipId, bool ScopeAll, bool CanManageScope, bool CanManageMembers);
 
 /// <summary>Rule 7 (§3.5/7): a membership with no membership_scope row is an error, never a silent default.</summary>
 public sealed class MissingMembershipScopeException(Guid membershipId)
@@ -29,6 +29,9 @@ public sealed class NoActiveMembershipException(Guid userId, Guid tenantId)
 /// </summary>
 public static class ScopeResolver
 {
+    public const string ManageScope = "core.scope.manage";
+    public const string ManageMembers = "core.members.manage";
+
     public static async Task<ResolvedScope> ResolveAsync(CoreDbContext db, Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
     {
         // a. memberships, via membership_self (needs only app.user_id) → app.membership_id
@@ -46,17 +49,21 @@ public static class ScopeResolver
         var scopeAll = scopeMode == "all";
         await SetLocalAsync(db, "SET LOCAL app.scope_all = '" + (scopeAll ? "true" : "false") + "'", cancellationToken);
 
-        // c. membership_roles → role_permissions → permissions (the standard template + the global catalog)
-        //    → app.can_manage_scope. A permission, not a scope: independent of the mode (§4.8, 1.9).
-        var canManageScope = await (
+        // c. membership_roles → role_permissions → permissions (the standard template + the global catalog):
+        //    one read, then app.can_manage_scope and app.can_manage_members, in that order (3.5/6, 3.10).
+        //    Permissions, not a scope: independent of the mode (§4.8, 1.9).
+        var held = await (
             from mr in db.MembershipRoles
             join rp in db.RolePermissions on mr.RoleId equals rp.RoleId
             join p in db.Permissions on rp.PermissionId equals p.Id
-            where mr.MembershipId == membership && p.Code == "core.scope.manage"
-            select 1).AnyAsync(cancellationToken);
+            where mr.MembershipId == membership && (p.Code == ManageScope || p.Code == ManageMembers)
+            select p.Code).Distinct().ToListAsync(cancellationToken);
+        var canManageScope = held.Contains(ManageScope);
+        var canManageMembers = held.Contains(ManageMembers);
         await SetLocalAsync(db, "SET LOCAL app.can_manage_scope = '" + (canManageScope ? "true" : "false") + "'", cancellationToken);
+        await SetLocalAsync(db, "SET LOCAL app.can_manage_members = '" + (canManageMembers ? "true" : "false") + "'", cancellationToken);
 
-        return new ResolvedScope(membership, scopeAll, canManageScope);
+        return new ResolvedScope(membership, scopeAll, canManageScope, canManageMembers);
     }
 
     /// <summary>Rule 7: the scope row must exist. Loud above; the policy beneath fails safe into zero rows.</summary>

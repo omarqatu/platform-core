@@ -38,7 +38,7 @@ public static class UnitOfWork
         }, cancellationToken);
 
     // Each variable is its own SET LOCAL statement (3.5/2), in the order app.user_id, app.tenant_id,
-    // then — when both a user and an active tenant are present — the three second-axis variables,
+    // then — when both a user and an active tenant are present — the four second-axis variables,
     // resolved from the database on every transaction in the order of Rule 6 (3.5/1, 3.5/6).
     // A tenant with no user (no membership to resolve) sets no second-axis variable: the policies
     // beneath fail safe into zero rows on the second axis.
