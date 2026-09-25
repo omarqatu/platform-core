@@ -44,6 +44,19 @@ public class CoreDbContext : DbContext
     /// </summary>
     public ResolvedScope? Scope { get; internal set; }
 
+    /// <summary>
+    /// The tenant and actor this transaction's writes are audited under (7), or null outside one. Set by
+    /// UnitOfWork and by the provisioner paths; never carried past the transaction.
+    /// </summary>
+    public AuditContext? Audit { get; internal set; }
+
+    /// <summary>The caller's address, recorded on the audit entries (7). Set by the request pipeline.</summary>
+    public string? ClientAddress { get; set; }
+
+    // The automatic audit's state between SavingChanges and SavedChanges, and its recursion flag (7).
+    internal List<AuditEntry>? PendingAudit { get; set; }
+    internal bool SavingAudit { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Tenant>().ToTable("tenants");

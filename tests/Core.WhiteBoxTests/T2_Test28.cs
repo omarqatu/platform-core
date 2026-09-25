@@ -122,6 +122,9 @@ public class T2_Test28(WhiteBoxFixture fixture)
         var person = new Person { Id = Id(), FullName = "Test 28", Email = $"t28-{Guid.CreateVersion7():N}@test", CreatedAt = now };
         var module = new Module { Id = Id(), Code = "t28", NameAr = "x", NameEn = "x", DisplayOrder = 99, IsActive = true };
         var template = new RoleTemplate { Id = Id(), Code = "t28-template", NameAr = "x", NameEn = "x" };
+        // (T4, PLATFORM_CORE 7) Every write is audited automatically, under the transaction's tenant: this hand-opened
+        // transaction names its own throwaway tenant, so the audit inserts run through EF here too.
+        db.Audit = new AuditContext(tenant.Id, null, "test", null);
         db.AddRange(tenant, person, module, template);
         await db.SaveChangesAsync();
 

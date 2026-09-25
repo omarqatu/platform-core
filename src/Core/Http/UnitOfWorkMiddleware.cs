@@ -11,6 +11,8 @@ public sealed class UnitOfWorkMiddleware(RequestDelegate next)
 {
     public Task InvokeAsync(HttpContext http, CoreDbContext db, ISessionContextAccessor session)
     {
+        // Recorded on this request's audit entries (7).
+        db.ClientAddress = http.Connection.RemoteIpAddress?.ToString();
         var metadata = http.GetEndpoint()?.Metadata;
         if (metadata?.GetMetadata<OwnUnitsOfWorkAttribute>() is not null)
             return next(http);

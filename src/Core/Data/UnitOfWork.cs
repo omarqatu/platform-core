@@ -24,6 +24,7 @@ public static class UnitOfWork
         finally
         {
             db.Scope = null;
+            db.Audit = null;
         }
     }
 
@@ -48,6 +49,8 @@ public static class UnitOfWork
             await SetLocalAsync(db, "app.user_id", userId, ct);
         if (session.TenantId is { } tenantId)
             await SetLocalAsync(db, "app.tenant_id", tenantId, ct);
+        // The audit entries of this transaction go to the tenant app.tenant_id names, attributed to the user (7).
+        db.Audit = new AuditContext(session.TenantId, session.UserId, session.UserId is null ? "system" : "user", db.ClientAddress);
         if (session is { UserId: { } user, TenantId: { } tenant })
             db.Scope = await ScopeResolver.ResolveAsync(db, user, tenant, ct);
     }

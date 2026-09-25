@@ -1,0 +1,3 @@
+# Paths under src/ allowed to call ExecuteUpdate/ExecuteDelete (check-no-bulk-writes).
+# Empty: the one exception the document names — the password command (PLATFORM_CORE 3.8, 3.10) — is a raw
+# SQL command, not an EF bulk command, so it never matches. Adding a line is a project-owner decision.
