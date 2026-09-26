@@ -95,6 +95,7 @@ app.MapMemberEndpoints();
 app.MapAuditEndpoints();
 app.MapSubscriptionEndpoints();
 app.MapUnifiedSubscriptions();
+app.MapSubscriptionScreen();
 app.MapAcceptance();
 // Bootstrap: registered in Development and CI only; in any other environment the route does not exist (T4.17).
 app.MapBootstrap(app.Environment.EnvironmentName);
