@@ -8,14 +8,32 @@ namespace Core.Data;
 /// </summary>
 public static class UnitOfWork
 {
-    public static async Task<T> RunAsync<TContext, T>(
+    public static Task<T> RunAsync<TContext, T>(
         TContext db, SessionContext session, Func<TContext, CancellationToken, Task<T>> work,
         CancellationToken cancellationToken = default)
+        where TContext : CoreDbContext =>
+        RunAsync(db, session, readOnly: false, work, cancellationToken);
+
+    /// <summary>
+    /// A read-only unit of work: the transaction is declared READ ONLY before anything else, so any write in it fails
+    /// loudly in the database (25006) — the unified view's read-only guard (6.4) held beneath the code.
+    /// </summary>
+    public static Task<T> RunReadOnlyAsync<TContext, T>(
+        TContext db, SessionContext session, Func<TContext, CancellationToken, Task<T>> work,
+        CancellationToken cancellationToken = default)
+        where TContext : CoreDbContext =>
+        RunAsync(db, session, readOnly: true, work, cancellationToken);
+
+    private static async Task<T> RunAsync<TContext, T>(
+        TContext db, SessionContext session, bool readOnly, Func<TContext, CancellationToken, Task<T>> work,
+        CancellationToken cancellationToken)
         where TContext : CoreDbContext
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         try
         {
+            if (readOnly)
+                await db.Database.ExecuteSqlRawAsync("SET TRANSACTION READ ONLY", cancellationToken);
             await ApplyContextAsync(db, session, cancellationToken);
             var result = await work(db, cancellationToken);
             await transaction.CommitAsync(cancellationToken);

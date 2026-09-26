@@ -28,6 +28,7 @@ alone, and it still holds every [B] test.
 | `T4_17_*` | T4.17: `POST /provision/tenants` absent in Production and Staging (404, no route), present in Development and CI; the same detector finds the route when the guard is replaced by one that admits everything |
 | `T4_AutomaticAuditTests` | T4.15 (v1.16 §7): every tracked write audited in its own transaction (read back before commit, rolled back with it, no audit of the audit); a write with no tenant to audit under → loud before any command; login's `last_login_at` exempt (no error, no entry); `user_password_credentials` never audited; `token_hash` kept, valued `"[masked]"` |
 | `T5_ModuleModelTests` | Test 28 (b, c) on the first module's model (T5): `SubscriptionsDbContext` extends the core's — all 21 entity types `ValueGenerated.Never`; the module's inserts send no `RETURNING` and are audited automatically |
+| `T6_5_*`, `TheBatchCap_*` | T6.5: the unified routes are GET only, and a write inside a fan-out tenant transaction fails loudly (`25006`, READ ONLY) and writes nothing; the batch cap of 6.3 bounds the tenant transactions open at once |
 
 Since T2 the tests run on the real schema, through Core's EF model, against two tenants of their
 own (W1, W2) that the fixture creates as migrator and deletes afterwards (`WhiteBoxFixture`). Since T3
