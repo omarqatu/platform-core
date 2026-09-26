@@ -87,6 +87,27 @@ public sealed class World : IDisposable
         return id;
     }
 
+    /// <summary>(T6) Subscriptions of a client in this tenant, ending on the given dates — setup as migrator.</summary>
+    public async Task SubscriptionsAsync(Guid client, params DateOnly[] endsOn)
+    {
+        foreach (var date in endsOn)
+            await ExecuteAsMigratorAsync(
+                "INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at) VALUES (@id, @t, @c, 'unified', @d, now())",
+                ("id", Guid.CreateVersion7()), ("t", TenantId), ("c", client), ("d", date));
+    }
+
+    /// <summary>
+    /// (T6) A member of another world joins this one with their existing account: invited by this owner, accepted
+    /// signed in as themselves (4.5/3). Returns the new membership's id.
+    /// </summary>
+    public async Task<Guid> JoinExistingAsync(Member member, string roleCode, string mode)
+    {
+        var (invited, _, token) = await InviteAsync(Owner, member.Email, roleCode, mode);
+        Assert.Equal(HttpStatusCode.Created, invited.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await AcceptAsync(member.Browser, TenantId, token)).StatusCode);
+        return await ScalarAsync("SELECT id FROM memberships WHERE tenant_id = @t AND user_id = @u", ("t", TenantId), ("u", member.UserId));
+    }
+
     public async Task<(HttpResponseMessage Response, Guid InvitationId, string Token)> InviteAsync(Member by, string email, string roleCode,
         string mode)
     {
