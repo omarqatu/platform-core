@@ -47,6 +47,17 @@ Closed by the T5 PR:
 - **13.** Test 20, the visible rows: a revoked assignment and a lowered mode during a live session → the next
   request lists zero subscriptions of that client, with no re-login.
 
+## For the project owner — a decision after T8
+
+### 27. The measurement threshold is exceeded: choose between the two declared alternatives
+
+- **Origin:** T8 (spec item j). The threshold, written before the measurement: p95 of the reference query under both
+  policies ≤ 1.5 × under `tenant_isolation` alone, under 20 concurrent requests.
+- **The result:** exceeded — 4 runs of 5 above 1.5, median ratio 1.574 (1.491–1.704); about 3.5 ms at p95 in absolute
+  terms; the whole transaction's ratio stays within 1.5 (median 1.386). `docs/measurements/README.md` has every run.
+- **Not fixed in T8** (the spec). **The decision:** a materialized assignment table, or a `SECURITY DEFINER` function
+  for `client_scope` (§4.8, 13-i) — or a measurement on a dedicated database host first; the threshold itself stays.
+
 ## For the real subscriptions module — outside the proof
 
 ### 25. Module activation per tenant is not checked
