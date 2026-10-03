@@ -129,7 +129,7 @@ public class T4_ProvisioningTests(WhiteBoxFixture fixture)
             using var client = api.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
             var request = Request("t4-17");
 
-            var response = await client.PostAsJsonAsync("/provision/tenants", new
+            var response = await client.PostAsJsonAsync("/api/provision/tenants", new
             {
                 tenant_name = request.TenantName, full_name = request.FullName, email = request.Email, username = request.Username,
                 password = request.Password,
@@ -149,7 +149,7 @@ public class T4_ProvisioningTests(WhiteBoxFixture fixture)
             await using var api = InProcessApi.Create(environment);
             using var client = api.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
 
-            var response = await client.PostAsJsonAsync("/provision/tenants", new { tenant_name = "" });
+            var response = await client.PostAsJsonAsync("/api/provision/tenants", new { tenant_name = "" });
 
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
             Assert.Single(BootstrapRoutes(api.Services.GetRequiredService<EndpointDataSource>()));
@@ -166,7 +166,8 @@ public class T4_ProvisioningTests(WhiteBoxFixture fixture)
             builder.Services.AddDbContext<ProvisionerDbContext>(options => options.UseNpgsql("Host=unused"));
             var app = builder.Build();
 
-            var registered = app.MapBootstrap(app.Environment.EnvironmentName, guard);
+            // Mapped as Program maps it: inside the API's group (OPEN_ITEMS 37).
+            var registered = app.MapGroup(Api.WebInterface.ApiPrefix).MapBootstrap(app.Environment.EnvironmentName, guard);
 
             Assert.Equal(expected == 1, registered);
             Assert.Equal(expected, BootstrapRoutes(new CompositeEndpointDataSource(((IEndpointRouteBuilder)app).DataSources)).Count);
@@ -175,7 +176,7 @@ public class T4_ProvisioningTests(WhiteBoxFixture fixture)
 
     private static List<string> BootstrapRoutes(EndpointDataSource endpoints) =>
         endpoints.Endpoints.OfType<RouteEndpoint>().Select(e => e.RoutePattern.RawText ?? "")
-            .Where(p => p.TrimStart('/') == "provision/tenants").ToList();
+            .Where(p => p == $"{Api.WebInterface.ApiPrefix}/provision/tenants").ToList();
 
     private static ProvisionerDbContext ProvisionerContext(NpgsqlDataSource dataSource, params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] extra)
     {

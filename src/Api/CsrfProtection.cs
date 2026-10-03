@@ -41,7 +41,7 @@ public static class CsrfProtection
         return origins;
     }
 
-    /// <summary>After the API prefix, before routing.</summary>
+    /// <summary>Before routing, on every path — the API's, the interface's and the T8 screen's alike.</summary>
     public static void UseCsrfProtection(this WebApplication app, IReadOnlyCollection<string> allowedOrigins)
     {
         var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(CsrfProtection));

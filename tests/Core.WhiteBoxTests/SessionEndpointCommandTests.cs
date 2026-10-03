@@ -33,24 +33,24 @@ public class SessionEndpointCommandTests(WhiteBoxFixture fixture)
         var omar = await ScalarGuidAsync("SELECT id FROM users WHERE username = 'omar'");
         var alAmin = await ScalarGuidAsync("SELECT id FROM tenants WHERE name = 'Al-Amin'");
 
-        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync("/auth/login", new { username = "omar", password = "omar-seed-password" })).StatusCode);
-        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync($"/tenants/{alAmin}/select", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync("/api/auth/login", new { username = "omar", password = "omar-seed-password" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync($"/api/tenants/{alAmin}/select", null)).StatusCode);
 
         recorder.Clear();
-        var me = await client.GetAsync("/me");
+        var me = await client.GetAsync("/api/me");
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
         Assert.Equal([$"SET LOCAL app.user_id = '{omar}'"], recorder.Commands.Where(c => c.Contains("SET LOCAL")).ToList());
         Assert.DoesNotContain(recorder.Commands, c => c.Contains("app.tenant_id") || c.Contains("app.membership_id"));
 
         // Deselect: a new cookie with the user alone, and not one command.
         recorder.Clear();
-        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync("/tenants/deselect", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync("/api/tenants/deselect", null)).StatusCode);
         Assert.Empty(recorder.Commands);
-        var after = await client.GetFromJsonAsync<System.Text.Json.JsonElement>("/me");
+        var after = await client.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/me");
         Assert.Equal(System.Text.Json.JsonValueKind.Null, after.GetProperty("active_tenant").ValueKind);
 
         recorder.Clear();
-        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync("/auth/logout", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync("/api/auth/logout", null)).StatusCode);
         Assert.Empty(recorder.Commands);
     });
 

@@ -30,6 +30,7 @@ alone, and it still holds every [B] test.
 | `T5_ModuleModelTests` | Test 28 (b, c) on the first module's model (T5): `SubscriptionsDbContext` extends the core's — all 21 entity types `ValueGenerated.Never`; the module's inserts send no `RETURNING` and are audited automatically |
 | `CsrfNoDatabaseCommandTests` | CSRF (OPEN_ITEMS 28, a project-owner decision, not PROOF_SPEC): a login with no `Origin`, a signed-in selection from a sibling subdomain, an acceptance with no `X-Requested-With` → 403 `csrf_rejected` and zero commands, the recorder on all four of Api's contexts; the control, the same selection with both headers, runs its commands. Api hosted in-process |
 | `SessionEndpointCommandTests` | The identity screens' session endpoints: `GET /me` sets `app.user_id` alone, even with a tenant in the cookie (no `app.tenant_id`, no second-axis variable — T3.7's path); `POST /tenants/deselect` and `POST /auth/logout` send no command (and after deselect `/me` names no tenant). Api hosted in-process |
+| `ApiRoutesTests` | The path space (OPEN_ITEMS 37): every route Api registers is under `/api`, except the documented server-rendered screen (`/subscriptions/screen`); the same check finds a planted bare route |
 | `AllowedOrigins_*` | CSRF: Api refuses to start with no `Security:AllowedOrigins`, or with an entry no browser sends as `Origin` (a path, a trailing slash, upper case, a default port, no scheme, `null`); starts with a serialized origin |
 | `T6_5_*`, `TheBatchCap_*` | T6.5: the unified routes are GET only, and a write inside a fan-out tenant transaction fails loudly (`25006`, READ ONLY) and writes nothing; the batch cap of 6.3 bounds the tenant transactions open at once |
 
@@ -42,3 +43,7 @@ every transaction with a user and a tenant, so the T1 tests that used a random u
 Api hosted in-process (`InProcessApi`) allows one origin, `https://localhost`, and its clients send it as `Origin`
 with `X-Requested-With: platform-web` on every request, as the web interface does — Api refuses an unsafe request
 without both (CSRF). That is the harness's configuration; no test's expectation depends on it.
+
+The API lives under `/api` (OPEN_ITEMS 37): the tests that call Api in-process use `/api/...` paths. The route
+detectors of T4.17 and T6.5 compare the full pattern (`/api/provision/tenants`, `/api/unified…`), and T4.17's detector
+self-test maps the bootstrap route inside the `/api` group, as Program does — both decided by the project owner.

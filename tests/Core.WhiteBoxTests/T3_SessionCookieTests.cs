@@ -34,11 +34,11 @@ public class T3_SessionCookieTests(WhiteBoxFixture fixture)
         var omar = await ScalarGuidAsync("SELECT id FROM users WHERE username = 'omar'");
         var alAmin = await ScalarGuidAsync("SELECT id FROM tenants WHERE name = 'Al-Amin'");
 
-        var login = await client.PostAsJsonAsync("/auth/login", new { username = "omar", password = "omar-seed-password" });
+        var login = await client.PostAsJsonAsync("/api/auth/login", new { username = "omar", password = "omar-seed-password" });
         Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
         var afterLogin = SessionCookieOf(login);
 
-        using var select = new HttpRequestMessage(HttpMethod.Post, $"/tenants/{alAmin}/select");
+        using var select = new HttpRequestMessage(HttpMethod.Post, $"/api/tenants/{alAmin}/select");
         select.Headers.Add("Cookie", "session=" + afterLogin.Value);
         var selected = await client.SendAsync(select);
         Assert.Equal(HttpStatusCode.NoContent, selected.StatusCode);

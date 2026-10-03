@@ -120,7 +120,7 @@ public class T4_AutomaticAuditTests(WhiteBoxFixture fixture)
 
         await using var api = InProcessApi.Create();
         using var client = api.CreateClient(new() { BaseAddress = new Uri("https://localhost") });
-        var login = await client.PostAsJsonAsync("/auth/login", new { username = "khaled", password = "khaled-seed-password" });
+        var login = await client.PostAsJsonAsync("/api/auth/login", new { username = "khaled", password = "khaled-seed-password" });
 
         Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
         var after = await LastLoginAsync(khaled);

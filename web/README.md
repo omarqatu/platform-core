@@ -50,9 +50,9 @@ after Conformance, against the Api container. Locally: an Api with `Web__Root` p
 ## Routing and the session
 
 - **react-router** (library mode: `BrowserRouter`, `Routes`): the simplest router that gives deep links and history.
-- **Paths:** `/login`, `/organizations`, and the organization's screens under `/app/` (`/app/subscriptions`). An
-  interface path never equals an API path: Api serves `index.html` only for a page no API route matches, so a reload of
-  `/subscriptions` would be the API's JSON (OPEN_ITEMS 37).
+- **Paths:** `/login`, `/organizations`, and the organization's screens under `/app/` (`/app/subscriptions`). The API
+  is under `/api` only; the one other server route is the original T8 screen, `/subscriptions/screen`, which the
+  interface never uses.
 - **The session** is the HTTP-only cookie and `GET /me` — nothing in `localStorage` or `sessionStorage` (the `lang`
   cookie aside). After signing in: no active membership → a status screen with "Sign out"; one → entered directly; more
   → the selection. Only active memberships in active organizations count.
@@ -75,11 +75,15 @@ after Conformance, against the Api container. Locally: an Api with `Web__Root` p
 Same origin as the API, always: no CORS, and the session stays Api's HTTP-only cookie.
 
 - **Production:** the Api image builds `web/` in its own stage and copies `dist/` to `wwwroot` beside `Api.dll`
-  (`src/Api/Dockerfile`). Api (`src/Api/WebInterface.cs`) removes the `/api` prefix before routing — `/api/x` is
-  routed as `/x`, so every API route keeps its path and behaviour — and, only for a GET no route matched outside
-  `/api`, serves a file of the build, or `index.html` for a page (`Accept: text/html`). Anything else is answered as
-  before. Without a build (`Web:Root` absent), nothing changes.
-- **Development:** Vite's proxy forwards `/api/*` to Api with the prefix removed, and the browser's `Origin` as it
+  (`src/Api/Dockerfile`). The path space is split (`src/Api/WebInterface.cs`):
+  - every API route is registered under `/api`, and only there — a bare path (`/tenants`) is a 404;
+  - a GET no route matched, outside `/api` and asking for a page (`Accept: text/html`), is `index.html` (or a file
+    of the build); anything else no route matched — any path under `/api` included — is a plain 404, never
+    `index.html`;
+  - the one documented exception is the original T8 screen, `/subscriptions/screen` (`WebInterface.ServerRenderedScreens`),
+    part of a merged proof: it keeps its path, and the interface never answers under it.
+  - `ApiRoutesTests` (WhiteBox) fails on any route registered outside `/api` but that one.
+- **Development:** Vite's proxy forwards `/api/*` to Api as it is, with the browser's `Origin` as it
   is. Open the interface at `http://localhost:5173` exactly: it is the one origin Api's Development configuration
   allows.
 
