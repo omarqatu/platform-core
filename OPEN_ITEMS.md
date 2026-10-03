@@ -128,6 +128,11 @@ Closed by the API-path PR:
 - **If wanted:** the role and the scope mode of each membership, read on the same path. Each needs its own decision:
   under app.user_id alone the roles and `membership_scope` of other tenants are not visible today (the policies are
   per tenant), so showing them means a new read path, reviewed like T3.7.
+- **The same gap on the acceptance screen** (invitation acceptance, decided by the project owner):
+  `/app/invitations/accept` names neither the inviting organization nor the role offered — nothing read before
+  accepting returns them, and `POST /invitations/accept` answers 204 with no body. Showing them means a read of the
+  invitation by its token before acceptance (or a body on the 204, which existing tests assert), decided with the
+  selection's.
 
 ### 35. No step-up path in the interface
 
@@ -143,6 +148,32 @@ Closed by the API-path PR:
   expires.
 - **When needed:** server-side revocation — a session id or a security stamp in the cookie, checked on every request
   against a store (and a "log out everywhere"). Not built.
+
+## From invitation acceptance
+
+### 39. No membership without its scope, enforced in the database
+
+- **Origin:** invitation acceptance (option C), decided by the project owner. P4 of the v1.17 proposal
+  (`docs/proposals/v1.17-acceptance/p4-membership-has-scope.sql`) — a deferred constraint trigger refusing at commit a
+  membership with no `membership_scope` row, in any path and for any role, `migrator` included — was run both ways
+  on PostgreSQL 18 and **not adopted**: it breaks two existing tests whose setup commits such a membership on purpose,
+  to prove what the application does with one (T3.8): `Conformance.T3_SessionTests.T3_8_Test18_MembershipWithoutScopeRow_LoudAtTenantSelection`
+  and `Core.WhiteBoxTests.T3_Test26.Test26_Rule7_MembershipWithoutScopeRow_ResolverThrows`.
+- **Today:** the paths write the scope in the membership's transaction (bootstrap, acceptance, return); nothing in the
+  database forbids a membership without one.
+- **To build:** the database rule, together with new setup for those two tests (e.g. deleting the scope row of a
+  committed membership, which the trigger does not see) — a change to existing tests, for the owner to approve.
+
+### 40. If the email match must one day be enforced in the database
+
+- **Origin:** invitation acceptance (option C), decided by the project owner. The match is the application's
+  (§4.5), normalized. Two database variants were run both ways on PostgreSQL 18 and rejected
+  (`docs/proposals/v1.17-acceptance/README.md`): policies over `invitations → users → persons` (new chains, §3.9;
+  bootstrap through a founding invitation, §4.4), and a `SECURITY DEFINER` function owned by `migrator` (BYPASSRLS
+  reached from application code, §3.4; a fourth audit writer outside the interceptor, §7).
+- **The direction, if it becomes necessary:** a function owned by a dedicated role **without `BYPASSRLS`**, so the
+  policies still apply inside it, and whose writes pass through the automatic audit interceptor — not either variant
+  tried here.
 
 ## For the real subscriptions module — outside the proof
 
@@ -177,6 +208,10 @@ Closed by the API-path PR:
   are enough" (§3.10, acceptance with no account) falls: a manager holding the token could accept in the invitee's
   name — creating the account with the invitee's email — and bring someone into the tenant without their consent.
   The lifetime also becomes a decision of the document.
+- **The link the email carries** (invitation acceptance, decided by the project owner): the token in the
+  **fragment**, never the query string — `/app/invitations/accept#tenant=<tenant id>&token=<token>` — as the
+  acceptance screen is built: a fragment reaches no server log and no referrer, and the interface takes it out of the
+  address before anything renders (`web/src/invitations/pendingInvitation.ts`).
 
 ### 16. Login attempt limiting (§4.3-a/2)
 
@@ -300,6 +335,15 @@ Closed by the API-path PR:
 - **For the document:** state it, with what enforces it (e.g. an `owner` invitation only with `intended_scope_mode
   = 'all'`, no downgrade of an owner, granting `owner` only to an `all` member), each run in isolation both ways on
   PostgreSQL 18 before adoption (PROOF_SPEC rule 11).
+
+### 41. One account per address, and the normalized match
+
+- **Origin:** invitation acceptance (option C), decided by the project owner.
+- **As built:** migration 0009 adds `persons_email_normalized_key`, a unique index on `lower(btrim(email))`, beside
+  the exact `persons_email_key` (§3.3). The application compares addresses under the same rule
+  (`EmailAddress.Normalize`) on every acceptance path — a new account, a return, an existing account — and an
+  address whose account exists refuses the new-account path under it (§4.5).
+- **For the document:** §3.3 (the constraint) and §4.5 ("authenticated email ≠ the invitation's", normalized).
 
 ## For the next version of PROOF_SPEC — not for the code
 

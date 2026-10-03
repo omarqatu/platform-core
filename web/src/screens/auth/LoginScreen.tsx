@@ -1,11 +1,11 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useIntl, type MessageDescriptor } from 'react-intl';
-import { Navigate, useNavigate, useSearchParams } from 'react-router';
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { ApiError } from '../../api/client';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { apiErrors, errorMessage } from '../../i18n/apiErrors';
-import { nextQuery, safeNext } from '../../session/next';
+import { needsTenant, nextQuery, safeNext } from '../../session/next';
 import { useSession } from '../../session/SessionProvider';
 import { LoadingScreen } from '../status/StatusScreens';
 import { messages } from './messages';
@@ -18,7 +18,12 @@ export function LoginScreen() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { state, signIn } = useSession();
+  const location = useLocation();
   const next = safeNext(params.get('next'));
+  // Back to a path that needs no organization (accepting an invitation): straight there, nothing entered.
+  const direct = next !== null && !needsTenant(next);
+  // An account just created by accepting an invitation: to the selection, but nothing entered by itself.
+  const accepted = (location.state as { accepted?: boolean } | null)?.accepted === true;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
@@ -27,7 +32,7 @@ export function LoginScreen() {
 
   if (state.status === 'loading') return <LoadingScreen />;
   if (state.status === 'authenticated' && !pending)
-    return <Navigate to={state.activeTenant ? (next ?? '/') : `/organizations${nextQuery(next)}`} replace />;
+    return <Navigate to={direct && next ? next : state.activeTenant ? (next ?? '/') : `/organizations${nextQuery(next)}`} replace />;
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -35,8 +40,9 @@ export function LoginScreen() {
     setError(null);
     try {
       await signIn(username, password);
-      // The selection enters by itself when there is exactly one organization to enter.
-      navigate(`/organizations${nextQuery(next)}`, { replace: true, state: { autoEnter: true } });
+      if (direct && next) navigate(next, { replace: true });
+      // The selection enters by itself when there is exactly one organization to enter — not after an acceptance.
+      else navigate(`/organizations${nextQuery(next)}`, { replace: true, state: { autoEnter: !accepted } });
     } catch (e) {
       const code = e instanceof ApiError ? e.code : null;
       // The password stays in the field only: never in a message or a log.
@@ -56,6 +62,16 @@ export function LoginScreen() {
       {state.status === 'anonymous' && state.reason === 'expired' && !error && (
         <p role="status" className="notice">
           {intl.formatMessage(messages.sessionEnded)}
+        </p>
+      )}
+      {accepted && !error && (
+        <p role="status" className="notice">
+          {intl.formatMessage(messages.accountCreated)}
+        </p>
+      )}
+      {direct && !accepted && !error && (
+        <p role="status" className="notice">
+          {intl.formatMessage(messages.toAcceptInvitation)}
         </p>
       )}
       <ErrorAlert message={error} id={ids.error} />

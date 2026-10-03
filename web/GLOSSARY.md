@@ -15,6 +15,8 @@ Every text of the interface uses these terms — the English `defaultMessage` in
 | scope `assigned` | عملاء محددون | Assigned clients |
 | assignment | الإسناد | Assignment |
 | invitation | الدعوة | Invitation |
+| accepting an invitation | قبول الدعوة | Accept the invitation |
+| account | الحساب | Account |
 
 The original T8 screen rendered by Api (`src/Modules.Subscriptions/SubscriptionScreen.cs`) keeps "المستأجر": it is
 part of a merged proof and is not edited (OPEN_ITEMS 29).
