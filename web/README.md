@@ -44,7 +44,24 @@ Same origin as the API, always: no CORS, and the session stays Api's HTTP-only c
   routed as `/x`, so every API route keeps its path and behaviour — and, only for a GET no route matched outside
   `/api`, serves a file of the build, or `index.html` for a page (`Accept: text/html`). Anything else is answered as
   before. Without a build (`Web:Root` absent), nothing changes.
-- **Development:** Vite's proxy forwards `/api/*` to Api with the prefix removed.
+- **Development:** Vite's proxy forwards `/api/*` to Api with the prefix removed, and the browser's `Origin` as it
+  is. Open the interface at `http://localhost:5173` exactly: it is the one origin Api's Development configuration
+  allows.
+
+## CSRF
+
+Api refuses every unsafe request (POST, PUT, PATCH, DELETE — login and invitation acceptance included) unless both
+hold, with 403 `csrf_rejected`, before any database command (`src/Api/CsrfProtection.cs`):
+
+- `Origin` equals, character for character, one of `Security:AllowedOrigins`. No `Origin`: refused (never a fallback
+  to `Referer`). The browser sends it itself on every unsafe request.
+- `X-Requested-With: platform-web`. `src/api/client.ts` — the one way the interface reaches the API — sends it on
+  every request. Another origin cannot send a custom header without a CORS preflight, which Api never grants.
+
+`Security:AllowedOrigins` is a list of serialized origins (`https://app.example.com`: scheme, host, port if not the
+default; no path, no trailing slash). Api refuses to start with none, or with an entry a browser could never send. Each
+environment sets its own: Development has `http://localhost:5173`; production sets its public origin
+(`Security__AllowedOrigins__0=https://…`); CI sets the Api container's own (`.github/workflows/ci.yml`).
 
 ## Messages
 

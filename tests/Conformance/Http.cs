@@ -8,7 +8,10 @@ namespace Conformance;
 /// <summary>
 /// One browser against the implementation's HTTP surface (from T3): its own cookie jar, so each instance is one
 /// session. The base URL and the seed users' passwords come from configuration (PROOF_SPEC 6); the endpoints and
-/// their contracts are the ones named in T3.
+/// their contracts are the ones named in T3. Like the web interface, it sends Origin (<see cref="Origin"/>) and
+/// X-Requested-With: platform-web on every request — Api refuses an unsafe request without both (CSRF, OPEN_ITEMS
+/// 28). This is the harness's configuration; no test's expectation depends on it. <c>new Browser(platformHeaders:
+/// false)</c> sends neither, for the tests of that refusal.
 /// </summary>
 public sealed class Browser : IDisposable
 {
@@ -20,6 +23,12 @@ public sealed class Browser : IDisposable
 
     public static Uri BaseUrl => new(Config["Api:BaseUrl"] ?? throw new InvalidOperationException("Api:BaseUrl is not configured."));
 
+    /// <summary>The origin the harness sends: Api:Origin, by default the base URL's own (scheme://host:port).</summary>
+    public static string Origin => Config["Api:Origin"] ?? BaseUrl.GetLeftPart(UriPartial.Authority);
+
+    public const string RequestedWithHeader = "X-Requested-With";
+    public const string RequestedWith = "platform-web";
+
     /// <summary>The seed contract's test-only password for a seed user (tests/seed/seed-contract.sql header).</summary>
     public static string PasswordOf(string username) =>
         string.Format(Config["Seed:PasswordFormat"] ?? throw new InvalidOperationException("Seed:PasswordFormat is not configured."), username);
@@ -27,9 +36,14 @@ public sealed class Browser : IDisposable
     public CookieContainer Cookies { get; } = new();
     public HttpClient Client { get; }
 
-    public Browser()
+    public Browser(bool platformHeaders = true)
     {
         Client = new HttpClient(new HttpClientHandler { CookieContainer = Cookies, UseCookies = true }) { BaseAddress = BaseUrl };
+        if (platformHeaders)
+        {
+            Client.DefaultRequestHeaders.Add("Origin", Origin);
+            Client.DefaultRequestHeaders.Add(RequestedWithHeader, RequestedWith);
+        }
     }
 
     public Task<HttpResponseMessage> LoginAsync(string username, string password) =>

@@ -2,6 +2,7 @@
   "errors.account_exists": "An account with this email already exists. Sign in, then accept the invitation.",
   "errors.already_member": "You are already a member of this tenant.",
   "errors.conflict": "This already exists.",
+  "errors.csrf_rejected": "The request was refused for security reasons. Reload the page and try again.",
   "errors.email_mismatch": "This invitation was sent to a different email address.",
   "errors.invalid_credentials": "The username or password is incorrect.",
   "errors.invalid_cursor": "The list has changed. Reload the page.",

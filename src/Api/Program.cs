@@ -41,6 +41,10 @@ if (!requireHttps && !plainHttpEnvironments.Contains(builder.Environment.Environ
         $"Session:RequireHttps=false is allowed only in {string.Join(" or ", plainHttpEnvironments)}; " +
         $"this environment is '{builder.Environment.EnvironmentName}'.");
 
+// Every unsafe request needs an allowed Origin and X-Requested-With (CsrfProtection). None configured: Api refuses
+// to start, rather than refuse every write.
+var allowedOrigins = CsrfProtection.AllowedOrigins(builder.Configuration);
+
 builder.Services.AddCoreDataAccess(builder.Configuration.GetConnectionString("app_user")!);
 // The subscriptions module (PROOF_SPEC T5): its own context, on the same app_user data source and transaction layer.
 builder.Services.AddDbContext<SubscriptionsDbContext>((services, options) =>
@@ -84,6 +88,7 @@ var app = builder.Build();
 
 // The web interface's API prefix, then the interface itself for what no route matches (WebInterface).
 app.UseApiPrefix();
+app.UseCsrfProtection(allowedOrigins);
 app.UseRouting();
 app.UseWebInterface();
 app.UseMiddleware<ErrorResponses>();
