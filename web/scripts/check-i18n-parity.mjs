@@ -11,6 +11,9 @@ import { extract, missing, readJson, WEB } from './extract.mjs';
 
 const ARABIC_PLURAL_FORMS = ['zero', 'one', 'two', 'few', 'many', 'other'];
 
+// The glossary (web/GLOSSARY.md): the platform's word for a tenant never reaches the user.
+const NOT_IN_GLOSSARY = { en: /\btenants?\b/i, ar: /مستأجر/ };
+
 /** Every problem between the extracted messages, the committed en.json and ar.json, as lines. */
 export function problems(extracted, en, ar) {
   const out = [];
@@ -20,6 +23,10 @@ export function problems(extracted, en, ar) {
   const enStale = missing(ids, Object.keys(en)).length > 0 || missing(Object.keys(en), ids).length > 0 ||
     ids.some((id) => en[id] !== extracted[id]);
   if (enStale) out.push('locales/en.json is not the current extraction: run `npm run i18n:extract` and commit it');
+  for (const [id, message] of Object.entries(extracted))
+    if (NOT_IN_GLOSSARY.en.test(message)) out.push(`${id}: "tenant" — the glossary's word is "organization"`);
+  for (const [id, message] of Object.entries(ar))
+    if (NOT_IN_GLOSSARY.ar.test(message)) out.push(`ar.json ${id}: "مستأجر" — the glossary's word is "الجهة"`);
   for (const [id, message] of Object.entries(ar)) {
     let ast;
     try {
@@ -45,20 +52,25 @@ function* plurals(elements) {
 }
 
 function selfTest(extracted, en, ar) {
-  // Plant one key missing from ar.json, one extra key, and a plural with two Arabic forms only.
+  // Plant one key missing from ar.json, one extra key, a plural with two Arabic forms only, and a term outside the
+  // glossary in each language.
   const [removed] = Object.keys(ar);
   const planted = { ...ar, 'planted.extra.key': 'زائد', 'planted.plural.key': '{n, plural, one {واحد} other {#}}' };
   delete planted[removed];
-  const found = problems(extracted, en, planted);
+  const termId = Object.keys(extracted).find((id) => id !== removed);
+  planted[termId] = 'اختر المستأجر';
+  const found = problems({ ...extracted, [termId]: 'Choose a tenant' }, { ...en, [termId]: 'Choose a tenant' }, planted);
   console.log(found.join('\n'));
   const expected = [
     `missing in ar.json: ${removed}`,
     'in ar.json, not in the code: planted.extra.key',
     'in ar.json, not in the code: planted.plural.key',
     'ar.json planted.plural.key: {n, plural} lacks zero, two, few, many',
+    `${termId}: "tenant" — the glossary's word is "organization"`,
+    `ar.json ${termId}: "مستأجر" — the glossary's word is "الجهة"`,
   ];
   if (found.length === expected.length && expected.every((line) => found.includes(line))) {
-    console.log('PASS (self-test): check-i18n-parity reports the missing key, the extra key and the incomplete plural.');
+    console.log('PASS (self-test): check-i18n-parity reports the missing key, the extra key, the incomplete plural and both terms outside the glossary.');
     return 0;
   }
   console.log('FAIL (self-test): check-i18n-parity did not report exactly the planted differences.');

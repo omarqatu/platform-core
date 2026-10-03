@@ -12,13 +12,13 @@ export const apiErrors = defineMessages({
     defaultMessage: 'The request was refused for security reasons. Reload the page and try again.',
   },
   invalid_credentials: { id: 'errors.invalid_credentials', defaultMessage: 'The username or password is incorrect.' },
-  no_active_tenant: { id: 'errors.no_active_tenant', defaultMessage: 'Choose a tenant first.' },
-  tenant_not_active: { id: 'errors.tenant_not_active', defaultMessage: 'This tenant is not active.' },
+  no_active_tenant: { id: 'errors.no_active_tenant', defaultMessage: 'Choose an organization first.' },
+  tenant_not_active: { id: 'errors.tenant_not_active', defaultMessage: 'This organization is not active.' },
   step_up_required: {
     id: 'errors.step_up_required',
-    defaultMessage: 'This tenant requires another sign-in method.',
+    defaultMessage: 'This organization requires a stronger sign-in method, which is not available yet.',
   },
-  not_a_member: { id: 'errors.not_a_member', defaultMessage: 'You are not an active member of this tenant.' },
+  not_a_member: { id: 'errors.not_a_member', defaultMessage: 'You are not an active member of this organization.' },
   not_permitted: { id: 'errors.not_permitted', defaultMessage: 'You do not have permission to do this.' },
   membership_scope_missing: {
     id: 'errors.membership_scope_missing',
@@ -28,10 +28,10 @@ export const apiErrors = defineMessages({
   invalid_reference: { id: 'errors.invalid_reference', defaultMessage: 'The selected item is not available.' },
   invalid_cursor: { id: 'errors.invalid_cursor', defaultMessage: 'The list has changed. Reload the page.' },
   conflict: { id: 'errors.conflict', defaultMessage: 'This already exists.' },
-  last_owner: { id: 'errors.last_owner', defaultMessage: 'The tenant must keep at least one active owner.' },
+  last_owner: { id: 'errors.last_owner', defaultMessage: 'The organization must keep at least one active owner.' },
   last_all_member: {
     id: 'errors.last_all_member',
-    defaultMessage: 'The tenant must keep at least one active member who sees all data.',
+    defaultMessage: 'The organization must keep at least one active member with the All clients scope.',
   },
   invalid_invitation: { id: 'errors.invalid_invitation', defaultMessage: 'This invitation is not valid.' },
   invitation_expired: { id: 'errors.invitation_expired', defaultMessage: 'This invitation has expired.' },
@@ -43,10 +43,10 @@ export const apiErrors = defineMessages({
     id: 'errors.account_exists',
     defaultMessage: 'An account with this email already exists. Sign in, then accept the invitation.',
   },
-  already_member: { id: 'errors.already_member', defaultMessage: 'You are already a member of this tenant.' },
+  already_member: { id: 'errors.already_member', defaultMessage: 'You are already a member of this organization.' },
   role_templates_unavailable: {
     id: 'errors.role_templates_unavailable',
-    defaultMessage: 'The tenant could not be set up. Contact support.',
+    defaultMessage: 'The organization could not be set up. Contact support.',
   },
   unknown: { id: 'errors.unknown', defaultMessage: 'Something went wrong. Try again.' },
 });

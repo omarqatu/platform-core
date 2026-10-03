@@ -103,6 +103,48 @@ Closed by the CSRF PR:
   and it would avoid one frame in the default direction when the cookie is absent and the browser prefers English.
   Not needed now.
 
+## From the identity screens — the web interface
+
+### 34. The organization cards show the name only
+
+- **Origin:** the identity screens. `GET /tenants` (app.user_id alone, T3.7) returns `tenant_id`, `name`,
+  `tenant_status`, `membership_status` — no role, no scope mode — and the task added no field to it. The selection
+  shows the name alone.
+- **If wanted:** the role and the scope mode of each membership, read on the same path. Each needs its own decision:
+  under app.user_id alone the roles and `membership_scope` of other tenants are not visible today (the policies are
+  per tenant), so showing them means a new read path, reviewed like T3.7.
+
+### 35. No step-up path in the interface
+
+- **Origin:** the identity screens, decided by the project owner. `POST /tenants/{id}/select` refuses with
+  `step_up_required` a membership whose tenant accepts no provider the session used (4.2; `password` is the only
+  provider today). The selection shows the message ("requires a stronger sign-in method, which is not available
+  yet") and does not enter. **To build:** the step-up flow itself, with the provider it needs.
+
+### 36. Logging out does not revoke the session on the server
+
+- **Origin:** the identity screens, decided by the project owner. `POST /auth/logout` expires the cookie in the
+  browser; the cookie is self-contained (encrypted user and tenant ids), so a copy kept elsewhere stays valid until it
+  expires.
+- **When needed:** server-side revocation — a session id or a security stamp in the cookie, checked on every request
+  against a store (and a "log out everywhere"). Not built.
+
+### 37. The API and the interface share one path space
+
+- **Origin:** the identity screens. Api routes sit at the root (`/subscriptions`, `/tenants`, `/me`, …); the interface
+  is served for a page no route matches (WebInterface). An interface path equal to an API path would be the API's on a
+  reload: the T8 screen's first path, `/subscriptions`, was exactly that (found by the E2E deep-link reload). The
+  interface now keeps its screens under `/app/` (plus `/login`, `/organizations`), which no API route uses.
+- **The decision:** keep the convention, or move the API's routes under `/api` on the server (today only a prefix the
+  interface adds and Api strips) — a change of every route, so of the Conformance base paths.
+
+### 38. "Switch organization", then a reload, returns to the previous organization
+
+- **Origin:** the identity screens. Switching clears the interface and shows the selection, but the cookie still holds
+  the previous tenant until another is selected: a reload at that moment asks `/me`, which names it, and the interface
+  enters it again. Nothing of another tenant is shown; it is only a surprise.
+- **If it matters:** an endpoint that clears the active tenant from the cookie (a new endpoint: the owner's approval).
+
 ## For the real subscriptions module — outside the proof
 
 ### 25. Module activation per tenant is not checked

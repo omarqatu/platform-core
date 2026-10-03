@@ -4,3 +4,5 @@
 **/node_modules/
 web/dist/
 web/compiled-locales/
+web/test-results/
+web/playwright-report/

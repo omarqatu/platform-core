@@ -62,7 +62,7 @@ export default tseslint.config(
   },
   {
     // The repository's own scripts (checks and their self-tests) run on Node.
-    files: ['scripts/**/*.mjs', '*.config.{js,ts}'],
+    files: ['scripts/**/*.mjs', '*.config.{js,ts}', 'e2e/**/*.ts'],
     languageOptions: { globals: globals.node },
   },
   {
