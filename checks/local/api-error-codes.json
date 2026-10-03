@@ -1,6 +1,7 @@
 {
   "source": "src/Core/ApiErrorCodes.cs",
   "codes": [
+    "csrf_rejected",
     "invalid_request",
     "invalid_credentials",
     "no_active_tenant",

@@ -7,6 +7,10 @@ import { defineMessages, type MessageDescriptor } from 'react-intl';
  */
 export const apiErrors = defineMessages({
   invalid_request: { id: 'errors.invalid_request', defaultMessage: 'The request is not valid.' },
+  csrf_rejected: {
+    id: 'errors.csrf_rejected',
+    defaultMessage: 'The request was refused for security reasons. Reload the page and try again.',
+  },
   invalid_credentials: { id: 'errors.invalid_credentials', defaultMessage: 'The username or password is incorrect.' },
   no_active_tenant: { id: 'errors.no_active_tenant', defaultMessage: 'Choose a tenant first.' },
   tenant_not_active: { id: 'errors.tenant_not_active', defaultMessage: 'This tenant is not active.' },

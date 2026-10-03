@@ -10,6 +10,7 @@ namespace Core;
 public static class ApiErrorCodes
 {
     // Request and session
+    public const string CsrfRejected = "csrf_rejected";
     public const string InvalidRequest = "invalid_request";
     public const string InvalidCredentials = "invalid_credentials";
     public const string NoActiveTenant = "no_active_tenant";

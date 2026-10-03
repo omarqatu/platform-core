@@ -47,6 +47,12 @@ Closed by the T5 PR:
 - **13.** Test 20, the visible rows: a revoked assignment and a lowered mode during a live session → the next
   request lists zero subscriptions of that client, with no re-login.
 
+Closed by the CSRF PR:
+- **28.** CSRF: `CsrfProtection` (Api) refuses every unsafe request (POST, PUT, PATCH, DELETE — login and
+  invitation acceptance included) unless its `Origin` equals one of `Security:AllowedOrigins` (no `Referer`
+  fallback) and it carries `X-Requested-With: platform-web`: 403 `csrf_rejected`, before routing and any database
+  command. Conformance `CsrfTests` [B]; `CsrfNoDatabaseCommandTests` [W].
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -59,20 +65,6 @@ Closed by the T5 PR:
   for `client_scope` (§4.8, 13-i) — or a measurement on a dedicated database host first; the threshold itself stays.
 
 ## From the i18n task — the web interface (web/)
-
-### 28. CSRF: the SPA's state-changing requests rest on SameSite=Strict alone
-
-- **Origin:** i18n task (the SPA is served same-origin by Api, with the session cookie).
-- **What protects them now:** the session cookie is `HttpOnly`, `SameSite=Strict` — a browser sends it on no request
-  started by another site. Endpoints that bind a JSON body also need `Content-Type: application/json`, which a form
-  cannot send and a cross-origin script cannot send without a CORS preflight (no CORS is configured). There is no
-  antiforgery token and no `Origin`/`Sec-Fetch-Site` check.
-- **The gap:** `SameSite` is per *site*, not per origin: a page on a sibling subdomain of the same registrable domain
-  is same-site. The endpoints with no body are reachable by a plain form POST from there — `POST /me/leave`,
-  `POST /tenants/{id}/select`, `POST /members/invitations/{id}/revoke`.
-- **Proposal (not built here):** one middleware refusing an unsafe method (POST, PUT, PATCH, DELETE) whose
-  `Sec-Fetch-Site` is present and not `same-origin`, or whose `Origin` is present and not Api's own — or ASP.NET Core
-  antiforgery with the token in a header. Either way a Conformance test per bodyless endpoint.
 
 ### 29. Two T8 screens: the original server-rendered one stays outside i18n
 
