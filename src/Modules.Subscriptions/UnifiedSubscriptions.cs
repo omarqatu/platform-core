@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Core;
 using Core.Data;
 using Core.Http;
 using Microsoft.AspNetCore.Builder;
@@ -39,7 +40,7 @@ public static class UnifiedSubscriptions
             IConfiguration configuration, ILoggerFactory loggers, CancellationToken ct) =>
         {
             if (!Cursor.TryParse(cursor, out var cursors))
-                return Results.Json(new { error = "invalid_cursor" }, statusCode: StatusCodes.Status400BadRequest);
+                return Results.Json(new { error = ApiErrorCodes.InvalidCursor }, statusCode: StatusCodes.Status400BadRequest);
             var take = Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit);
             var cap = configuration.GetValue("UnifiedView:TenantBatchCap", TenantFanOut.DefaultBatchCap);
             var user = session.Current.UserId!.Value;

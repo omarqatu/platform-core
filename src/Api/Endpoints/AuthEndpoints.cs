@@ -23,13 +23,13 @@ public static class AuthEndpoints
             CoreDbContext db, CancellationToken ct) =>
         {
             if (body is not { Username: { Length: > 0 and <= MaxUsername } username, Password: { Length: <= MaxPassword } password })
-                return Results.Json(new { error = "invalid_request" }, statusCode: StatusCodes.Status400BadRequest);
+                return Results.Json(new { error = ApiErrorCodes.InvalidRequest }, statusCode: StatusCodes.Status400BadRequest);
 
             var userId = await Authenticator.AuthenticateAsync(
                 authenticator, username, password, http.Connection.RemoteIpAddress?.ToString(), ct);
             // One response for every failure — a missing username and a wrong password alike (T3.5).
             if (userId is not { } user)
-                return Results.Json(new { error = "invalid_credentials" }, statusCode: StatusCodes.Status401Unauthorized);
+                return Results.Json(new { error = ApiErrorCodes.InvalidCredentials }, statusCode: StatusCodes.Status401Unauthorized);
 
             // A tracked update of the actor's own row: exempt from automatic auditing (7, self-service identity).
             await UnitOfWork.RunAsync(db, new SessionContext(user, null), async (c, token) =>

@@ -31,11 +31,11 @@ public static class LastMemberGuards
 
     /// <summary>Item a — a departure, removing an owner role, or disabling an owner.</summary>
     public static Task RequireAnotherOwnerAsync(CoreDbContext db, Guid membershipId, CancellationToken ct) =>
-        RequireAnotherAsync(db, IsOwner, membershipId, "last_owner", ct);
+        RequireAnotherAsync(db, IsOwner, membershipId, ApiErrorCodes.LastOwner, ct);
 
     /// <summary>Item g — a downgrade to 'assigned', disabling an 'all' member, or an 'all' member's departure.</summary>
     public static Task RequireAnotherAllAsync(CoreDbContext db, Guid membershipId, CancellationToken ct) =>
-        RequireAnotherAsync(db, IsAll, membershipId, "last_all_member", ct);
+        RequireAnotherAsync(db, IsAll, membershipId, ApiErrorCodes.LastAllMember, ct);
 
     private static async Task RequireAnotherAsync(CoreDbContext db, string condition, Guid membershipId, string code, CancellationToken ct)
     {

@@ -1,3 +1,4 @@
+using Core;
 using Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -33,37 +34,37 @@ public sealed class ErrorResponses(RequestDelegate next, ILogger<ErrorResponses>
             {
                 // Rule 7 (3.5/7): a membership without a scope row is invalid data — loud, never a default.
                 case MissingMembershipScopeException:
-                    return (StatusCodes.Status500InternalServerError, "membership_scope_missing");
+                    return (StatusCodes.Status500InternalServerError, ApiErrorCodes.MembershipScopeMissing);
                 case NoActiveMembershipException:
-                    return (StatusCodes.Status403Forbidden, "not_a_member");
+                    return (StatusCodes.Status403Forbidden, ApiErrorCodes.NotAMember);
                 // The provisioner paths (4.4): an acceptance refused before any write; bootstrap without templates (T4.9).
                 case Core.Provisioning.InvitationRefusedException refused:
                     return (refused.Code switch
                     {
-                        "invalid_request" => StatusCodes.Status400BadRequest,
-                        "account_exists" => StatusCodes.Status409Conflict,
+                        ApiErrorCodes.InvalidRequest => StatusCodes.Status400BadRequest,
+                        ApiErrorCodes.AccountExists => StatusCodes.Status409Conflict,
                         _ => StatusCodes.Status403Forbidden,
                     }, refused.Code);
                 // Items a and g (3.10): the change would leave no active owner / no active 'all' membership.
                 case Endpoints.LastMemberException last:
                     return (StatusCodes.Status409Conflict, last.Code);
                 case Core.Provisioning.RoleTemplatesUnavailableException:
-                    return (StatusCodes.Status500InternalServerError, "role_templates_unavailable");
+                    return (StatusCodes.Status500InternalServerError, ApiErrorCodes.RoleTemplatesUnavailable);
                 // The application layer's explicit permission check (5), before any write.
                 case NotPermittedException:
-                    return (StatusCodes.Status403Forbidden, "not_permitted");
+                    return (StatusCodes.Status403Forbidden, ApiErrorCodes.NotPermitted);
                 // The rows-affected guard (3.5/5): the row is not writable under this context.
                 case CriticalWriteException:
-                    return (StatusCodes.Status403Forbidden, "not_permitted");
+                    return (StatusCodes.Status403Forbidden, ApiErrorCodes.NotPermitted);
                 case PostgresException { SqlState: PostgresErrorCodes.InsufficientPrivilege }:
-                    return (StatusCodes.Status403Forbidden, "not_permitted");
+                    return (StatusCodes.Status403Forbidden, ApiErrorCodes.NotPermitted);
                 case PostgresException { SqlState: PostgresErrorCodes.CheckViolation }:
-                    return (StatusCodes.Status400BadRequest, "invalid_value");
+                    return (StatusCodes.Status400BadRequest, ApiErrorCodes.InvalidValue);
                 // A reference to another tenant's row, or to none: the composite FK (3.3) — never a leak of which.
                 case PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation }:
-                    return (StatusCodes.Status400BadRequest, "invalid_reference");
+                    return (StatusCodes.Status400BadRequest, ApiErrorCodes.InvalidReference);
                 case PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }:
-                    return (StatusCodes.Status409Conflict, "conflict");
+                    return (StatusCodes.Status409Conflict, ApiErrorCodes.Conflict);
             }
         }
         return null;

@@ -1,3 +1,4 @@
+using Core;
 using Core.Data;
 using Core.Http;
 using Core.Provisioning;
@@ -84,5 +85,5 @@ public static class ProvisioningEndpoints
     }
 
     private static IResult InvalidRequest() =>
-        Results.Json(new { error = "invalid_request" }, statusCode: StatusCodes.Status400BadRequest);
+        Results.Json(new { error = ApiErrorCodes.InvalidRequest }, statusCode: StatusCodes.Status400BadRequest);
 }

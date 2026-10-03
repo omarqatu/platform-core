@@ -82,7 +82,10 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 var app = builder.Build();
 
+// The web interface's API prefix, then the interface itself for what no route matches (WebInterface).
+app.UseApiPrefix();
 app.UseRouting();
+app.UseWebInterface();
 app.UseMiddleware<ErrorResponses>();
 app.UseAuthentication();
 app.UseAuthorization();

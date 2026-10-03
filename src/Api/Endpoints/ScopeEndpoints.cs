@@ -42,7 +42,7 @@ public static class ScopeEndpoints
             if (db.Scope is null)
                 return NoActiveTenant();
             if (body.ScopeMode is not ("all" or "assigned"))
-                return Results.Json(new { error = "invalid_value" }, statusCode: StatusCodes.Status400BadRequest);
+                return Results.Json(new { error = ApiErrorCodes.InvalidValue }, statusCode: StatusCodes.Status400BadRequest);
 
             await ScopeAdministration.ChangeModeAsync(db, session.Current, membershipId, body.ScopeMode, ct);
             return Results.NoContent();
@@ -62,5 +62,5 @@ public static class ScopeEndpoints
     }
 
     private static IResult NoActiveTenant() =>
-        Results.Json(new { error = "no_active_tenant" }, statusCode: StatusCodes.Status409Conflict);
+        Results.Json(new { error = ApiErrorCodes.NoActiveTenant }, statusCode: StatusCodes.Status409Conflict);
 }

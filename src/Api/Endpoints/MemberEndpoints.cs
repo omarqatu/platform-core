@@ -84,8 +84,8 @@ public static class MemberEndpoints
     }
 
     private static IResult NoActiveTenant() =>
-        Results.Json(new { error = "no_active_tenant" }, statusCode: StatusCodes.Status409Conflict);
+        Results.Json(new { error = ApiErrorCodes.NoActiveTenant }, statusCode: StatusCodes.Status409Conflict);
 
     private static IResult InvalidValue() =>
-        Results.Json(new { error = "invalid_value" }, statusCode: StatusCodes.Status400BadRequest);
+        Results.Json(new { error = ApiErrorCodes.InvalidValue }, statusCode: StatusCodes.Status400BadRequest);
 }

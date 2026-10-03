@@ -60,23 +60,23 @@ public static class Acceptance
     {
         var now = DateTime.UtcNow;
         if ((authenticatedUser is null) == (request.Account is null))
-            throw new InvitationRefusedException("invalid_request", "either an authenticated user or a new account, not both");
+            throw new InvitationRefusedException(ApiErrorCodes.InvalidRequest, "either an authenticated user or a new account, not both");
         var userId = authenticatedUser ?? Guid.CreateVersion7();
         await ProvisionerUnitOfWork.EnterTenantAsync(db, request.TenantId, userId, "user", ct);
 
         var tokenHash = InvitationToken.Hash(request.Token);
         var invitation = await db.Invitations.SingleOrDefaultAsync(i => i.TokenHash == tokenHash, ct)
-            ?? throw new InvitationRefusedException("invalid_invitation", "no invitation for this token in this tenant");
+            ?? throw new InvitationRefusedException(ApiErrorCodes.InvalidInvitation, "no invitation for this token in this tenant");
         if (invitation.Status != "pending")
-            throw new InvitationRefusedException("invalid_invitation", $"the invitation is {invitation.Status}");
+            throw new InvitationRefusedException(ApiErrorCodes.InvalidInvitation, $"the invitation is {invitation.Status}");
         if (invitation.ExpiresAt <= now)
-            throw new InvitationRefusedException("invitation_expired", "the invitation has expired");
+            throw new InvitationRefusedException(ApiErrorCodes.InvitationExpired, "the invitation has expired");
 
         var email = authenticatedUser is { } user
             ? await (from u in db.Users where u.Id == user join p in db.Persons on u.PersonId equals p.Id select p.Email).SingleAsync(ct)
             : request.Account!.Email;
         if (!string.Equals(email.Trim(), invitation.Email.Trim(), StringComparison.OrdinalIgnoreCase))
-            throw new InvitationRefusedException("email_mismatch", "the invitee's email is not the invitation's");
+            throw new InvitationRefusedException(ApiErrorCodes.EmailMismatch, "the invitee's email is not the invitation's");
 
         var returned = false;
         Guid membershipId;
@@ -84,7 +84,7 @@ public static class Acceptance
         {
             var account = request.Account!;
             if (await db.Persons.AnyAsync(p => p.Email == account.Email, ct) || await db.Users.AnyAsync(u => u.Username == account.Username, ct))
-                throw new InvitationRefusedException("account_exists", "an account exists: log in, then accept");
+                throw new InvitationRefusedException(ApiErrorCodes.AccountExists, "an account exists: log in, then accept");
             await Identities.CreateAsync(db, account.FullName, account.Email, account.Username, account.Password, now, ct, userId);
             membershipId = await JoinAsync(db, invitation, userId, now, ct);
         }
@@ -102,7 +102,7 @@ public static class Acceptance
                     returned = true;
                     break;
                 default:
-                    throw new InvitationRefusedException("already_member", $"the membership in this tenant is {existing.Status}");
+                    throw new InvitationRefusedException(ApiErrorCodes.AlreadyMember, $"the membership in this tenant is {existing.Status}");
             }
         }
 

@@ -1,0 +1,25 @@
+{
+  "source": "src/Core/ApiErrorCodes.cs",
+  "codes": [
+    "invalid_request",
+    "invalid_credentials",
+    "no_active_tenant",
+    "tenant_not_active",
+    "step_up_required",
+    "not_a_member",
+    "not_permitted",
+    "membership_scope_missing",
+    "invalid_value",
+    "invalid_reference",
+    "invalid_cursor",
+    "conflict",
+    "last_owner",
+    "last_all_member",
+    "invalid_invitation",
+    "invitation_expired",
+    "email_mismatch",
+    "account_exists",
+    "already_member",
+    "role_templates_unavailable"
+  ]
+}

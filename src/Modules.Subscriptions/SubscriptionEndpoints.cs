@@ -1,3 +1,4 @@
+using Core;
 using Core.Data;
 using Core.Http;
 using Microsoft.AspNetCore.Builder;
@@ -51,7 +52,7 @@ public static class SubscriptionEndpoints
             {
                 await Permissions.RequireAsync(c, Write, t);
                 if (body is not { ClientId: { } client, ServiceName: { Length: > 0 and <= MaxServiceName } name, EndsOn: { } endsOn })
-                    return Results.Json(new { error = "invalid_value" }, statusCode: StatusCodes.Status400BadRequest);
+                    return Results.Json(new { error = ApiErrorCodes.InvalidValue }, statusCode: StatusCodes.Status400BadRequest);
                 var subscription = new Subscription
                 {
                     Id = Guid.CreateVersion7(), TenantId = session.Current.TenantId!.Value, ScopeRefId = client, ServiceName = name,
@@ -68,7 +69,7 @@ public static class SubscriptionEndpoints
     {
         db.ClientAddress = http.Connection.RemoteIpAddress?.ToString();   // recorded on the audit entries (7)
         if (session.Current.TenantId is null)
-            return Task.FromResult(Results.Json(new { error = "no_active_tenant" }, statusCode: StatusCodes.Status409Conflict));
+            return Task.FromResult(Results.Json(new { error = ApiErrorCodes.NoActiveTenant }, statusCode: StatusCodes.Status409Conflict));
         return UnitOfWork.RunAsync(db, session.Current, work, ct);
     }
 }

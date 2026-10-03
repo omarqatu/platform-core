@@ -1,0 +1,31 @@
+/* Logical properties only: the same rules lay the screen out right-to-left and left-to-right. */
+.subscriptions {
+  max-inline-size: 48rem;
+  margin-inline: auto;
+  padding: 1.5rem;
+}
+
+.subscriptions .scope {
+  padding-block: 0.5rem;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 4px solid #2f6f4e;
+  background: #eef6f1;
+}
+
+.subscriptions table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  margin-block-start: 1rem;
+}
+
+.subscriptions th,
+.subscriptions td {
+  text-align: start;
+  padding-block: 0.4rem;
+  padding-inline: 0.6rem;
+  border-block-end: 1px solid #ddd;
+}
+
+.subscriptions .date {
+  font-variant-numeric: tabular-nums;
+}
