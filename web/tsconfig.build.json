@@ -1,0 +1,6 @@
+{
+  // The build checks shipped code only: tests read files outside web/ (the backend's code list), which the image's
+  // web stage does not have.
+  "extends": "./tsconfig.json",
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test-setup.ts"]
+}

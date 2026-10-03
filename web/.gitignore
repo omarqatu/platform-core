@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# Built from locales/ by `npm run i18n:compile` (run before dev, build, typecheck and test).
+compiled-locales/
