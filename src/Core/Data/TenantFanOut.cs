@@ -60,7 +60,7 @@ public static class TenantFanOut
         }
         catch (NotPermittedException)
         {
-            return new TenantResult<T>(tenant, "not_permitted", default);
+            return new TenantResult<T>(tenant, ApiErrorCodes.NotPermitted, default);
         }
         catch (Exception error) when (!ct.IsCancellationRequested)
         {

@@ -37,11 +37,11 @@ public static class TenantEndpoints
             {
                 var status = await c.Tenants.Where(t => t.Id == tenantId).Select(t => t.Status).SingleAsync(token);
                 if (status != "active")
-                    return "tenant_not_active";
+                    return ApiErrorCodes.TenantNotActive;
                 var membership = c.Scope!.MembershipId;
                 var providers = await c.MembershipAuths.Where(a => a.MembershipId == membership).Select(a => a.Provider)
                     .ToListAsync(token);
-                return providers.Contains("password") ? null : "step_up_required";
+                return providers.Contains("password") ? null : ApiErrorCodes.StepUpRequired;
             }, ct);
             if (refusal is not null)
                 return Results.Json(new { error = refusal }, statusCode: StatusCodes.Status403Forbidden);

@@ -21,7 +21,7 @@ public static class AuditEndpoints
         app.MapGet("/audit-log", async (int? offset, int? limit, CoreDbContext db, CancellationToken ct) =>
         {
             if (db.Scope is null)
-                return Results.Json(new { error = "no_active_tenant" }, statusCode: StatusCodes.Status409Conflict);
+                return Results.Json(new { error = ApiErrorCodes.NoActiveTenant }, statusCode: StatusCodes.Status409Conflict);
             var scope = await Permissions.RequireAsync(db, Read, ct);
             var page = await ScopedList.PageAsync(scope,
                 db.AuditLog.OrderBy(a => a.Id), offset, limit, ct);
