@@ -43,8 +43,9 @@ jobs:
         run: bash docs/proposals/v1.17-acceptance/checks-${{ matrix.variant }}.sh
 
   # What each variant breaks among the existing suites, through the real EF paths: a database carrying the parts
-  # the current code can run on — the draft's P3 and P4 (P1 and P2 need the application to create the founding
-  # invitation and record the acceptor: phase B), and B whole (P3 and the function; the code does not call it yet).
+  # the current code can run on — the draft's P3 and P4 — then the draft whole (P1 and P2 need the application to
+  # create the founding invitation and record the acceptor: what fails there is what phase B's code must change),
+  # and B whole (P3 and the function; the code does not call it yet).
   ef-existing-suites:
     strategy:
       fail-fast: false
@@ -52,6 +53,8 @@ jobs:
         include:
           - variant: draft-p3-p4
             parts: p3-one-account-per-address p4-membership-has-scope
+          - variant: draft-whole
+            parts: p1-membership-needs-invitation p2-invitation-records-its-acceptor p3-one-account-per-address p4-membership-has-scope
           - variant: altb
             parts: p3-one-account-per-address b-accept-invitation
     name: ef-existing-suites (${{ matrix.variant }})
