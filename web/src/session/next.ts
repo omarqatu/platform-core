@@ -1,3 +1,5 @@
+import { ACCEPT_PATH } from '../invitations/pendingInvitation';
+
 /**
  * The path to return to after signing in, from ?next=. Only a path inside the interface is accepted: it starts with
  * one "/" — not "//" (another host) nor "/\" (which browsers read as "//") — and holds no backslash, no control
@@ -24,4 +26,12 @@ export function safeNext(raw: string | null | undefined): string | null {
 export function nextQuery(path: string | null): string {
   const next = safeNext(path);
   return next && next !== '/' ? `?next=${encodeURIComponent(next)}` : '';
+}
+
+/**
+ * Whether a return path needs an organization chosen first. Accepting an invitation does not (it enters none, 3.10
+ * condition 6): after signing in, the interface goes straight back to it — no selection, nothing entered.
+ */
+export function needsTenant(path: string): boolean {
+  return new URL(path, 'https://interface.invalid').pathname !== ACCEPT_PATH;
 }

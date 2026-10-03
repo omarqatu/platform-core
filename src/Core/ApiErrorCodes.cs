@@ -35,6 +35,7 @@ public static class ApiErrorCodes
     public const string InvitationExpired = "invitation_expired";
     public const string EmailMismatch = "email_mismatch";
     public const string AccountExists = "account_exists";
+    public const string UsernameTaken = "username_taken";
     public const string AlreadyMember = "already_member";
     public const string RoleTemplatesUnavailable = "role_templates_unavailable";
 }

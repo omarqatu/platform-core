@@ -43,6 +43,7 @@ export const apiErrors = defineMessages({
     id: 'errors.account_exists',
     defaultMessage: 'An account with this email already exists. Sign in, then accept the invitation.',
   },
+  username_taken: { id: 'errors.username_taken', defaultMessage: 'This username is taken. Choose another.' },
   already_member: { id: 'errors.already_member', defaultMessage: 'You are already a member of this organization.' },
   role_templates_unavailable: {
     id: 'errors.role_templates_unavailable',

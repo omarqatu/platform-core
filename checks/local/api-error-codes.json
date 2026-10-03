@@ -20,6 +20,7 @@
     "invitation_expired",
     "email_mismatch",
     "account_exists",
+    "username_taken",
     "already_member",
     "role_templates_unavailable"
   ]

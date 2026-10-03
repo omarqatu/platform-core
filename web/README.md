@@ -8,7 +8,8 @@ web/
   index.html
   GLOSSARY.md                the interface's terms (Organization / الجهة, …) — check-i18n-parity enforces them
   src/
-    main.tsx                 I18nProvider → BrowserRouter → SessionProvider → App
+    main.tsx                 the invitation's token out of the address first; then I18nProvider → BrowserRouter →
+                             SessionProvider → App
     App.tsx                  the routes
     api/client.ts            request(): /api, X-Requested-With, the error code of any status; 401 → the session;
                              abortAll() for every request in flight
@@ -16,12 +17,14 @@ web/
       SessionProvider.tsx    the session from GET /me (no storage); signIn, selectTenant, switchTenant, signOut,
                              revalidate
       guards.tsx             RequireAuth (→ /login?next=…), RequireTenant (→ /organizations; one subtree per tenant)
-      next.ts                safeNext(): the return path after signing in — internal paths only
+      next.ts                safeNext(): the return path after signing in — internal paths only; needsTenant()
+    invitations/             pendingInvitation: the token being accepted, in memory only
     components/              IdentityBar, LanguageSwitcher, ErrorAlert (role="alert", focused)
     i18n/                    locale, compiled messages, I18nProvider, apiErrors
     screens/
       auth/                  the login screen
       tenants/               the organization selection (and "no active membership")
+      invitations/           accepting an invitation: a new account, or signed in
       status/                loading, not permitted, not found
       subscriptions/         the T8 screen
   e2e/                       Playwright [B] against a real Api (npm run e2e)
@@ -50,12 +53,19 @@ after Conformance, against the Api container. Locally: an Api with `Web__Root` p
 ## Routing and the session
 
 - **react-router** (library mode: `BrowserRouter`, `Routes`): the simplest router that gives deep links and history.
-- **Paths:** `/login`, `/organizations`, and the organization's screens under `/app/` (`/app/subscriptions`). The API
+- **Paths:** `/login`, `/organizations`, and the organization's screens under `/app/` (`/app/subscriptions`) — and
+  `/app/invitations/accept`, open signed in or not and inside no organization (accepting enters none). The API
   is under `/api` only; the one other server route is the original T8 screen, `/subscriptions/screen`, which the
   interface never uses.
 - **The session** is the HTTP-only cookie and `GET /me` — nothing in `localStorage` or `sessionStorage` (the `lang`
   cookie aside). After signing in: no active membership → a status screen with "Sign out"; one → entered directly; more
   → the selection. Only active memberships in active organizations count.
+- **Accepting an invitation:** the link is `/app/invitations/accept#tenant=<id>&token=<token>`. The fragment never
+  reaches the server nor a referrer; `main.tsx` takes both values into memory before anything renders and replaces the
+  history entry with the bare path — so neither the address bar, the history nor the router holds the token — and does
+  the same for a second link opened in the tab (`hashchange`). Signed in: one button. Not signed in: a new account; an
+  address that already has one is refused (`account_exists`) with "Sign in to accept", and signing in comes straight
+  back (the token still in memory; a reload loses it). Afterwards, the selection — nothing entered by itself.
 - **Switching or leaving an organization:** the state changes first, so the organization's subtree (keyed by it) is gone
   in the same render, and every request in flight is aborted. There is no data cache beyond that subtree's state. A
   switch then calls `POST /tenants/deselect` (the cookie keeps the user alone) before the selection shows, so a reload

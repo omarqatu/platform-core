@@ -1,13 +1,16 @@
 import { Navigate, Route, Routes } from 'react-router';
+import { ACCEPT_PATH } from './invitations/pendingInvitation';
 import { LoginScreen } from './screens/auth/LoginScreen';
+import { AcceptInvitationScreen } from './screens/invitations/AcceptInvitationScreen';
 import { NotFoundScreen } from './screens/status/StatusScreens';
 import { SubscriptionsScreen } from './screens/subscriptions/SubscriptionsScreen';
 import { TenantSelectScreen } from './screens/tenants/TenantSelectScreen';
 import { RequireAuth, RequireTenant } from './session/guards';
 
 /**
- * The interface's paths. /login is open; /organizations needs a session; the organization's screens live under /app/,
- * one subtree per organization (RequireTenant). Anything else is "not found". The API lives under /api only, and Api
+ * The interface's paths. /login is open; so is /app/invitations/accept, signed in or not, and in no organization;
+ * /organizations needs a session; the organization's screens live under /app/, one subtree per organization
+ * (RequireTenant). Anything else is "not found". The API lives under /api only, and Api
  * serves index.html for any other page no route matches (WebInterface) — except the original T8 screen
  * (/subscriptions/screen), the one server-rendered page, which the interface never uses.
  */
@@ -15,6 +18,8 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginScreen />} />
+      {/* Open, signed in or not, and outside every organization: accepting enters none. */}
+      <Route path={ACCEPT_PATH} element={<AcceptInvitationScreen />} />
       <Route element={<RequireAuth />}>
         <Route path="/organizations" element={<TenantSelectScreen />} />
         <Route element={<RequireTenant />}>

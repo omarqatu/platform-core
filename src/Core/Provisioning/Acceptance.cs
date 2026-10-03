@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Core.Data;
+using Core.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace Core.Provisioning;
@@ -38,11 +39,15 @@ public static class InvitationToken
 /// <item>app.tenant_id from the request, before the invitation is read (T4.11): a tenant id that is not the token's
 /// → zero rows → a loud refusal.</item>
 /// <item>The invitation: pending and unexpired; its email equal to the invitee's — the authenticated user's, or the
-/// new account's — the token alone is not consent (4.5/3, T4.3).</item>
+/// new account's — under <see cref="EmailAddress"/>'s rule, surrounding spaces and case aside: the token alone is not
+/// consent (4.5/3, T4.3). The match is the application's (option C, OPEN_ITEMS 40).</item>
+/// <item>A new account: refused when the address already has one — under the same rule, the expression of
+/// persons_email_normalized_key — so the invitee signs in and accepts instead; or when the username is taken.</item>
 /// <item>No membership in the tenant → a new one: membership, its role, membership_scope in the invitation's mode
 /// (item f), membership_auth 'password' (item c). A membership that left → it returns, in the binding order of
 /// 3.10 (D9, D10). Active or disabled → refused.</item>
-/// <item>Last, the invitation accepted WHERE status = 'pending': one row, or loud (single-use).</item>
+/// <item>Last, the invitation accepted WHERE status = 'pending': one row, or loud (single-use) — of two acceptances
+/// of one token at once, the second's write affects no row and its whole transaction rolls back (3.5/5).</item>
 /// </list>
 /// The model maps no relationships, so EF orders no inserts: each layer is its own SaveChanges.
 /// </summary>
@@ -75,7 +80,7 @@ public static class Acceptance
         var email = authenticatedUser is { } user
             ? await (from u in db.Users where u.Id == user join p in db.Persons on u.PersonId equals p.Id select p.Email).SingleAsync(ct)
             : request.Account!.Email;
-        if (!string.Equals(email.Trim(), invitation.Email.Trim(), StringComparison.OrdinalIgnoreCase))
+        if (!EmailAddress.Same(email, invitation.Email))
             throw new InvitationRefusedException(ApiErrorCodes.EmailMismatch, "the invitee's email is not the invitation's");
 
         var returned = false;
@@ -83,8 +88,13 @@ public static class Acceptance
         if (authenticatedUser is null)
         {
             var account = request.Account!;
-            if (await db.Persons.AnyAsync(p => p.Email == account.Email, ct) || await db.Users.AnyAsync(u => u.Username == account.Username, ct))
-                throw new InvitationRefusedException(ApiErrorCodes.AccountExists, "an account exists: log in, then accept");
+            // In persons_email_normalized_key's own expression, written out: LINQ's Trim() translates to
+            // btrim(email, E' \t\n\r') — another rule than btrim's spaces, and not the index's expression.
+            var address = EmailAddress.Normalize(account.Email);
+            if (await db.Persons.FromSql($"SELECT * FROM persons WHERE lower(btrim(email)) = {address}").AnyAsync(ct))
+                throw new InvitationRefusedException(ApiErrorCodes.AccountExists, "an account exists for this address: sign in, then accept");
+            if (await db.Users.AnyAsync(u => u.Username == account.Username, ct))
+                throw new InvitationRefusedException(ApiErrorCodes.UsernameTaken, "the username is taken");
             await Identities.CreateAsync(db, account.FullName, account.Email, account.Username, account.Password, now, ct, userId);
             membershipId = await JoinAsync(db, invitation, userId, now, ct);
         }

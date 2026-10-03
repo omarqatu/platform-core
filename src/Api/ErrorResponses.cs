@@ -42,7 +42,7 @@ public sealed class ErrorResponses(RequestDelegate next, ILogger<ErrorResponses>
                     return (refused.Code switch
                     {
                         ApiErrorCodes.InvalidRequest => StatusCodes.Status400BadRequest,
-                        ApiErrorCodes.AccountExists => StatusCodes.Status409Conflict,
+                        ApiErrorCodes.AccountExists or ApiErrorCodes.UsernameTaken => StatusCodes.Status409Conflict,
                         _ => StatusCodes.Status403Forbidden,
                     }, refused.Code);
                 // Items a and g (3.10): the change would leave no active owner / no active 'all' membership.

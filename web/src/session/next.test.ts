@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextQuery, safeNext } from './next';
+import { needsTenant, nextQuery, safeNext } from './next';
 
 describe('safeNext — the return path after signing in', () => {
   it.each(['/', '/subscriptions', '/subscriptions?page=2#top', '/a/b%20c'])('accepts the internal path %s', (path) =>
@@ -28,4 +28,14 @@ describe('safeNext — the return path after signing in', () => {
     expect(nextQuery('/')).toBe('');
     expect(nextQuery('//evil.com')).toBe('');
   });
+});
+
+describe('needsTenant — whether a return path waits for an organization', () => {
+  it('the acceptance does not: signing in goes straight back to it', () => {
+    expect(needsTenant('/app/invitations/accept')).toBe(false);
+    expect(needsTenant('/app/invitations/accept?x=1')).toBe(false);
+  });
+
+  it.each(['/', '/app/subscriptions', '/app/invitations/accept/other', '/organizations'])('%s does', (path) =>
+    expect(needsTenant(path)).toBe(true));
 });
