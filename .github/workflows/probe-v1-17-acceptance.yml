@@ -51,6 +51,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - variant: p3-alone
+            parts: p3-one-account-per-address
           - variant: draft-p3-p4
             parts: p3-one-account-per-address p4-membership-has-scope
           - variant: draft-whole
