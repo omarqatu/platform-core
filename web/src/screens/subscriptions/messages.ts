@@ -22,7 +22,7 @@ export const messages = defineMessages<Values>({
   scopeAll: {
     id: 'subscriptions.list.scopeAll',
     defaultMessage:
-      "You are shown all of the tenant's subscriptions: {subscriptions, plural, one {# subscription} other {# subscriptions}}.",
+      "You are shown all of the organization's subscriptions: {subscriptions, plural, one {# subscription} other {# subscriptions}}.",
   },
   scopeAssigned: {
     id: 'subscriptions.list.scopeAssigned',

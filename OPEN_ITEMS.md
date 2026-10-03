@@ -53,6 +53,12 @@ Closed by the CSRF PR:
   fallback) and it carries `X-Requested-With: platform-web`: 403 `csrf_rejected`, before routing and any database
   command. Conformance `CsrfTests` [B]; `CsrfNoDatabaseCommandTests` [W].
 
+Closed by the identity screens PR:
+- **38.** "Switch organization", then a reload, no longer returns to the previous organization: `POST
+  /tenants/deselect` (the owner's decision) issues the cookie again with the user alone — no database command, CSRF
+  applies — and the interface calls it before showing the selection. Conformance `Deselect_*`, WhiteBox
+  `SessionEndpointCommandTests`, E2E 7.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -102,6 +108,45 @@ Closed by the CSRF PR:
   browser; only a server-side choice (Api writing `lang`/`dir` into `index.html` before the first paint) would differ,
   and it would avoid one frame in the default direction when the cookie is absent and the browser prefers English.
   Not needed now.
+
+## From the identity screens — the web interface
+
+### 34. The organization cards show the name only
+
+- **Origin:** the identity screens. `GET /tenants` (app.user_id alone, T3.7) returns `tenant_id`, `name`,
+  `tenant_status`, `membership_status` — no role, no scope mode — and the task added no field to it. The selection
+  shows the name alone.
+- **If wanted:** the role and the scope mode of each membership, read on the same path. Each needs its own decision:
+  under app.user_id alone the roles and `membership_scope` of other tenants are not visible today (the policies are
+  per tenant), so showing them means a new read path, reviewed like T3.7.
+
+### 35. No step-up path in the interface
+
+- **Origin:** the identity screens, decided by the project owner. `POST /tenants/{id}/select` refuses with
+  `step_up_required` a membership whose tenant accepts no provider the session used (4.2; `password` is the only
+  provider today). The selection shows the message ("requires a stronger sign-in method, which is not available
+  yet") and does not enter. **To build:** the step-up flow itself, with the provider it needs.
+
+### 36. Logging out does not revoke the session on the server
+
+- **Origin:** the identity screens, decided by the project owner. `POST /auth/logout` expires the cookie in the
+  browser; the cookie is self-contained (encrypted user and tenant ids), so a copy kept elsewhere stays valid until it
+  expires.
+- **When needed:** server-side revocation — a session id or a security stamp in the cookie, checked on every request
+  against a store (and a "log out everywhere"). Not built.
+
+### 37. The API and the interface share one path space — decided: the API under /api only
+
+- **Origin:** the identity screens. Api's routes sit at the root (`/subscriptions`, `/tenants`, `/me`, …), and since
+  #11 every one also answers under `/api` (WebInterface strips the prefix) — the double path; the interface is served
+  for a page no route matches. An interface path equal to an API path is the API's on a reload: the T8 screen's first
+  path, `/subscriptions`, was exactly that (found by the E2E deep-link reload). For now the interface keeps its screens
+  under `/app/` (plus `/login`, `/organizations`).
+- **Decided by the project owner:** the API lives under `/api` only — the bare routes are removed; the Conformance and
+  white-box harnesses move their base path to `/api` (configuration only, no expectation changes); the interface stays
+  under `/app/`. This also closes the double path introduced in #11 (`/api/x` and `/x` both answering), which had no
+  number of its own.
+- **Not built here:** a later task.
 
 ## For the real subscriptions module — outside the proof
 

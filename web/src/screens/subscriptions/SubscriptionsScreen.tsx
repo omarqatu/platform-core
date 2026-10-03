@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useIntl } from 'react-intl';
-import { ApiError, getJson } from '../../api/client';
+import { ApiError, getJson, isAbort } from '../../api/client';
 import { errorMessage } from '../../i18n/apiErrors';
+import { useSession } from '../../session/SessionProvider';
+import { ForbiddenScreen } from '../status/StatusScreens';
 import { messages } from './messages';
 import './SubscriptionsScreen.css';
 
@@ -36,6 +38,9 @@ const CLIENTS_LIMIT = 200; // the API's maximum page
 
 type State = { status: 'loading' } | { status: 'error'; code: string | null } | { status: 'ready'; data: SubscriptionsData };
 
+/** The tenant can no longer be entered: the session asks /me again, and the interface returns to the selection. */
+const TENANT_LOST = new Set(['not_a_member', 'no_active_tenant', 'tenant_not_active']);
+
 /**
  * The subscription list (PROOF_SPEC T8), from GET /subscriptions and GET /subscriptions/clients: the scope declaration,
  * then the rows. The chrome is translated; what users entered — services and clients — is shown as is, in its own
@@ -43,6 +48,7 @@ type State = { status: 'loading' } | { status: 'error'; code: string | null } | 
  */
 export function SubscriptionsScreen() {
   const [state, setState] = useState<State>({ status: 'loading' });
+  const { revalidate } = useSession();
 
   useEffect(() => {
     const abort = new AbortController();
@@ -52,12 +58,16 @@ export function SubscriptionsScreen() {
     ]).then(
       ([subscriptions, clients]) => setState({ status: 'ready', data: { subscriptions, clients } }),
       (error: unknown) => {
-        if (!abort.signal.aborted) setState({ status: 'error', code: error instanceof ApiError ? error.code : null });
+        if (abort.signal.aborted || isAbort(error)) return;
+        const code = error instanceof ApiError ? error.code : null;
+        if (code && TENANT_LOST.has(code)) revalidate().catch(() => undefined);
+        setState({ status: 'error', code });
       },
     );
     return () => abort.abort();
-  }, []);
+  }, [revalidate]);
 
+  if (state.status === 'error' && state.code === 'not_permitted') return <ForbiddenScreen />;
   return <SubscriptionsView state={state} />;
 }
 

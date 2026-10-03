@@ -9,6 +9,11 @@ namespace Api.Endpoints;
 
 public sealed record LoginRequest(string? Username, string? Password);
 
+/// <summary>The current session as the interface shows it: the user, and the active tenant if it can still be entered.</summary>
+public sealed record MeResponse(string Username, MeTenant? ActiveTenant);
+
+public sealed record MeTenant(Guid TenantId, string Name);
+
 public static class AuthEndpoints
 {
     private const int MaxUsername = 256;
@@ -42,5 +47,33 @@ public static class AuthEndpoints
             await http.SignInAsync(SessionCookie.Scheme, SessionCookie.Principal(user, null));
             return Results.NoContent();
         }).WithMetadata(new OwnUnitsOfWorkAttribute());
+
+        // Logging out: the cookie is expired in the browser. No database access, and no session required — an expired
+        // one logs out too. The cookie is self-contained: a copy kept elsewhere stays valid until it expires
+        // (OPEN_ITEMS 36). An unsafe request, so CsrfProtection applies.
+        app.MapPost("/auth/logout", async (HttpContext http) =>
+        {
+            await http.SignOutAsync(SessionCookie.Scheme);
+            return Results.NoContent();
+        }).WithMetadata(new OwnUnitsOfWorkAttribute());
+
+        // The current session, for the interface's identity bar: app.user_id alone, like the tenant-selection path
+        // (4.3-b, T3.7) — the user's own row (user_self_read), and the cookie's tenant only if it is among the user's
+        // own active memberships in an active tenant (membership_self, tenant_visible_to_member). Otherwise
+        // active_tenant is null, and nothing is said about why. No role, scope or permission.
+        app.MapGet("/me", async (CoreDbContext db, ISessionContextAccessor session, CancellationToken ct) =>
+        {
+            var user = session.Current.UserId!.Value;
+            var username = await db.Users.Where(u => u.Id == user).Select(u => u.Username).SingleAsync(ct);
+            MeTenant? active = null;
+            if (session.Current.TenantId is { } tenant)
+                active = await (
+                    from m in db.Memberships
+                    where m.UserId == user && m.TenantId == tenant && m.Status == "active"
+                    join t in db.Tenants on m.TenantId equals t.Id
+                    where t.Status == "active"
+                    select new MeTenant(t.Id, t.Name)).SingleOrDefaultAsync(ct);
+            return Results.Ok(new MeResponse(username, active));
+        }).RequireAuthorization().WithMetadata(new WithoutActiveTenantAttribute());
     }
 }

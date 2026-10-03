@@ -6,19 +6,27 @@ React + TypeScript, built with Vite. Text through FormatJS (`react-intl`), ICU m
 ```
 web/
   index.html
+  GLOSSARY.md                the interface's terms (Organization / الجهة, …) — check-i18n-parity enforces them
   src/
-    main.tsx                 the root: I18nProvider around App
-    App.tsx
-    api/client.ts            fetch under /api; a refusal is ApiError(status, code)
-    i18n/
-      locale.ts              the languages, the Intl locale per language, dir, the "lang" cookie, the initial choice
-      messages.ts            the compiled catalogues (compiled-locales/)
-      I18nProvider.tsx       IntlProvider, document lang/dir and the cookie; useLocale() → { lang, setLang }
-      apiErrors.ts           one message per API error code; errorMessage(code)
-    screens/subscriptions/   the T8 screen (the i18n proof)
-  locales/
-    en.json                  generated: npm run i18n:extract — never edited by hand
-    ar.json                  edited by hand
+    main.tsx                 I18nProvider → BrowserRouter → SessionProvider → App
+    App.tsx                  the routes
+    api/client.ts            request(): /api, X-Requested-With, the error code of any status; 401 → the session;
+                             abortAll() for every request in flight
+    session/
+      SessionProvider.tsx    the session from GET /me (no storage); signIn, selectTenant, switchTenant, signOut,
+                             revalidate
+      guards.tsx             RequireAuth (→ /login?next=…), RequireTenant (→ /organizations; one subtree per tenant)
+      next.ts                safeNext(): the return path after signing in — internal paths only
+    components/              IdentityBar, LanguageSwitcher, ErrorAlert (role="alert", focused)
+    i18n/                    locale, compiled messages, I18nProvider, apiErrors
+    screens/
+      auth/                  the login screen
+      tenants/               the organization selection (and "no active membership")
+      status/                loading, not permitted, not found
+      subscriptions/         the T8 screen
+  e2e/                       Playwright [B] against a real Api (npm run e2e)
+  locales/en.json            generated: npm run i18n:extract — never edited by hand
+  locales/ar.json            edited by hand
   compiled-locales/          generated: npm run i18n:compile (--ast); not committed
   scripts/                   the checks' logic (see checks/local/README.md) and the ESLint self-test
 ```
@@ -31,7 +39,34 @@ npm run dev        # Vite on :5173; /api/* is forwarded to Api (API_URL, default
 npm test           # vitest (jsdom)
 npm run lint
 npm run build      # dist/
+npm run e2e        # Playwright against a running Api serving dist/ (E2E_BASE_URL, default http://127.0.0.1:5080)
 ```
+
+The E2E tests sign in as the seed contract's users (passwords from `Seed:PasswordFormat`, as Conformance) and reach
+the database as migrator for their fixtures (`ConnectionStrings__migrator`), restoring what they change. CI runs them
+after Conformance, against the Api container. Locally: an Api with `Web__Root` pointing at `dist/`, and
+`PW_CHROMIUM_PATH` if Chromium is installed elsewhere.
+
+## Routing and the session
+
+- **react-router** (library mode: `BrowserRouter`, `Routes`): the simplest router that gives deep links and history.
+- **Paths:** `/login`, `/organizations`, and the organization's screens under `/app/` (`/app/subscriptions`). An
+  interface path never equals an API path: Api serves `index.html` only for a page no API route matches, so a reload of
+  `/subscriptions` would be the API's JSON (OPEN_ITEMS 37).
+- **The session** is the HTTP-only cookie and `GET /me` — nothing in `localStorage` or `sessionStorage` (the `lang`
+  cookie aside). After signing in: no active membership → a status screen with "Sign out"; one → entered directly; more
+  → the selection. Only active memberships in active organizations count.
+- **Switching or leaving an organization:** the state changes first, so the organization's subtree (keyed by it) is gone
+  in the same render, and every request in flight is aborted. There is no data cache beyond that subtree's state. A
+  switch then calls `POST /tenants/deselect` (the cookie keeps the user alone) before the selection shows, so a reload
+  never re-enters the previous organization.
+- **An ended session** (any 401 but login's — expiry, or Api restarted, OPEN_ITEMS 18): the login screen with a
+  message and the way back (`?next=`, internal paths only). **A lost organization** (`/me` names none — a membership
+  disabled, an organization suspended): checked on each navigation, when the window comes back (focus, visible), and
+  when a data request is refused with `not_a_member`, `no_active_tenant` or `tenant_not_active`; everything is dropped
+  and the selection shows.
+- **Selection refusals** (`membership_scope_missing`, `step_up_required`, `tenant_not_active`, `not_a_member`, …) are
+  shown as they are, focused, and the screen stays. The client reads the code of a 500 too.
 
 `dev`, `build`, `typecheck` and `test` compile the messages first.
 
