@@ -23,14 +23,17 @@ export interface TenantChoice {
 export type SessionState =
   | { status: 'loading' }
   | { status: 'anonymous'; reason: 'none' | 'expired' | 'signedOut' }
-  | { status: 'authenticated'; username: string; activeTenant: MeTenant | null };
+  | { status: 'authenticated'; username: string; activeTenant: MeTenant | null; leaving?: boolean };
 
 interface SessionValue {
   state: SessionState;
   signIn: (username: string, password: string) => Promise<void>;
   selectTenant: (tenantId: string) => Promise<void>;
-  /** Back to the tenant selection: everything shown for the current tenant is dropped first. */
-  switchTenant: () => void;
+  /**
+   * Back to the tenant selection: everything shown for the current tenant is dropped first, then the API forgets the
+   * tenant (POST /tenants/deselect), so a reload cannot enter it again. Resolves when the selection can show.
+   */
+  switchTenant: () => Promise<void>;
   signOut: () => Promise<void>;
   /** Asks the API again; a tenant the user can no longer enter sends the interface back to the selection. */
   revalidate: () => Promise<void>;
@@ -109,9 +112,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [load],
   );
 
-  const switchTenant = useCallback(() => {
+  const switchTenant = useCallback(async () => {
     abortAll();
-    setState((current) => (current.status === 'authenticated' ? { ...current, activeTenant: null } : current));
+    setState((current) => (current.status === 'authenticated' ? { ...current, activeTenant: null, leaving: true } : current));
+    try {
+      await request<void>('POST', '/tenants/deselect');
+    } finally {
+      setState((current) => (current.status === 'authenticated' ? { ...current, leaving: false } : current));
+    }
   }, []);
 
   const signOut = useCallback(async () => {

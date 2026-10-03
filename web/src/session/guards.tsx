@@ -36,6 +36,8 @@ export function RequireTenant() {
   const { state } = useSession();
   const location = useLocation();
   if (state.status !== 'authenticated') return null;
+  // Switching: the tenant's screens are already gone; the selection shows once the API has forgotten the tenant.
+  if (!state.activeTenant && state.leaving) return <LoadingScreen />;
   if (!state.activeTenant) return <Navigate to={`/organizations${nextQuery(here(location))}`} replace />;
   return <TenantScope key={state.activeTenant.tenant_id} />;
 }

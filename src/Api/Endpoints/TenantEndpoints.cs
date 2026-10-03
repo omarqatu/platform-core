@@ -49,5 +49,14 @@ public static class TenantEndpoints
             await http.SignInAsync(SessionCookie.Scheme, SessionCookie.Principal(user, tenantId));
             return Results.NoContent();
         }).RequireAuthorization().WithMetadata(new OwnUnitsOfWorkAttribute());
+
+        // Leaving the active tenant without logging out (the interface's "switch organization"): the cookie is issued
+        // again with the user alone, so a reload cannot re-enter the previous tenant (OPEN_ITEMS 38, decided by the
+        // project owner). No database access; an unsafe request, so CsrfProtection applies.
+        app.MapPost("/tenants/deselect", async (HttpContext http, ISessionContextAccessor session) =>
+        {
+            await http.SignInAsync(SessionCookie.Scheme, SessionCookie.Principal(session.Current.UserId!.Value, null));
+            return Results.NoContent();
+        }).RequireAuthorization().WithMetadata(new OwnUnitsOfWorkAttribute());
     }
 }

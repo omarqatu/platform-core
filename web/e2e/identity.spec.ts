@@ -73,7 +73,7 @@ test('3. sign out: then any protected page leads to the login screen', async ({ 
     await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
   }
   // The server agrees: the cookie is gone.
-  expect((await page.request.get('/me')).status()).toBe(401);
+  expect((await page.request.get('/api/me')).status()).toBe(401);
 });
 
 test('4. one membership: entered straight away', async ({ page }) => {
@@ -138,4 +138,20 @@ test('6. a membership disabled during the session: /me names no organization, ev
   } finally {
     await asMigrator((db) => db.query("UPDATE memberships SET status = 'active' WHERE id = $1", [own.membershipId]));
   }
+});
+
+test('7. switch, then reload: the selection — never the previous organization (OPEN_ITEMS 38)', async ({ page }) => {
+  await signIn(page, 'omar', passwordOf('omar'));
+  await page.getByRole('button', { name: 'Al-Amin' }).click();
+  await expect(page.getByRole('cell', { name: 'A service 1', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Switch organization' }).click();
+  await expect(page.getByRole('heading', { name: 'Choose an organization' })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Choose an organization' })).toBeVisible();
+  await expect(page.getByTestId('identity-organization')).toHaveText('None chosen');
+  await expect(page.getByRole('cell', { name: AL_AMIN_ROW })).toHaveCount(0);
+  // The API agrees: the session has no active organization.
+  expect((await (await page.request.get('/api/me')).json()).active_tenant).toBeNull();
 });

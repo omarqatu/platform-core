@@ -24,6 +24,11 @@ function fakeApi(options: { me?: typeof A | null; signedIn?: boolean; tenants?: 
     calls.push({ method, path, headers: (init?.headers ?? {}) as Record<string, string> });
     const override = overrides.get(`${method} ${path.split('?')[0]}`);
     if (override) return override();
+    if (method === 'POST' && path === '/tenants/deselect') {
+      if (!state.signedIn) return new Response(null, { status: 401 });
+      state.active = null;
+      return new Response(null, { status: 204 });
+    }
     if (method === 'POST' && path === '/auth/logout') {
       state.signedIn = false;
       return new Response(null, { status: 204 });
@@ -75,8 +80,8 @@ const cells = () => screen.queryAllByRole('cell').map((c) => c.textContent);
 afterEach(() => vi.unstubAllGlobals());
 
 describe('switching the organization', () => {
-  it('drops everything shown for the previous one before the selection appears', async () => {
-    fakeApi();
+  it('drops everything shown for the previous one, deselects it in the API, then shows the selection', async () => {
+    const api = fakeApi();
     renderApp('/app/subscriptions');
     await screen.findByText('Al-Amin row 0');
 
@@ -93,10 +98,18 @@ describe('switching the organization', () => {
 
     act(() => screen.getByRole('button', { name: 'Switch organization' }).click());
 
-    // In the same render as the click: not one row of Al-Amin, and the selection screen.
+    // In the same render as the click: not one row of Al-Amin.
     expect(cells().some((c) => c?.startsWith('Al-Amin'))).toBe(false);
     expect(screen.queryByRole('table')).toBeNull();
+
+    // The selection shows once the API has forgotten the tenant: deselect comes before the selection's first request.
+    await screen.findByRole('heading', { name: 'Choose an organization' });
     expect(probe.location.startsWith('/organizations')).toBe(true);
+    const deselect = api.calls.findIndex((c) => c.method === 'POST' && c.path === '/tenants/deselect');
+    const listed = api.calls.findIndex((c, i) => i > 0 && c.path === '/tenants' && api.calls.slice(0, i).some((p) => p.path.startsWith('/subscriptions')));
+    expect(deselect).toBeGreaterThan(-1);
+    expect(deselect).toBeLessThan(listed);
+    expect(api.calls[deselect]!.headers['X-Requested-With']).toBe('platform-web');
 
     fireEvent.click(await screen.findByRole('button', { name: /Maan/ }));
     await screen.findByText('Maan row 0');

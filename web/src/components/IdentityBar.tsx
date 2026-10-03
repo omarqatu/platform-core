@@ -13,9 +13,13 @@ export function IdentityBar() {
   const { username, activeTenant } = useAuthenticated();
   const [leaving, setLeaving] = useState(false);
 
-  const onSwitch = () => {
-    switchTenant(); // the tenant's screens are gone before the selection shows
-    navigate('/organizations');
+  // The tenant's screens are gone at once; the selection shows after the API has forgotten the tenant (deselect).
+  const onSwitch = async () => {
+    try {
+      await switchTenant();
+    } finally {
+      navigate('/organizations');
+    }
   };
   const onSignOut = async () => {
     setLeaving(true);

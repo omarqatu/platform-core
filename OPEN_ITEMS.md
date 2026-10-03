@@ -53,6 +53,12 @@ Closed by the CSRF PR:
   fallback) and it carries `X-Requested-With: platform-web`: 403 `csrf_rejected`, before routing and any database
   command. Conformance `CsrfTests` [B]; `CsrfNoDatabaseCommandTests` [W].
 
+Closed by the identity screens PR:
+- **38.** "Switch organization", then a reload, no longer returns to the previous organization: `POST
+  /tenants/deselect` (the owner's decision) issues the cookie again with the user alone — no database command, CSRF
+  applies — and the interface calls it before showing the selection. Conformance `Deselect_*`, WhiteBox
+  `SessionEndpointCommandTests`, E2E 7.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -129,21 +135,18 @@ Closed by the CSRF PR:
 - **When needed:** server-side revocation — a session id or a security stamp in the cookie, checked on every request
   against a store (and a "log out everywhere"). Not built.
 
-### 37. The API and the interface share one path space
+### 37. The API and the interface share one path space — decided: the API under /api only
 
-- **Origin:** the identity screens. Api routes sit at the root (`/subscriptions`, `/tenants`, `/me`, …); the interface
-  is served for a page no route matches (WebInterface). An interface path equal to an API path would be the API's on a
-  reload: the T8 screen's first path, `/subscriptions`, was exactly that (found by the E2E deep-link reload). The
-  interface now keeps its screens under `/app/` (plus `/login`, `/organizations`), which no API route uses.
-- **The decision:** keep the convention, or move the API's routes under `/api` on the server (today only a prefix the
-  interface adds and Api strips) — a change of every route, so of the Conformance base paths.
-
-### 38. "Switch organization", then a reload, returns to the previous organization
-
-- **Origin:** the identity screens. Switching clears the interface and shows the selection, but the cookie still holds
-  the previous tenant until another is selected: a reload at that moment asks `/me`, which names it, and the interface
-  enters it again. Nothing of another tenant is shown; it is only a surprise.
-- **If it matters:** an endpoint that clears the active tenant from the cookie (a new endpoint: the owner's approval).
+- **Origin:** the identity screens. Api's routes sit at the root (`/subscriptions`, `/tenants`, `/me`, …), and since
+  #11 every one also answers under `/api` (WebInterface strips the prefix) — the double path; the interface is served
+  for a page no route matches. An interface path equal to an API path is the API's on a reload: the T8 screen's first
+  path, `/subscriptions`, was exactly that (found by the E2E deep-link reload). For now the interface keeps its screens
+  under `/app/` (plus `/login`, `/organizations`).
+- **Decided by the project owner:** the API lives under `/api` only — the bare routes are removed; the Conformance and
+  white-box harnesses move their base path to `/api` (configuration only, no expectation changes); the interface stays
+  under `/app/`. This also closes the double path introduced in #11 (`/api/x` and `/x` both answering), which had no
+  number of its own.
+- **Not built here:** a later task.
 
 ## For the real subscriptions module — outside the proof
 

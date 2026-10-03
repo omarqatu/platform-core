@@ -57,7 +57,9 @@ after Conformance, against the Api container. Locally: an Api with `Web__Root` p
   cookie aside). After signing in: no active membership → a status screen with "Sign out"; one → entered directly; more
   → the selection. Only active memberships in active organizations count.
 - **Switching or leaving an organization:** the state changes first, so the organization's subtree (keyed by it) is gone
-  in the same render, and every request in flight is aborted. There is no data cache beyond that subtree's state.
+  in the same render, and every request in flight is aborted. There is no data cache beyond that subtree's state. A
+  switch then calls `POST /tenants/deselect` (the cookie keeps the user alone) before the selection shows, so a reload
+  never re-enters the previous organization.
 - **An ended session** (any 401 but login's — expiry, or Api restarted, OPEN_ITEMS 18): the login screen with a
   message and the way back (`?next=`, internal paths only). **A lost organization** (`/me` names none — a membership
   disabled, an organization suspended): checked on each navigation, when the window comes back (focus, visible), and

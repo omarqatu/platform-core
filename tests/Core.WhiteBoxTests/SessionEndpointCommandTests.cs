@@ -13,13 +13,13 @@ namespace Core.WhiteBoxTests;
 
 // The session endpoints of the identity screens [W] (approved by the project owner with them): GET /me runs on the
 // tenant-selection path — app.user_id alone, even with a tenant in the cookie: no app.tenant_id, no second-axis
-// variable (T3.7) — and POST /auth/logout sends no database command at all. Api hosted in-process, the command
-// recorder on all four of its contexts.
+// variable (T3.7) — and POST /tenants/deselect and POST /auth/logout send no database command at all. Api hosted
+// in-process, the command recorder on all four of its contexts.
 [Collection(WhiteBoxCollection.Name)]
 public class SessionEndpointCommandTests(WhiteBoxFixture fixture)
 {
     [Fact]
-    public Task Me_SetsUserIdAlone_EvenWithATenantSelected_AndLogout_SendsNoCommand() => InProcessApi.WithoutMigratorVariableAsync(async () =>
+    public Task Me_SetsUserIdAlone_EvenWithATenantSelected_DeselectAndLogout_SendNoCommand() => InProcessApi.WithoutMigratorVariableAsync(async () =>
     {
         var recorder = new CommandRecorder();
         await using var api = InProcessApi.Create().WithWebHostBuilder(web => web.ConfigureServices(services =>
@@ -41,6 +41,13 @@ public class SessionEndpointCommandTests(WhiteBoxFixture fixture)
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
         Assert.Equal([$"SET LOCAL app.user_id = '{omar}'"], recorder.Commands.Where(c => c.Contains("SET LOCAL")).ToList());
         Assert.DoesNotContain(recorder.Commands, c => c.Contains("app.tenant_id") || c.Contains("app.membership_id"));
+
+        // Deselect: a new cookie with the user alone, and not one command.
+        recorder.Clear();
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync("/tenants/deselect", null)).StatusCode);
+        Assert.Empty(recorder.Commands);
+        var after = await client.GetFromJsonAsync<System.Text.Json.JsonElement>("/me");
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, after.GetProperty("active_tenant").ValueKind);
 
         recorder.Clear();
         Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync("/auth/logout", null)).StatusCode);
