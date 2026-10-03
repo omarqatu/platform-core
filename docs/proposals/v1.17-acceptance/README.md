@@ -1,12 +1,41 @@
 # Proposal for PLATFORM_CORE v1.17: acceptance with an existing account, enforced in the database
 
-**Status:** a draft for the project owner (phase A of the acceptance task) — **two variants, the owner decides.** **Not built.** Nothing here enters `src/`
-or `Migrations/` until the owner approves it and the document text is issued.
+**Status:** decided by the project owner — **option C**; the draft and alternative B are **rejected** (below). This
+directory stays as the record of what was tried and why; its scripts run against a database by hand
+(`run.sh draft|altb`) — the probe's workflow was removed before the build.
 **Base:** PLATFORM_CORE v1.16 (frozen), PROOF_SPEC v1.3, `main` at the merge of #14.
 **The text under test:** the six conditions of the owner's §3.10 addition (acceptance by a signed-in user of an
 invitation to another tenant) and its closing paragraph (with no session, an email that has an account cannot register
 again). The task referred to the text as attached; it was not attached, so the probe tests the conditions as the
 owner wrote them in the previous message.
+
+## The decision — option C
+
+**Adopted (C):**
+1. The email match stays the **application's** (§4.5), **normalized** — surrounding spaces removed and case unified,
+   under the same rule as P3 (`lower(btrim(…))`) — on **every** acceptance path: a new account, a return, an existing
+   account.
+2. **P3 is adopted:** one person per normalized address (`persons_email_normalized_key`, migration 0009). On
+   PostgreSQL 18, P3 alone breaks no existing test (run 37139863515, below).
+3. **P4 is not adopted:** OPEN_ITEMS 39 (no membership without its scope in the database, with new setup for
+   `T3_8_Test18` and `T3_Test26`).
+4. **No new chain, no bootstrap change, no function, no new column.** Acceptance by an existing account goes through
+   path 3b as it is: the provisioner on its own connection. Any new grant or policy goes back to the owner first.
+5. **The race:** consuming the token is a critical write under the rows-affected guard (§3.5/5) — of two concurrent
+   acceptances one succeeds — proven by test.
+
+**Rejected — the draft (P1, P1b, P2, P4):** it puts the match in the database on every path, at the price of three
+rewritten policies, a fourth, and **two new chains** against §3.9's "no new chains"; and it changes **the bootstrap**
+(§4.4: a founding invitation, `INSERT` on `invitations` for the provisioner) — the whole draft broke bootstrap, and
+with it 34 existing tests, until the code changed.
+
+**Rejected — alternative B (one `SECURITY DEFINER` function):** it keeps §3.9 and the bootstrap, but the function is
+owned by `migrator` and so runs with `BYPASSRLS` reached from application code, against §3.4's condition (1); and it
+writes `audit_log` itself, a **fourth writer** outside the interceptor, against §7. It also covers only the
+existing-account path.
+
+**If the database must one day enforce the match:** OPEN_ITEMS 40 — a function owned by a role without `BYPASSRLS`,
+whose writes pass through the audit interceptor; not either variant tried here.
 
 ## The mechanism
 
@@ -58,7 +87,9 @@ active or disabled → `23505`. Then the token consumed, and one `audit_log` ent
   result but for P3's), plus G1–G18 through the function (as `app_user`, and as the roles that must not execute it),
   R5 (two acceptances through the function at once), and `effects.sh`: what the function committed, read back as
   `migrator` — not what it reports. Each variant on its own database (`run.sh draft|altb`).
-- **Where:** PostgreSQL 18 in GitHub Actions (`.github/workflows/probe-v1-17-acceptance.yml`) — the reference. The
+- **Where:** PostgreSQL 18 in GitHub Actions — the reference — through a probe workflow on the task's branch, removed
+  before the build was proposed (it ran `run.sh draft|altb`, `checks-draft.sh` / `checks-altb.sh`, and the existing
+  suites on each variant). The
   harness was developed against a local PostgreSQL 16, which proves the scripts, not the result.
 
 ## Results — PostgreSQL 18.6, run 37139263296
@@ -94,6 +125,7 @@ all ten pass, each fails on its plant.
 | Draft P3 + P4 | 84/85 | 143/144 | `T3_Test26…ResolverThrows`, `T3_8_Test18…LoudAtTenantSelection` — their setup commits a membership without its scope (P4: `23514`) |
 | Draft whole | 82/85 | 112/144 | the two above; and bootstrap refused (`42501` on `memberships`: no founding invitation yet) — `T4_9`, `T4_10`, and 31 conformance tests whose setup bootstraps a tenant (`Expected: Created`). Phase B's code must change bootstrap and acceptance; not measured past that. |
 | B (P3 + function) | 85/85 | 144/144 | none |
+| **P3 alone** (option C; run 37139863515) | **85/85** | **144/144** | **none** |
 
 ## Draft and B side by side
 
