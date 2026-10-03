@@ -128,6 +128,11 @@ Closed by the API-path PR:
 - **If wanted:** the role and the scope mode of each membership, read on the same path. Each needs its own decision:
   under app.user_id alone the roles and `membership_scope` of other tenants are not visible today (the policies are
   per tenant), so showing them means a new read path, reviewed like T3.7.
+- **The same gap on the acceptance screen** (invitation acceptance, decided by the project owner):
+  `/app/invitations/accept` names neither the inviting organization nor the role offered — nothing read before
+  accepting returns them, and `POST /invitations/accept` answers 204 with no body. Showing them means a read of the
+  invitation by its token before acceptance (or a body on the 204, which existing tests assert), decided with the
+  selection's.
 
 ### 35. No step-up path in the interface
 
@@ -203,6 +208,10 @@ Closed by the API-path PR:
   are enough" (§3.10, acceptance with no account) falls: a manager holding the token could accept in the invitee's
   name — creating the account with the invitee's email — and bring someone into the tenant without their consent.
   The lifetime also becomes a decision of the document.
+- **The link the email carries** (invitation acceptance, decided by the project owner): the token in the
+  **fragment**, never the query string — `/app/invitations/accept#tenant=<tenant id>&token=<token>` — as the
+  acceptance screen is built: a fragment reaches no server log and no referrer, and the interface takes it out of the
+  address before anything renders (`web/src/invitations/pendingInvitation.ts`).
 
 ### 16. Login attempt limiting (§4.3-a/2)
 
