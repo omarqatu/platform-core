@@ -4,10 +4,12 @@
 # race is torn down after it (teardown.sql + fixtures.sql). "assert" is what the application does after consuming the
 # token (CriticalWrite: zero rows → loud); "raw" is the same without it — what the database alone guarantees.
 #
-# Usage: races.sh baseline|draft     (PSQL_AS as in cases.sh)
+# R5 is alternative B: the same token through accept_invitation() twice at once (app_user, app.user_id alone).
+#
+# Usage: races.sh baseline|draft|altb    (PSQL_AS as in cases.sh)
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
-phase="${1:?baseline|draft}"
+phase="${1:?baseline|draft|altb}"
 psql_as="${PSQL_AS:-docker compose exec -T postgres psql -d platform -U}"
 P=0b000000-0000-7000-8000-000000000001; INV=0b000000-0000-7000-8000-000000000501
 pass=0; fail=0
@@ -40,6 +42,21 @@ SQL
   if grep -q 'ERROR:' <<< "$out"; then grep -oE 'ERROR: +[0-9A-Z]{5}' <<< "$out" | head -1 | awk '{print "error=" $2}'; else echo COMMITTED; fi
 }
 
+# accept_fn <user>: one acceptance through alternative B's function, holding the transaction 2 s after it.
+accept_fn() {
+  local out
+  out="$($psql_as app_user -X -A -t -v ON_ERROR_STOP=1 2>&1 <<SQL
+\set VERBOSITY sqlstate
+BEGIN;
+SET LOCAL app.user_id = '$1';
+SELECT * FROM public.accept_invitation('$P', 'tok-501');
+SELECT pg_sleep(2);
+COMMIT;
+SQL
+)"
+  if grep -q 'ERROR:' <<< "$out"; then grep -oE 'ERROR: +[0-9A-Z]{5}' <<< "$out" | head -1 | awk '{print "error=" $2}'; else echo COMMITTED; fi
+}
+
 # race <id> <user1> <user2> <mode> <expected committed memberships for INV's address> <what>
 race() {
   local id="$1" u1="$2" u2="$3" mode="$4" expected="$5" what="$6" r1 r2 got status
@@ -48,7 +65,11 @@ race() {
       got="setup refused: $(grep -oE 'ERROR: +[^ ]+.*' <<< "$setup_out" | head -1)"
       if [ "$expected" = "setup-refused" ]; then pass=$((pass + 1)); status=PASS; else fail=$((fail + 1)); status=FAIL; fi
       printf '%s  %-4s expected %-14s got %s — %s\n' "$status" "$id" "$expected" "$got" "$what"; return; fi; }
-  ( accept "$u1" "$mode" > /tmp/race1 ) & ( sleep 0.3; accept "$u2" "$mode" > /tmp/race2 ) & wait
+  if [ "$mode" = function ]; then
+    ( accept_fn "$u1" > /tmp/race1 ) & ( sleep 0.3; accept_fn "$u2" > /tmp/race2 ) & wait
+  else
+    ( accept "$u1" "$mode" > /tmp/race1 ) & ( sleep 0.3; accept "$u2" "$mode" > /tmp/race2 ) & wait
+  fi
   r1="$(cat /tmp/race1)"; r2="$(cat /tmp/race2)"
   got="$(q "SELECT count(*) FROM memberships m WHERE m.tenant_id = '$P' AND m.user_id IN ('$u1', '$u2') AND m.created_at > now() - interval '1 minute'")"
   if [ "$got" = "$expected" ]; then pass=$((pass + 1)); status=PASS; else fail=$((fail + 1)); status=FAIL; fi
@@ -69,6 +90,7 @@ else
   SETUP="$TWIN" race R3 $M1 $M2 assert setup-refused "the same token, two persons with the same address in another case"
   SETUP="$TWIN" race R4 $M1 $M2 raw    setup-refused "the same token, two persons with the same address in another case (no application check)"
 fi
+SETUP="" race R5 $M1 $M1 function "$([ "$phase" = altb ] && echo 1 || echo 0)" "the same token, the same user, twice at once through accept_invitation() (B; absent before it)"
 reset
 echo "== races, $phase: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

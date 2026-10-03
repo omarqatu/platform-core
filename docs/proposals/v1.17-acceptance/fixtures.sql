@@ -1,5 +1,6 @@
 -- The probe's fixtures, committed as migrator: one organization of its own ("Probe", P) and persons on probe.test.
--- Everything is removed by teardown.sql. Ids are fixed, so the cases can name them.
+-- Everything is removed by teardown.sql. Ids are fixed, so the cases can name them. Each invitation's token is
+-- 'tok-<its last three digits>' (token_hash: its SHA-256 in hex, as InvitationToken.Hash computes it).
 --   matcher   — no membership; a pending invitation for '  Match@Probe.TEST ' (case and spaces differ)
 --   stranger  — no membership; their OWN pending invitation (stranger@probe.test) — the P2 case
 --   stranger2 — no membership, no invitation
@@ -38,10 +39,10 @@ INSERT INTO membership_scope (id, tenant_id, membership_id, scope_mode)
   FROM memberships m WHERE m.tenant_id = '0b000000-0000-7000-8000-000000000001';
 
 INSERT INTO invitations (id, tenant_id, email, role_id, token_hash, status, invited_by, expires_at, created_at, intended_scope_mode) VALUES
-  ('0b000000-0000-7000-8000-000000000501', '0b000000-0000-7000-8000-000000000001', '  Match@Probe.TEST ',  '0b000000-0000-7000-8000-000000000002', 'probe-501', 'pending',  '0b000000-0000-7000-8000-000000000209', now() + interval '7 days', now(), 'assigned'),
-  ('0b000000-0000-7000-8000-000000000502', '0b000000-0000-7000-8000-000000000001', 'stranger@probe.test',  '0b000000-0000-7000-8000-000000000002', 'probe-502', 'pending',  '0b000000-0000-7000-8000-000000000209', now() + interval '7 days', now(), 'assigned'),
-  ('0b000000-0000-7000-8000-000000000504', '0b000000-0000-7000-8000-000000000001', 'member@probe.test',    '0b000000-0000-7000-8000-000000000002', 'probe-504', 'pending',  '0b000000-0000-7000-8000-000000000209', now() + interval '7 days', now(), 'assigned'),
-  ('0b000000-0000-7000-8000-000000000505', '0b000000-0000-7000-8000-000000000001', 'leaver@probe.test',    '0b000000-0000-7000-8000-000000000002', 'probe-505', 'pending',  '0b000000-0000-7000-8000-000000000209', now() + interval '7 days', now(), 'assigned'),
-  ('0b000000-0000-7000-8000-000000000507', '0b000000-0000-7000-8000-000000000001', 'expired@probe.test',   '0b000000-0000-7000-8000-000000000002', 'probe-507', 'pending',  '0b000000-0000-7000-8000-000000000209', now() - interval '1 day',  now() - interval '8 days', 'assigned'),
-  ('0b000000-0000-7000-8000-000000000508', '0b000000-0000-7000-8000-000000000001', 'done@probe.test',      '0b000000-0000-7000-8000-000000000002', 'probe-508', 'accepted', '0b000000-0000-7000-8000-000000000209', now() + interval '7 days', now(), 'assigned');
+  ('0b000000-0000-7000-8000-000000000501', '0b000000-0000-7000-8000-000000000001', '  Match@Probe.TEST ',  '0b000000-0000-7000-8000-000000000002', encode(sha256(convert_to('tok-501', 'UTF8')), 'hex'), 'pending',  '0b000000-0000-7000-8000-000000000209', now() + interval '7 days', now(), 'assigned'),
+  ('0b000000-0000-7000-8000-000000000502', '0b000000-0000-7000-8000-000000000001', 'stranger@probe.test',  '0b000000-0000-7000-8000-000000000002', encode(sha256(convert_to('tok-502', 'UTF8')), 'hex'), 'pending',  '0b000000-0000-7000-8000-000000000209', now() + interval '7 days', now(), 'assigned'),
+  ('0b000000-0000-7000-8000-000000000504', '0b000000-0000-7000-8000-000000000001', 'member@probe.test',    '0b000000-0000-7000-8000-000000000002', encode(sha256(convert_to('tok-504', 'UTF8')), 'hex'), 'pending',  '0b000000-0000-7000-8000-000000000209', now() + interval '7 days', now(), 'assigned'),
+  ('0b000000-0000-7000-8000-000000000505', '0b000000-0000-7000-8000-000000000001', 'leaver@probe.test',    '0b000000-0000-7000-8000-000000000002', encode(sha256(convert_to('tok-505', 'UTF8')), 'hex'), 'pending',  '0b000000-0000-7000-8000-000000000209', now() + interval '7 days', now(), 'assigned'),
+  ('0b000000-0000-7000-8000-000000000507', '0b000000-0000-7000-8000-000000000001', 'expired@probe.test',   '0b000000-0000-7000-8000-000000000002', encode(sha256(convert_to('tok-507', 'UTF8')), 'hex'), 'pending',  '0b000000-0000-7000-8000-000000000209', now() - interval '1 day',  now() - interval '8 days', 'assigned'),
+  ('0b000000-0000-7000-8000-000000000508', '0b000000-0000-7000-8000-000000000001', 'done@probe.test',      '0b000000-0000-7000-8000-000000000002', encode(sha256(convert_to('tok-508', 'UTF8')), 'hex'), 'accepted', '0b000000-0000-7000-8000-000000000209', now() + interval '7 days', now(), 'assigned');
 COMMIT;
