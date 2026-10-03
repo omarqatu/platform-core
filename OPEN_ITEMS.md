@@ -58,6 +58,59 @@ Closed by the T5 PR:
 - **Not fixed in T8** (the spec). **The decision:** a materialized assignment table, or a `SECURITY DEFINER` function
   for `client_scope` (§4.8, 13-i) — or a measurement on a dedicated database host first; the threshold itself stays.
 
+## From the i18n task — the web interface (web/)
+
+### 28. CSRF: the SPA's state-changing requests rest on SameSite=Strict alone
+
+- **Origin:** i18n task (the SPA is served same-origin by Api, with the session cookie).
+- **What protects them now:** the session cookie is `HttpOnly`, `SameSite=Strict` — a browser sends it on no request
+  started by another site. Endpoints that bind a JSON body also need `Content-Type: application/json`, which a form
+  cannot send and a cross-origin script cannot send without a CORS preflight (no CORS is configured). There is no
+  antiforgery token and no `Origin`/`Sec-Fetch-Site` check.
+- **The gap:** `SameSite` is per *site*, not per origin: a page on a sibling subdomain of the same registrable domain
+  is same-site. The endpoints with no body are reachable by a plain form POST from there — `POST /me/leave`,
+  `POST /tenants/{id}/select`, `POST /members/invitations/{id}/revoke`.
+- **Proposal (not built here):** one middleware refusing an unsafe method (POST, PUT, PATCH, DELETE) whose
+  `Sec-Fetch-Site` is present and not `same-origin`, or whose `Origin` is present and not Api's own — or ASP.NET Core
+  antiforgery with the token in a header. Either way a Conformance test per bodyless endpoint.
+
+### 29. Two T8 screens: the original server-rendered one stays outside i18n
+
+- **Origin:** i18n task, decided by the project owner: `SubscriptionScreen.cs` (`GET /subscriptions/screen`) is part
+  of a merged proof (T8.2) and is not edited.
+- **Now:** the server screen stays Arabic-only, its text in C#; it keeps the one API error code written as a literal
+  in `src/` (`no_active_tenant`, the same value as `ApiErrorCodes.NoActiveTenant`), allowlisted by name in
+  `checks/local/api-error-codes-literal-allowlist.txt`. The React screen (`web/src/screens/subscriptions`) is the
+  i18n proof, from `GET /subscriptions` and `GET /subscriptions/clients`.
+- **The decision:** retire the server screen and restate T8.2 against the React screen (a browser test, or the
+  component tests as they are) — or keep both.
+
+### 30. The unified view's per-tenant statuses are not in ApiErrorCodes
+
+- **Origin:** i18n task. `GET /unified/subscriptions` declares each tenant's `status`: `ok`, `not_permitted`,
+  `failed`, `exhausted`. These are statuses in a successful response, not error bodies, so `ApiErrorCodes` (and the
+  `check-api-error-codes` list) does not hold them — except `not_permitted`, which is the same refusal and now uses
+  the constant (`TenantFanOut`).
+- **When the unified screen is built:** a second source (e.g. `TenantStatuses`), exported and checked like the
+  error codes, with its messages in the interface.
+
+### 31. The React T8 screen: order, and client names past 200
+
+- **Origin:** i18n task, which changes no API behaviour.
+- **Order:** `GET /subscriptions` pages by id; the server screen orders by `ends_on`. The React screen shows the API's
+  order: sorting one page on the client would misorder across pages.
+- **Client names:** joined from `GET /subscriptions/clients?limit=200` (the API's maximum page). A subscription
+  whose client is past the first 200 shows "Not shown". **For the real module:** the client's name on the
+  subscription item, or a sort parameter — an API change, decided there.
+
+### 32. The initial language does not read Accept-Language on the server
+
+- **Origin:** i18n task. The SPA has no server render, so it reads `navigator.languages` — the list the browser sends
+  as `Accept-Language` — after the `lang` cookie and before the Arabic default. The result is the same for a
+  browser; only a server-side choice (Api writing `lang`/`dir` into `index.html` before the first paint) would differ,
+  and it would avoid one frame in the default direction when the cookie is absent and the browser prefers English.
+  Not needed now.
+
 ## For the real subscriptions module — outside the proof
 
 ### 25. Module activation per tenant is not checked

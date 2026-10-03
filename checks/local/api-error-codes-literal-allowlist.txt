@@ -1,0 +1,6 @@
+# Files under src/ that may write an API error code as a string literal instead of ApiErrorCodes (a path under src/,
+# one per line). Each is a project-owner decision.
+#
+# The original T8 screen is part of a merged proof and is not edited (project owner, i18n task): its one
+# "no_active_tenant" stays a literal. The value is identical to ApiErrorCodes.NoActiveTenant.
+Modules.Subscriptions/SubscriptionScreen.cs
