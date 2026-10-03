@@ -7,9 +7,9 @@ import { RequireAuth, RequireTenant } from './session/guards';
 
 /**
  * The interface's paths. /login is open; /organizations needs a session; the organization's screens live under /app/,
- * one subtree per organization (RequireTenant). Anything else is "not found". No interface path is an API path: Api
- * serves index.html only for a page no API route matches (WebInterface), so /subscriptions would be the API's list,
- * not this screen, on a reload (OPEN_ITEMS 37).
+ * one subtree per organization (RequireTenant). Anything else is "not found". The API lives under /api only, and Api
+ * serves index.html for any other page no route matches (WebInterface) — except the original T8 screen
+ * (/subscriptions/screen), the one server-rendered page, which the interface never uses.
  */
 export function App() {
   return (

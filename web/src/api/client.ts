@@ -35,7 +35,7 @@ export function abortAll() {
   generation = new AbortController();
 }
 
-/** The one way to reach the API: same-origin under /api (Vite forwards it in development), the session cookie included. */
+/** The one way to reach the API: same-origin, under /api (where every API route lives), the session cookie included. */
 export async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json', ...REQUESTED_WITH };
   if (body !== undefined) headers['Content-Type'] = 'application/json';

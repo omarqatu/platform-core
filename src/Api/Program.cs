@@ -86,8 +86,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 var app = builder.Build();
 
-// The web interface's API prefix, then the interface itself for what no route matches (WebInterface).
-app.UseApiPrefix();
+// CSRF on every path, before routing; then the interface for what no route matches (WebInterface).
 app.UseCsrfProtection(allowedOrigins);
 app.UseRouting();
 app.UseWebInterface();
@@ -96,17 +95,22 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<UnitOfWorkMiddleware>();
 
-app.MapAuthEndpoints();
-app.MapTenantEndpoints();
-app.MapScopeEndpoints();
-app.MapMemberEndpoints();
-app.MapAuditEndpoints();
-app.MapSubscriptionEndpoints();
-app.MapUnifiedSubscriptions();
-app.MapSubscriptionScreen();
-app.MapAcceptance();
+// Every API route lives under /api, and only there (OPEN_ITEMS 37, decided by the project owner).
+var api = app.MapGroup(WebInterface.ApiPrefix);
+api.MapAuthEndpoints();
+api.MapTenantEndpoints();
+api.MapScopeEndpoints();
+api.MapMemberEndpoints();
+api.MapAuditEndpoints();
+api.MapSubscriptionEndpoints();
+api.MapUnifiedSubscriptions();
+api.MapAcceptance();
 // Bootstrap: registered in Development and CI only; in any other environment the route does not exist (T4.17).
-app.MapBootstrap(app.Environment.EnvironmentName);
+api.MapBootstrap(app.Environment.EnvironmentName);
+
+// The one route outside /api and the interface: the original T8 screen, part of a merged proof (PROOF_SPEC T8.2),
+// kept at its path and never edited (WebInterface.ServerRenderedScreens).
+app.MapSubscriptionScreen();
 
 app.Lifetime.ApplicationStopped.Register(authenticatorDataSource.Dispose);
 app.Lifetime.ApplicationStopped.Register(provisionerDataSource.Dispose);

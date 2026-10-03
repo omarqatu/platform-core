@@ -42,11 +42,11 @@ public class CsrfNoDatabaseCommandTests(WhiteBoxFixture fixture)
         using var bare = api.Server.CreateClient();
 
         // The control: with both headers, a tenant selection runs its commands.
-        var login = await client.PostAsJsonAsync("/auth/login", Omar);
+        var login = await client.PostAsJsonAsync("/api/auth/login", Omar);
         Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
         var session = Assert.Single(login.Headers.GetValues("Set-Cookie"), h => h.StartsWith("session=")).Split(';')[0];
         var tenant = await AlAminAsync();
-        using (var select = Request(HttpMethod.Post, $"/tenants/{tenant}/select", session))
+        using (var select = Request(HttpMethod.Post, $"/api/tenants/{tenant}/select", session))
         {
             recorder.Clear();
             Assert.Equal(HttpStatusCode.NoContent, (await client.SendAsync(select)).StatusCode);
@@ -69,19 +69,19 @@ public class CsrfNoDatabaseCommandTests(WhiteBoxFixture fixture)
     private static IEnumerable<HttpRequestMessage> Refused(Guid tenant, string session)
     {
         // A login with X-Requested-With and no Origin.
-        var login = Request(HttpMethod.Post, "/auth/login");
+        var login = Request(HttpMethod.Post, "/api/auth/login");
         login.Content = JsonContent.Create(Omar);
         login.Headers.Add("X-Requested-With", "platform-web");
         yield return login;
 
         // A signed-in tenant selection from a sibling subdomain.
-        var select = Request(HttpMethod.Post, $"/tenants/{tenant}/select", session);
+        var select = Request(HttpMethod.Post, $"/api/tenants/{tenant}/select", session);
         select.Headers.Add("Origin", "https://evil.localhost");
         select.Headers.Add("X-Requested-With", "platform-web");
         yield return select;
 
         // An acceptance from the allowed Origin, with no X-Requested-With.
-        var accept = Request(HttpMethod.Post, "/invitations/accept");
+        var accept = Request(HttpMethod.Post, "/api/invitations/accept");
         accept.Content = JsonContent.Create(new { tenant_id = tenant, token = "any" });
         accept.Headers.Add("Origin", InProcessApi.Origin);
         yield return accept;

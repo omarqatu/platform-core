@@ -59,6 +59,15 @@ Closed by the identity screens PR:
   applies — and the interface calls it before showing the selection. Conformance `Deselect_*`, WhiteBox
   `SessionEndpointCommandTests`, E2E 7.
 
+Closed by the API-path PR:
+- **37.** The API lives under `/api` only (the owner's decision): every route is registered in that group; the bare
+  routes and the prefix stripping of #11 (`/api/x` and `/x` both answering — the double path, which had no number of
+  its own) are gone. A bare API path and any unknown path under `/api` are a plain 404, never `index.html`; any other
+  page path is the interface. The one documented exception is the original T8 screen, `/subscriptions/screen`
+  (`WebInterface.ServerRenderedScreens`). The Conformance harness takes its base path from configuration
+  (`Api:BasePath`, `Api:RootPaths`); the WhiteBox tests call `/api/...`. Conformance `ApiPathTests`, WhiteBox
+  `ApiRoutesTests`.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -134,19 +143,6 @@ Closed by the identity screens PR:
   expires.
 - **When needed:** server-side revocation — a session id or a security stamp in the cookie, checked on every request
   against a store (and a "log out everywhere"). Not built.
-
-### 37. The API and the interface share one path space — decided: the API under /api only
-
-- **Origin:** the identity screens. Api's routes sit at the root (`/subscriptions`, `/tenants`, `/me`, …), and since
-  #11 every one also answers under `/api` (WebInterface strips the prefix) — the double path; the interface is served
-  for a page no route matches. An interface path equal to an API path is the API's on a reload: the T8 screen's first
-  path, `/subscriptions`, was exactly that (found by the E2E deep-link reload). For now the interface keeps its screens
-  under `/app/` (plus `/login`, `/organizations`).
-- **Decided by the project owner:** the API lives under `/api` only — the bare routes are removed; the Conformance and
-  white-box harnesses move their base path to `/api` (configuration only, no expectation changes); the interface stays
-  under `/app/`. This also closes the double path introduced in #11 (`/api/x` and `/x` both answering), which had no
-  number of its own.
-- **Not built here:** a later task.
 
 ## For the real subscriptions module — outside the proof
 

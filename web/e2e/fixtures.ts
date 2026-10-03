@@ -46,7 +46,7 @@ export function api(): Promise<APIRequestContext> {
 }
 
 /**
- * An organization of the test's own, through the real path (POST /provision/tenants, registered in Development and
+ * An organization of the test's own, through the real path (POST /api/provision/tenants, registered in Development and
  * CI) — never the seed contract's. Its owner has exactly one membership, in it.
  */
 export async function ownOrganization(label: string) {
@@ -54,7 +54,7 @@ export async function ownOrganization(label: string) {
   const username = `e2e-${tag}`;
   const password = `${username}-password`;
   const context = await api();
-  const response = await context.post('/provision/tenants', {
+  const response = await context.post('/api/provision/tenants', {
     data: { tenant_name: `E2E ${tag}`, full_name: username, email: `${username}@e2e.test`, username, password },
   });
   expect(response.status()).toBe(201);

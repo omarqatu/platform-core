@@ -18,7 +18,7 @@ public class T6_UnifiedViewTests(WhiteBoxFixture fixture)
     {
         await using var api = InProcessApi.Create();
         var routes = api.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
-            .Where(e => (e.RoutePattern.RawText ?? "").TrimStart('/').StartsWith("unified", StringComparison.Ordinal))
+            .Where(e => (e.RoutePattern.RawText ?? "").StartsWith($"{Api.WebInterface.ApiPrefix}/unified", StringComparison.Ordinal))
             .ToList();
 
         Assert.NotEmpty(routes);
