@@ -154,6 +154,18 @@ Closed by the CSRF PR:
   live inside the container: a restart or a second instance invalidates every session.
 - **For production:** persist the key ring, protected at rest, shared by every Api instance.
 
+### 33. Machine clients are refused by the CSRF protection
+
+- **Origin:** the CSRF PR, decided by the project owner. `CsrfProtection` refuses every unsafe request without an
+  allowed `Origin` and `X-Requested-With: platform-web`, whoever sends it: a machine client — a cron job calling an
+  endpoint internally, an integration — sends neither, and gets 403 `csrf_rejected`. None exists today (the
+  background jobs run in the Worker, against the database, not through Api).
+- **When one is needed:** a separate authentication path — a token in a request header (e.g.
+  `Authorization: Bearer`), never the session cookie — with its own scheme and its own grants. CSRF protection stays
+  mandatory for every request that carries the session cookie: a request is exempt only because it authenticates
+  without a cookie, never by its path, its caller or a configuration switch.
+- **Not built now.**
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12
