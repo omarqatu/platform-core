@@ -11,7 +11,7 @@ export function ErrorAlert({ message, id }: { message: string | null; id?: strin
   }, [message]);
   if (!message) return null;
   return (
-    <p ref={ref} id={id} role="alert" tabIndex={-1} className="alert">
+    <p ref={ref} id={id} role="alert" tabIndex={-1} className="alert alert-danger">
       {message}
     </p>
   );

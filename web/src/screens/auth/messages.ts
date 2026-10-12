@@ -2,6 +2,12 @@ import { defineMessages } from 'react-intl';
 
 export const messages = defineMessages({
   title: { id: 'auth.login.title', defaultMessage: 'Sign in' },
+  subtitle: { id: 'auth.login.subtitle', defaultMessage: 'Welcome back. Enter your account details to continue.' },
+  brandName: { id: 'auth.login.brandName', defaultMessage: 'Platform' },
+  brandTagline: {
+    id: 'auth.login.brandTagline',
+    defaultMessage: "Your organization's clients and their subscriptions, in one place.",
+  },
   username: { id: 'auth.login.username', defaultMessage: 'Username' },
   password: { id: 'auth.login.password', defaultMessage: 'Password' },
   submit: { id: 'auth.login.submit', defaultMessage: 'Sign in' },

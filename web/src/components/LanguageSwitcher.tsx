@@ -14,8 +14,8 @@ export function LanguageSwitcher() {
   const id = useId();
   return (
     <span className="language">
-      <label htmlFor={id}>{intl.formatMessage(messages.language)}</label>
-      <select id={id} value={lang} onChange={(e) => isLang(e.target.value) && setLang(e.target.value)}>
+      <label htmlFor={id} className="form-label mb-0">{intl.formatMessage(messages.language)}</label>
+      <select id={id} className="form-select form-select-sm" value={lang} onChange={(e) => isLang(e.target.value) && setLang(e.target.value)}>
         {LANGS.map((l) => (
           <option key={l} value={l} lang={TAGS[l]}>
             {intl.formatMessage(NAMES[l])}

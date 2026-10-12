@@ -20,6 +20,7 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "bootstrap": "^5.3.8",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-intl": "^12.1.3",

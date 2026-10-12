@@ -75,9 +75,26 @@ export function SubscriptionsView({ state }: { state: State }) {
   const intl = useIntl();
   return (
     <main className="subscriptions">
-      <h1>{intl.formatMessage(messages.title)}</h1>
-      {state.status === 'loading' && <p>{intl.formatMessage(messages.loading)}</p>}
-      {state.status === 'error' && <p role="alert">{intl.formatMessage(errorMessage(state.code))}</p>}
+      <header className="page-header">
+        <span className="page-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5z" />
+            <path d="M8 9h8M8 12.5h8M8 16h5" />
+          </svg>
+        </span>
+        <h1>{intl.formatMessage(messages.title)}</h1>
+      </header>
+      {state.status === 'loading' && (
+        <div className="loading">
+          <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+          <p>{intl.formatMessage(messages.loading)}</p>
+        </div>
+      )}
+      {state.status === 'error' && (
+        <p role="alert" className="alert alert-danger">
+          {intl.formatMessage(errorMessage(state.code))}
+        </p>
+      )}
       {state.status === 'ready' && <SubscriptionsTable data={state.data} />}
     </main>
   );
@@ -89,33 +106,43 @@ function SubscriptionsTable({ data: { subscriptions, clients } }: { data: Subscr
   return (
     <>
       <Declaration subscriptions={subscriptions} clients={clients.visible_count} />
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">{intl.formatMessage(messages.columnService)}</th>
-            <th scope="col">{intl.formatMessage(messages.columnClient)}</th>
-            <th scope="col">{intl.formatMessage(messages.columnEndsOn)}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {subscriptions.items.map((s) => {
-            const client = names.get(s.client_id);
-            return (
-              <tr key={s.id}>
-                <td>
-                  <bdi dir="auto">{s.service_name}</bdi>
-                </td>
-                <td>
-                  {client === undefined ? intl.formatMessage(messages.clientUnavailable) : <bdi dir="auto">{client}</bdi>}
-                </td>
-                <td className="date">
-                  <time dateTime={s.ends_on}>{formatDay(intl.formatDate, s.ends_on)}</time>
-                </td>
+      <div className="card table-card">
+        <div className="table-responsive">
+          <table className="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th scope="col">{intl.formatMessage(messages.columnService)}</th>
+                <th scope="col">{intl.formatMessage(messages.columnClient)}</th>
+                <th scope="col">{intl.formatMessage(messages.columnEndsOn)}</th>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              {subscriptions.items.map((s) => {
+                const client = names.get(s.client_id);
+                return (
+                  <tr key={s.id}>
+                    <td className="service">
+                      <bdi dir="auto">{s.service_name}</bdi>
+                    </td>
+                    <td>
+                      {client === undefined ? (
+                        <span className="client unavailable">{intl.formatMessage(messages.clientUnavailable)}</span>
+                      ) : (
+                        <bdi dir="auto" className="client">
+                          {client}
+                        </bdi>
+                      )}
+                    </td>
+                    <td className="date">
+                      <time dateTime={s.ends_on}>{formatDay(intl.formatDate, s.ends_on)}</time>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
       {subscriptions.has_more_in_scope && (
         <p className="more">{intl.formatMessage(messages.more, { shown: subscriptions.items.length })}</p>
       )}

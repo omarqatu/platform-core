@@ -90,7 +90,7 @@ export function TenantSelectScreen() {
       <ul className="cards">
         {load.tenants.map((t) => (
           <li key={t.tenant_id}>
-            <button type="button" className="card" onClick={() => enter(t)} disabled={entering !== null} aria-busy={entering === t.tenant_id}>
+            <button type="button" className="org-card" onClick={() => enter(t)} disabled={entering !== null} aria-busy={entering === t.tenant_id}>
               <bdi dir="auto">{t.name}</bdi>
               {entering === t.tenant_id && <span className="hint">{intl.formatMessage(messages.entering)}</span>}
             </button>

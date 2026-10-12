@@ -1,9 +1,12 @@
 {
   "auth.login.accountCreated": "Your account has been created and the invitation accepted. Sign in to continue.",
+  "auth.login.brandName": "Platform",
+  "auth.login.brandTagline": "Your organization's clients and their subscriptions, in one place.",
   "auth.login.password": "Password",
   "auth.login.sessionEnded": "Your session has ended. Sign in again.",
   "auth.login.submit": "Sign in",
   "auth.login.submitting": "Signing in…",
+  "auth.login.subtitle": "Welcome back. Enter your account details to continue.",
   "auth.login.title": "Sign in",
   "auth.login.toAcceptInvitation": "Sign in to accept the invitation.",
   "auth.login.username": "Username",

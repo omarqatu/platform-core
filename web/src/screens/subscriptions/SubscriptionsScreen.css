@@ -1,31 +1,209 @@
 /* Logical properties only: the same rules lay the screen out right-to-left and left-to-right. */
 .subscriptions {
-  max-inline-size: 48rem;
+  max-inline-size: 64rem;
   margin-inline: auto;
-  padding: 1.5rem;
+  padding-block: 2rem 3rem;
+  padding-inline: 1.5rem;
+  animation: fade-in 0.35s ease-out both;
 }
 
+.subscriptions .page-header {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  margin-block-end: 1.5rem;
+}
+
+.subscriptions .page-header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.subscriptions .page-icon {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border-radius: 0.875rem;
+  color: #fff;
+  background: linear-gradient(150deg, var(--brand-500), var(--brand-700));
+  box-shadow: 0 8px 18px -8px rgb(34 116 79 / 65%);
+}
+
+.subscriptions .page-icon svg {
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.subscriptions .loading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1.25rem;
+  border-radius: var(--bs-border-radius-lg);
+  background: var(--surface);
+  color: var(--muted);
+  box-shadow: var(--shadow-sm);
+}
+
+.subscriptions .loading p {
+  margin: 0;
+}
+
+.subscriptions .loading .spinner-border {
+  color: var(--brand-600);
+}
+
+/* The scope declaration */
 .subscriptions .scope {
-  padding-block: 0.5rem;
-  padding-inline-start: 0.75rem;
-  border-inline-start: 4px solid #2f6f4e;
-  background: #eef6f1;
+  position: relative;
+  margin-block-end: 1.25rem;
+  padding-block: 0.85rem;
+  padding-inline: 3rem 1rem;
+  border: 1px solid rgb(47 138 95 / 22%);
+  border-radius: var(--bs-border-radius-lg);
+  background: var(--brand-50);
+  color: var(--brand-900);
+  line-height: 1.6;
+}
+
+/* An "i" in a disc, at the start of the line: decoration only, the text is the declaration. */
+.subscriptions .scope::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0.95rem;
+  inset-inline-start: 1rem;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  border-radius: 50%;
+  background:
+    linear-gradient(#fff, #fff) center 30% / 2px 2px no-repeat,
+    linear-gradient(#fff, #fff) center 68% / 2px 7px no-repeat,
+    var(--brand-600);
+}
+
+.subscriptions .scope[data-scope-mode='assigned'] {
+  border-color: rgb(224 161 0 / 35%);
+  background: #fff9e8;
+  color: #5c4300;
+}
+
+.subscriptions .scope[data-scope-mode='assigned']::before {
+  background-color: #b98500;
+}
+
+/* The table */
+.subscriptions .table-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--bs-border-radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .subscriptions table {
+  --bs-table-hover-bg: var(--brand-50);
   inline-size: 100%;
-  border-collapse: collapse;
-  margin-block-start: 1rem;
 }
 
 .subscriptions th,
 .subscriptions td {
   text-align: start;
-  padding-block: 0.4rem;
-  padding-inline: 0.6rem;
-  border-block-end: 1px solid #ddd;
+  padding-block: 0.85rem;
+  padding-inline: 1.25rem;
+  border-color: var(--line);
+}
+
+.subscriptions thead th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--muted);
+  background: #f8faf9;
+}
+
+.subscriptions tbody tr:last-child td {
+  border-block-end: 0;
+}
+
+.subscriptions .service {
+  font-weight: 600;
+}
+
+.subscriptions .client {
+  display: inline-block;
+  padding-block: 0.2rem;
+  padding-inline: 0.7rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--brand-700);
+  background: var(--brand-100);
+}
+
+.subscriptions .client.unavailable {
+  font-style: italic;
+  color: var(--muted);
+  background: #eef0ef;
 }
 
 .subscriptions .date {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.subscriptions .client {
+  white-space: nowrap;
+}
+
+@media (max-width: 575.98px) {
+  .subscriptions {
+    padding-block-start: 1.5rem;
+    padding-inline: 1rem;
+  }
+
+  .subscriptions th,
+  .subscriptions td {
+    padding-block: 0.75rem;
+    padding-inline: 0.75rem;
+  }
+
+  .subscriptions .date {
+    white-space: normal;
+    font-size: 0.875rem;
+  }
+}
+
+.subscriptions .more {
+  margin-block-start: 1rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subscriptions {
+    animation: none;
+  }
 }

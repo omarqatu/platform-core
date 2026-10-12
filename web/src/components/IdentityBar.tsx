@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useIntl } from 'react-intl';
-import { Link, useNavigate } from 'react-router';
+import { NavLink, useNavigate } from 'react-router';
 import { useAuthenticated, useSession } from '../session/SessionProvider';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { messages } from './messages';
@@ -48,17 +48,17 @@ export function IdentityBar() {
       </dl>
       {activeTenant && (
         <nav aria-label={intl.formatMessage(messages.navigation)}>
-          <Link to="/app/subscriptions">{intl.formatMessage(messages.subscriptions)}</Link>
+          <NavLink to="/app/subscriptions" className="nav-link">{intl.formatMessage(messages.subscriptions)}</NavLink>
         </nav>
       )}
       <div className="actions">
         <LanguageSwitcher />
         {activeTenant && (
-          <button type="button" onClick={onSwitch}>
+          <button type="button" className="btn btn-sm btn-outline-primary" onClick={onSwitch}>
             {intl.formatMessage(messages.switchOrganization)}
           </button>
         )}
-        <button type="button" onClick={onSignOut} disabled={leaving}>
+        <button type="button" className="btn btn-sm btn-primary" onClick={onSignOut} disabled={leaving}>
           {intl.formatMessage(messages.signOut)}
         </button>
       </div>
