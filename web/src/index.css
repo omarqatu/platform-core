@@ -1,9 +1,10 @@
-/* Logical properties only: the same rules lay every screen out right-to-left and left-to-right. */
+/* Logical properties only: the same rules lay every screen out right-to-left and left-to-right.
+   Colors come from the design tokens only (theme/tokens.css): every display mode and accent applies. */
 body {
   margin: 0;
-  font-family: system-ui, 'Noto Sans Arabic', sans-serif;
-  color: #1c2321;
-  background: #fafbfa;
+  font-family: var(--font-sans);
+  color: var(--text);
+  background: var(--canvas);
 }
 
 main {
@@ -21,10 +22,10 @@ select {
 button {
   padding-block: 0.4rem;
   padding-inline: 0.9rem;
-  border: 1px solid #2f6f4e;
-  border-radius: 0.375rem;
-  background: #2f6f4e;
-  color: #fff;
+  border: 1px solid var(--brand);
+  border-radius: var(--radius-sm);
+  background: var(--brand);
+  color: var(--on-brand);
   cursor: pointer;
 }
 
@@ -34,23 +35,25 @@ button:disabled {
 }
 
 :focus-visible {
-  outline: 3px solid #e0a100;
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 
 .alert {
   padding-block: 0.6rem;
   padding-inline: 0.9rem;
-  border-inline-start: 4px solid #b3261e;
-  background: #fdecea;
-  color: #7a1712;
+  border-inline-start: 4px solid var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
+/* Its own text color: the soft background stays light in dark mode. */
 .notice {
   padding-block: 0.6rem;
   padding-inline: 0.9rem;
-  border-inline-start: 4px solid #8a6d00;
-  background: #fff7d6;
+  border-inline-start: 4px solid var(--warning);
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 /* The identity bar */
@@ -61,8 +64,8 @@ button:disabled {
   gap: 0.75rem 1.5rem;
   padding-block: 0.6rem;
   padding-inline: 1.5rem;
-  border-block-end: 1px solid #d6dbd8;
-  background: #fff;
+  border-block-end: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .identity dl {
@@ -73,7 +76,7 @@ button:disabled {
 
 .identity dt {
   font-size: 0.8rem;
-  color: #5b6662;
+  color: var(--text-secondary);
 }
 
 .identity dd {
@@ -90,8 +93,8 @@ button:disabled {
 }
 
 .identity .actions button:not(:last-child) {
-  background: #fff;
-  color: #2f6f4e;
+  background: var(--surface);
+  color: var(--brand);
 }
 
 .language {
@@ -136,8 +139,8 @@ button:disabled {
   inline-size: 100%;
   padding-block: 1rem;
   padding-inline: 1.25rem;
-  border-color: #d6dbd8;
-  background: #fff;
+  border-color: var(--border);
+  background: var(--surface);
   color: inherit;
   text-align: start;
   font-weight: 600;
@@ -145,5 +148,5 @@ button:disabled {
 
 .card .hint {
   font-weight: 400;
-  color: #5b6662;
+  color: var(--text-secondary);
 }

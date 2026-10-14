@@ -1,0 +1,173 @@
+/*
+ * Design tokens (docs/ui/reference/src/index.css; spacing and type from the reference's spec table).
+ *
+ * Everything is selected by attributes on <html>, set before first paint (theme.ts, accentPreference.ts):
+ *   data-theme  light | dark | contrast — the display mode; never inverse tokens.
+ *   data-accent indigo | teal | rust | blue | violet — the personal accent; absent = the organization default.
+ * Every rule sits on the root element, so a mode's var() reads the accent's values. One rule per block, no nesting:
+ * tokens.test.ts reads this file to check the presets and the WCAG pairs in every mode.
+ */
+:root {
+  color-scheme: light;
+
+  /* Accent presets: a light variant (light surfaces) and a dark variant (dark surfaces and the dark sidebar). */
+  --accent-indigo-light: #5146e5;
+  --accent-indigo-dark: #8b84ff;
+  --accent-indigo-contrast: #000000;
+  --accent-teal-light: #006b5f;
+  --accent-teal-dark: #4fd1b5;
+  --accent-teal-contrast: #000000;
+  --accent-rust-light: #9a3412;
+  --accent-rust-dark: #fb923c;
+  --accent-rust-contrast: #000000;
+  --accent-blue-light: #075985;
+  --accent-blue-dark: #38bdf8;
+  --accent-blue-contrast: #000000;
+  --accent-violet-light: #7e22ce;
+  --accent-violet-dark: #c084fc;
+  --accent-violet-contrast: #000000;
+  --on-accent-light: #ffffff;
+  --on-accent-dark: #101114;
+  --on-accent-contrast: #ffffff;
+  --contrast-nav-active-bg: #ffffff;
+  --contrast-nav-active-text: #000000;
+
+  /* The accent in use: the organization default (indigo) until data-accent chooses another. */
+  --accent-light: var(--accent-indigo-light);
+  --accent-dark: var(--accent-indigo-dark);
+
+  /* Surfaces, text, borders (light). */
+  --canvas: #f4f5f7;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-soft: #f8f8fa;
+  --surface-strong: #101114;
+  --text: #17181c;
+  --text-secondary: #5d6069;
+  --text-muted: #82858f;
+  --border: #dedfe4;
+  --border-strong: #767982;
+
+  /* Brand and focus (light). */
+  --brand: var(--accent-light);
+  --on-brand: var(--on-accent-light);
+  --focus: var(--brand);
+
+  /* Status. */
+  --success: #08785b;
+  --success-soft: #e8f7f1;
+  --warning: #9a5b00;
+  --warning-soft: #fff4d8;
+  --danger: #bd2c36;
+  --danger-soft: #fdecee;
+
+  /* Navigation: the sidebar is dark in every mode but high contrast — always the accent's dark variant, dark text. */
+  --nav-surface: #17181c;
+  --nav-text: #d7d8de;
+  --nav-accent: var(--accent-dark);
+  --nav-active-bg: var(--nav-accent);
+  --nav-active-text: var(--on-accent-dark);
+
+  /* Spacing: 4pt grid (4 · 8 · 12 · 16 · 24 · 32 · 48 · 64). */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radius and depth. */
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 12px;
+  --shadow-1: 0 1px 2px rgba(16, 17, 20, 0.06), 0 5px 16px rgba(16, 17, 20, 0.04);
+  --shadow-2: 0 16px 40px rgba(16, 17, 20, 0.12);
+
+  /* Type: size / line height · weight. Fonts are the system's for now. */
+  --font-sans: system-ui, 'Noto Sans Arabic', sans-serif;
+  --type-display-size: 40px;
+  --type-display-line-height: 48px;
+  --type-display-weight: 700;
+  --type-h1-size: 30px;
+  --type-h1-line-height: 38px;
+  --type-h1-weight: 700;
+  --type-h2-size: 22px;
+  --type-h2-line-height: 30px;
+  --type-h2-weight: 650;
+  --type-body-size: 15px;
+  --type-body-line-height: 24px;
+  --type-body-weight: 450;
+  --type-label-size: 13px;
+  --type-label-line-height: 18px;
+  --type-label-weight: 600;
+}
+
+/* Personal accent presets. */
+:root[data-accent='indigo'] {
+  --accent-light: var(--accent-indigo-light);
+  --accent-dark: var(--accent-indigo-dark);
+}
+
+:root[data-accent='teal'] {
+  --accent-light: var(--accent-teal-light);
+  --accent-dark: var(--accent-teal-dark);
+}
+
+:root[data-accent='rust'] {
+  --accent-light: var(--accent-rust-light);
+  --accent-dark: var(--accent-rust-dark);
+}
+
+:root[data-accent='blue'] {
+  --accent-light: var(--accent-blue-light);
+  --accent-dark: var(--accent-blue-dark);
+}
+
+:root[data-accent='violet'] {
+  --accent-light: var(--accent-violet-light);
+  --accent-dark: var(--accent-violet-dark);
+}
+
+/* Dark: the brand takes the accent's dark variant, with dark text on it. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --canvas: #101114;
+  --surface: #18191d;
+  --surface-raised: #202126;
+  --surface-soft: #25262c;
+  --surface-strong: #f4f5f7;
+  --text: #f3f3f5;
+  --text-secondary: #b5b7c0;
+  --text-muted: #8c8f99;
+  --border: #34363d;
+  --border-strong: #777a84;
+  --brand: var(--accent-dark);
+  --on-brand: var(--on-accent-dark);
+  --nav-surface: #0b0c0f;
+  --nav-text: #d7d8de;
+  --nav-active-bg: var(--brand);
+  --nav-active-text: var(--on-brand);
+}
+
+/* High contrast: black and white; the accent is set aside (kept, and back when the mode changes). */
+:root[data-theme='contrast'] {
+  color-scheme: light;
+  --canvas: #ffffff;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-soft: #f0f0f0;
+  --surface-strong: #000000;
+  --text: #000000;
+  --text-secondary: #1c1c1c;
+  --text-muted: #3d3d3d;
+  --border: #000000;
+  --border-strong: #000000;
+  --brand: var(--accent-indigo-contrast);
+  --on-brand: var(--on-accent-contrast);
+  --nav-surface: #000000;
+  --nav-text: #ffffff;
+  --nav-active-bg: var(--contrast-nav-active-bg);
+  --nav-active-text: var(--contrast-nav-active-text);
+}

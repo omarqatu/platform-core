@@ -122,6 +122,22 @@ environment sets its own: Development has `http://localhost:5173`; production se
 - What users entered (client and service names) is shown as is, never translated, in `<bdi dir="auto">`.
 - Style sheets use logical properties only (`margin-inline-start`, `text-align: start`, …). No Tailwind.
 
+## Design tokens and appearance
+
+- **Tokens** (`src/theme/tokens.css`, from the approved spec in `docs/ui/reference/` — a reference only): surfaces,
+  text, borders, status, navigation, spacing (4pt grid), radius, shadows, type scale; CSS custom properties on `:root`.
+  Style sheets use tokens, never a color of their own.
+- **Display mode:** `data-theme` on `<html>` — `light`, `dark` or `contrast` (high contrast: black and white, the
+  accent set aside). An explicit choice wins; until there is one, `prefers-contrast: more` selects high contrast, then
+  `prefers-color-scheme` decides — and the interface follows the system as it changes.
+- **Accent:** `data-accent` on `<html>` — `indigo`, `teal`, `rust`, `blue`, `violet`, each with a light variant (light
+  surfaces) and a dark one (dark mode, and the dark sidebar, always with dark text). None = the organization default
+  (indigo).
+- **Kept** in the `theme` and `accent` cookies, as `lang` (`src/theme/preferenceStore.ts`) — never `localStorage`.
+- **Before first paint:** `main.tsx` sets both attributes before rendering; `ThemeProvider` keeps them in step
+  (`useAppearance()`). `src/theme/contrast.ts` has the WCAG arithmetic; `tokens.test.ts` checks every text, UI, focus
+  and navigation pair in every mode with every accent.
+
 ## ESLint
 
 - `formatjs/enforce-id`: the plugin's rule checks ids against a content hash (`idInterpolationPattern`) unless the id
