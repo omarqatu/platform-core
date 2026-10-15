@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router';
 import { ApiError, isAbort, request } from '../../api/client';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { messages as common } from '../../components/messages';
+import { Brand } from '../../components/Brand';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { apiErrors, errorMessage } from '../../i18n/apiErrors';
 import {
@@ -168,6 +169,7 @@ function Acceptance({ invitation }: { invitation: PendingInvitation | null }) {
   return (
     <main className="login invitation">
       <div className="toolbar">
+        <Brand />
         <LanguageSwitcher />
       </div>
       <h1>{intl.formatMessage(messages.title)}</h1>

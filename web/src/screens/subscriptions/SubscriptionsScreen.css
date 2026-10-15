@@ -8,8 +8,8 @@
 .subscriptions .scope {
   padding-block: 0.5rem;
   padding-inline-start: 0.75rem;
-  border-inline-start: 4px solid #2f6f4e;
-  background: #eef6f1;
+  border-inline-start: 4px solid var(--brand);
+  background: color-mix(in srgb, var(--brand) 9%, var(--surface));
 }
 
 .subscriptions table {
@@ -23,7 +23,7 @@
   text-align: start;
   padding-block: 0.4rem;
   padding-inline: 0.6rem;
-  border-block-end: 1px solid #ddd;
+  border-block-end: 1px solid var(--border);
 }
 
 .subscriptions .date {

@@ -19,7 +19,7 @@ web/
       guards.tsx             RequireAuth (→ /login?next=…), RequireTenant (→ /organizations; one subtree per tenant)
       next.ts                safeNext(): the return path after signing in — internal paths only; needsTenant()
     invitations/             pendingInvitation: the token being accepted, in memory only
-    components/              IdentityBar, LanguageSwitcher, ErrorAlert (role="alert", focused)
+    components/              AppShell (top bar, sidebar), AccentPicker, Badge, Icon, LanguageSwitcher, ErrorAlert
     i18n/                    locale, compiled messages, I18nProvider, apiErrors
     screens/
       auth/                  the login screen
@@ -121,6 +121,26 @@ environment sets its own: Development has `http://localhost:5173`; production se
 - Arabic is formatted as `ar-u-nu-latn`: Latin digits in every Intl format (numbers, plurals, dates).
 - What users entered (client and service names) is shown as is, never translated, in `<bdi dir="auto">`.
 - Style sheets use logical properties only (`margin-inline-start`, `text-align: start`, …). No Tailwind.
+
+## Design tokens and appearance
+
+- **Tokens** (`src/theme/tokens.css`, from the approved spec in `docs/ui/reference/` — a reference only): surfaces,
+  text, borders, status, navigation, spacing (4pt grid), radius, shadows, type scale; CSS custom properties on `:root`.
+  Style sheets use tokens, never a color of their own.
+- **Display mode:** `data-theme` on `<html>` — `light`, `dark` or `contrast` (high contrast: black and white, the
+  accent set aside). An explicit choice wins; until there is one, `prefers-contrast: more` selects high contrast, then
+  `prefers-color-scheme` decides — and the interface follows the system as it changes.
+- **Accent:** `data-accent` on `<html>` — `indigo`, `teal`, `rust`, `blue`, `violet`, each with a light variant (light
+  surfaces) and a dark one (dark mode, and the dark sidebar, always with dark text). None = the organization default
+  (indigo).
+- **Kept** in the `theme` and `accent` cookies, as `lang` (`src/theme/preferenceStore.ts`) — never `localStorage`.
+- **Before first paint:** `main.tsx` sets both attributes before rendering; `ThemeProvider` keeps them in step
+  (`useAppearance()`). `src/theme/contrast.ts` has the WCAG arithmetic; `tokens.test.ts` checks every text, UI, focus
+  and navigation pair in every mode with every accent.
+- **Shell** (`src/components/AppShell.tsx`, the reference's global shell): on every screen after signing in — the
+  top bar (organization, user, language, dark mode, the accent picker, switching and signing out) and, inside an
+  organization, the dark sidebar with its modules; a bottom bar at phone width. Buttons are `button` (primary),
+  `.btn.secondary` and `.btn.ghost`; a status is a `Badge` — an icon and a word, never a color alone.
 
 ## ESLint
 

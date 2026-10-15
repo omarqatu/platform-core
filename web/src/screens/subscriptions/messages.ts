@@ -10,6 +10,10 @@ type Values = {
   columnService: NoMessageValues;
   columnClient: NoMessageValues;
   columnEndsOn: NoMessageValues;
+  columnStatus: NoMessageValues;
+  statusActive: NoMessageValues;
+  statusDueSoon: NoMessageValues;
+  statusExpired: NoMessageValues;
   clientUnavailable: NoMessageValues;
   more: { shown: number };
 };
@@ -36,6 +40,10 @@ export const messages = defineMessages<Values>({
   columnService: { id: 'subscriptions.list.columnService', defaultMessage: 'Service' },
   columnClient: { id: 'subscriptions.list.columnClient', defaultMessage: 'Client' },
   columnEndsOn: { id: 'subscriptions.list.columnEndsOn', defaultMessage: 'Ends on' },
+  columnStatus: { id: 'subscriptions.list.columnStatus', defaultMessage: 'Status' },
+  statusActive: { id: 'subscriptions.list.statusActive', defaultMessage: 'Active' },
+  statusDueSoon: { id: 'subscriptions.list.statusDueSoon', defaultMessage: 'Due soon' },
+  statusExpired: { id: 'subscriptions.list.statusExpired', defaultMessage: 'Expired' },
   clientUnavailable: { id: 'subscriptions.list.clientUnavailable', defaultMessage: 'Not shown' },
   more: {
     id: 'subscriptions.list.more',

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { ApiError, getJson, isAbort } from '../../api/client';
+import { Badge, type BadgeTone } from '../../components/Badge';
 import { errorMessage } from '../../i18n/apiErrors';
 import { useSession } from '../../session/SessionProvider';
 import { ForbiddenScreen } from '../status/StatusScreens';
@@ -86,6 +87,7 @@ export function SubscriptionsView({ state }: { state: State }) {
 function SubscriptionsTable({ data: { subscriptions, clients } }: { data: SubscriptionsData }) {
   const intl = useIntl();
   const names = new Map(clients.items.map((c) => [c.id, c.name]));
+  const today = localDay(new Date());
   return (
     <>
       <Declaration subscriptions={subscriptions} clients={clients.visible_count} />
@@ -95,6 +97,7 @@ function SubscriptionsTable({ data: { subscriptions, clients } }: { data: Subscr
             <th scope="col">{intl.formatMessage(messages.columnService)}</th>
             <th scope="col">{intl.formatMessage(messages.columnClient)}</th>
             <th scope="col">{intl.formatMessage(messages.columnEndsOn)}</th>
+            <th scope="col">{intl.formatMessage(messages.columnStatus)}</th>
           </tr>
         </thead>
         <tbody>
@@ -110,6 +113,9 @@ function SubscriptionsTable({ data: { subscriptions, clients } }: { data: Subscr
                 </td>
                 <td className="date">
                   <time dateTime={s.ends_on}>{formatDay(intl.formatDate, s.ends_on)}</time>
+                </td>
+                <td>
+                  <StatusBadge status={subscriptionStatus(s.ends_on, today)} />
                 </td>
               </tr>
             );
@@ -138,6 +144,44 @@ function Declaration({ subscriptions, clients }: { subscriptions: ScopedList<Sub
         ? intl.formatMessage(messages.scopeAssignedEmpty)
         : intl.formatMessage(messages.scopeAssigned, { clients, subscriptions: subscriptions.visible_count })}
     </p>
+  );
+}
+
+/** How close an end date counts as "due soon", in days. TODO: the product's own threshold (a module setting). */
+export const DUE_SOON_DAYS = 30;
+
+export type SubscriptionStatus = 'expired' | 'dueSoon' | 'active';
+
+/**
+ * A subscription's status on `today` (both yyyy-MM-dd, compared as calendar days): ended before today → expired; ending
+ * within DUE_SOON_DAYS, today included → due soon; otherwise active.
+ */
+export function subscriptionStatus(endsOn: string, today: string): SubscriptionStatus {
+  const days = (Date.parse(`${endsOn}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000;
+  if (days < 0) return 'expired';
+  if (days <= DUE_SOON_DAYS) return 'dueSoon';
+  return 'active';
+}
+
+/** The user's calendar day now, yyyy-MM-dd (the day on their clock, not UTC's). */
+export function localDay(now: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+const STATUS: Record<SubscriptionStatus, { tone: BadgeTone; label: typeof messages.statusActive }> = {
+  expired: { tone: 'danger', label: messages.statusExpired },
+  dueSoon: { tone: 'warning', label: messages.statusDueSoon },
+  active: { tone: 'success', label: messages.statusActive },
+};
+
+function StatusBadge({ status }: { status: SubscriptionStatus }) {
+  const intl = useIntl();
+  const { tone, label } = STATUS[status];
+  return (
+    <Badge tone={tone}>
+      <span data-status={status}>{intl.formatMessage(label)}</span>
+    </Badge>
   );
 }
 

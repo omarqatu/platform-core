@@ -2,7 +2,15 @@ import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import type { Lang } from '../../i18n/locale';
-import { SubscriptionsView, type ClientItem, type ScopedList, type SubscriptionItem } from './SubscriptionsScreen';
+import {
+  DUE_SOON_DAYS,
+  localDay,
+  subscriptionStatus,
+  SubscriptionsView,
+  type ClientItem,
+  type ScopedList,
+  type SubscriptionItem,
+} from './SubscriptionsScreen';
 
 const ARABIC_INDIC_DIGITS = /[٠-٩۰-۹]/;
 
@@ -121,5 +129,31 @@ describe('an API refusal', () => {
     expect(shown('ar', 'no_active_tenant')).toBe('اختر الجهة أولًا.');
     expect(shown('en', 'not_permitted')).toBe('You do not have permission to do this.');
     expect(shown('en', 'brand_new_code')).toBe('Something went wrong. Try again.');
+  });
+});
+
+describe('the status badge', () => {
+  it('is expired before today, due soon from today through DUE_SOON_DAYS, and active after', () => {
+    const today = '2027-01-31';
+    expect(subscriptionStatus('2027-01-30', today)).toBe('expired');
+    expect(subscriptionStatus('2027-01-31', today)).toBe('dueSoon');
+    expect(subscriptionStatus('2027-03-02', today)).toBe('dueSoon'); // 30 days, across February
+    expect(subscriptionStatus('2027-03-03', today)).toBe('active');
+    expect(DUE_SOON_DAYS).toBe(30);
+  });
+
+  it("takes today from the user's clock, not UTC's", () => {
+    expect(localDay(new Date(2027, 0, 2, 23, 59))).toBe('2027-01-02');
+    expect(localDay(new Date(2027, 11, 31, 0, 0))).toBe('2027-12-31');
+  });
+
+  it('pairs an icon with the word, in each language', () => {
+    const en = show('en', list(subscriptions(1), 'all'));
+    const badge = en.querySelector('tbody .badge')!;
+    expect(badge.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(['Active', 'Due soon', 'Expired']).toContain(badge.textContent);
+    cleanup();
+    const ar = show('ar', list(subscriptions(1), 'all'));
+    expect(['نشط', 'قريب الانتهاء', 'منتهٍ']).toContain(ar.querySelector('tbody .badge')!.textContent);
   });
 });

@@ -1,0 +1,394 @@
+/* The global shell (docs/ui/reference: .topbar, .sidebar). Logical properties only; colors from the tokens only. */
+.shell {
+  min-block-size: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+}
+
+.shell.with-sidebar {
+  grid-template-columns: 248px minmax(0, 1fr);
+}
+
+.skip-link {
+  position: fixed;
+  inset-inline-start: var(--space-4);
+  inset-block-start: -60px;
+  z-index: 100;
+  padding-block: var(--space-3);
+  padding-inline: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-strong);
+  color: var(--canvas);
+}
+
+.skip-link:focus {
+  inset-block-start: var(--space-3);
+}
+
+/* The top bar */
+.topbar {
+  grid-column: 1 / -1;
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 20;
+  min-block-size: 72px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  padding-block: var(--space-2);
+  padding-inline: var(--space-6);
+  border-block-end: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.context,
+.context-control,
+.shell-controls,
+.icon-button {
+  display: flex;
+  align-items: center;
+}
+
+.context {
+  gap: var(--space-2);
+}
+
+.context-control {
+  min-block-size: 48px;
+  gap: var(--space-2);
+  padding-block: 6px;
+  padding-inline: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.control-copy {
+  display: grid;
+  font-size: var(--type-label-size);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.control-copy small {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.context-icon,
+.avatar {
+  inline-size: 28px;
+  block-size: 28px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.context-icon {
+  border-radius: 7px;
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.avatar {
+  border-radius: 50%;
+  background: var(--surface-strong);
+  color: var(--canvas);
+}
+
+.shell-controls {
+  gap: var(--space-2);
+  margin-inline-start: auto;
+}
+
+.icon-button {
+  min-block-size: 44px;
+  min-inline-size: 44px;
+  gap: 7px;
+  justify-content: center;
+  padding-block: 6px;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.icon-button:hover {
+  background: var(--surface-soft);
+}
+
+.icon-button span {
+  font-size: var(--type-label-size);
+  font-weight: 700;
+}
+
+.icon-button[aria-pressed='true'],
+.icon-button[aria-expanded='true'] {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+/* The accent picker */
+.accent-picker {
+  position: relative;
+}
+
+.accent-popover {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-2));
+  inset-inline-end: 0;
+  z-index: 40;
+  inline-size: min(290px, calc(100vw - 32px));
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: var(--shadow-2);
+}
+
+.accent-popover-heading {
+  display: grid;
+  gap: var(--space-1);
+  padding-block: var(--space-2) var(--space-3);
+  padding-inline: var(--space-2);
+}
+
+.accent-popover-heading strong {
+  font-size: var(--type-label-size);
+}
+
+.accent-popover-heading small {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.accent-contrast-note {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin-block: 0 var(--space-2);
+  margin-inline: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.accent-contrast-note .icon {
+  flex: 0 0 auto;
+  margin-block-start: 2px;
+}
+
+.accent-options {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.accent-option,
+.accent-reset {
+  inline-size: 100%;
+  min-block-size: 44px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  text-align: start;
+}
+
+.accent-option:hover,
+.accent-reset:hover {
+  background: var(--surface-soft);
+}
+
+.accent-option[aria-checked='true'] {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 9%, var(--surface));
+  font-weight: 700;
+}
+
+.accent-check {
+  inline-size: 20px;
+  min-block-size: 20px;
+  margin-inline-start: auto;
+  display: grid;
+  place-items: center;
+  color: var(--brand);
+}
+
+.accent-swatch {
+  inline-size: 24px;
+  block-size: 24px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--swatch-color) 70%, var(--border));
+  border-radius: 50%;
+  background: var(--swatch-color);
+}
+
+.accent-swatch.inactive {
+  opacity: 0.45;
+}
+
+.swatch-indigo {
+  --swatch-color: var(--accent-indigo-light);
+}
+
+.swatch-teal {
+  --swatch-color: var(--accent-teal-light);
+}
+
+.swatch-rust {
+  --swatch-color: var(--accent-rust-light);
+}
+
+.swatch-blue {
+  --swatch-color: var(--accent-blue-light);
+}
+
+.swatch-violet {
+  --swatch-color: var(--accent-violet-light);
+}
+
+.accent-reset {
+  margin-block-start: var(--space-2);
+  border-block-start: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+/* The sidebar: dark in every mode, the accent's dark variant for the current module. */
+.sidebar {
+  position: sticky;
+  inset-block-start: 72px;
+  align-self: start;
+  block-size: calc(100vh - 72px);
+  padding-block: 28px 18px;
+  padding-inline: var(--space-4);
+  border-inline-end: 1px solid color-mix(in srgb, var(--nav-text) 22%, transparent);
+  background: var(--nav-surface);
+  color: var(--nav-text);
+}
+
+.sidebar nav {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.side-link {
+  min-block-size: 44px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--nav-text);
+  text-decoration: none;
+}
+
+.side-link:hover {
+  background: color-mix(in srgb, var(--nav-text) 10%, var(--nav-surface));
+}
+
+.side-link.active {
+  position: relative;
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
+  font-weight: 650;
+}
+
+.side-link.active::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block: var(--space-2);
+  inline-size: 3px;
+  border-radius: 3px;
+  background: var(--nav-active-text);
+}
+
+.side-link:focus-visible {
+  outline-color: var(--nav-active-bg);
+}
+
+.shell-content {
+  min-inline-size: 0;
+}
+
+.shell-content:focus {
+  outline: none;
+}
+
+[dir='rtl'] .icon.directional {
+  transform: scaleX(-1);
+}
+
+/* Narrower: the brand's name goes, the buttons keep their icon and a hidden label (still their accessible name). */
+@media (max-width: 1120px) {
+  .topbar .brand-name {
+    display: none;
+  }
+
+  .btn .label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* Phone width: the sidebar becomes a bottom bar. */
+@media (max-width: 800px) {
+  .topbar {
+    padding-inline: var(--space-4);
+  }
+
+  .shell.with-sidebar {
+    grid-template-columns: minmax(0, 1fr);
+    padding-block-end: 66px;
+  }
+
+  .context-control.user {
+    display: none;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset-block: auto 0;
+    inset-inline: 0;
+    z-index: 30;
+    block-size: auto;
+    min-block-size: 66px;
+    padding-block: 6px;
+    padding-inline: var(--space-2);
+    border-inline-end: 0;
+    border-block-start: 1px solid var(--border);
+  }
+
+  .sidebar nav {
+    display: flex;
+    justify-content: space-around;
+  }
+
+  .side-link {
+    flex-direction: column;
+    gap: 2px;
+    padding-block: var(--space-1);
+    font-size: 12px;
+  }
+
+  .side-link.active::before {
+    display: none;
+  }
+}

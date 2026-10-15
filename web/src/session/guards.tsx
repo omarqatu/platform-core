@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router';
-import { IdentityBar } from '../components/IdentityBar';
+import { AppShell } from '../components/AppShell';
 import { LoadingScreen } from '../screens/status/StatusScreens';
 import { nextQuery } from './next';
 import { useSession } from './SessionProvider';
@@ -18,10 +18,9 @@ export function RequireAuth() {
   if (state.status === 'anonymous')
     return <Navigate to={state.reason === 'signedOut' ? '/login' : `/login${nextQuery(here(location))}`} replace />;
   return (
-    <>
-      <IdentityBar />
+    <AppShell>
       <Outlet />
-    </>
+    </AppShell>
   );
 }
 
