@@ -19,6 +19,8 @@ the short version to remember.
 | `checks/core/README.md`, `checks/local/README.md` | The CI checks |
 | `web/README.md`, `web/GLOSSARY.md` | The React interface |
 | `docs/operations.md` | Procedures that run outside the application |
+| `CLAUDE.md` | The rules in short, read automatically by Claude Code at the start of every session |
+| `.github/pull_request_template.md` | The PR checklist (§18), shown on every pull request |
 
 When this guide and the code disagree, the code is right and this guide has a bug — fix it in your PR. When the code
 and PLATFORM_CORE disagree, **the document governs**: stop and raise it (PROOF_SPEC rule 8).
@@ -1172,6 +1174,8 @@ From PROOF_SPEC §1 and PLATFORM_CORE §3:
 14. **Never put the `migrator` connection string anywhere Api or Worker can read it.**
 
 ### Before you open a PR
+
+The same list appears in every pull request (`.github/pull_request_template.md`).
 
 - [ ] Every database access goes through `UnitOfWork` / `ProvisionerUnitOfWork` / `SystemContext`.
 - [ ] Each new endpoint calls `Permissions.RequireAsync` (or the resolved management flag) before doing work.

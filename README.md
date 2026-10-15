@@ -17,6 +17,7 @@ Subscriptions first — are built on top of it.
 | `docs/PLATFORM_CORE_v1_16_FROZEN.md` | The architecture — authoritative (Arabic); English translation alongside |
 | `docs/PROOF_SPEC_v1_3.md` | The tasks and acceptance criteria — authoritative (Arabic); English translation alongside |
 | `OPEN_ITEMS.md` | What is known to be unfinished |
+| `CLAUDE.md` | The rules in short, for Claude Code sessions |
 
 ## Run it locally
 
