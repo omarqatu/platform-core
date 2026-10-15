@@ -99,15 +99,19 @@ jobs:
       # Before any test step, so no test fixture can ever be seen by a catalog check.
       # The local check-schema-allowlist runs beside them: a repository check with a name, never a
       # number — not one of PLATFORM_CORE's ten (checks/local/README.md).
-      - name: Catalog checks — Checks 1-10, and the local check-schema-allowlist
+      # check-schema-dump: docs/schema.sql is the pg_dump of this freshly migrated database (scripts/dump-schema.sh) —
+      # a local check with a name, like check-schema-allowlist.
+      - name: Catalog checks — Checks 1-10, and the local check-schema-allowlist and check-schema-dump
         run: |
           bash checks/core/run-checks.sh
           bash checks/local/check-schema-allowlist.sh
+          bash checks/local/check-schema-dump.sh
 
-      - name: Catalog checks — each fails on its plant (T2.2), the local check included
+      - name: Catalog checks — each fails on its plant (T2.2), the local checks included
         run: |
           bash checks/core/run-checks.sh --self-test
           bash checks/local/check-schema-allowlist.sh --self-test
+          bash checks/local/check-schema-dump.sh --self-test
 
       - name: Build Api image
         run: docker build -f src/Api/Dockerfile -t platform-api:ci .

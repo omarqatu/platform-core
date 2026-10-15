@@ -17,6 +17,7 @@ share.
 | `check-no-bulk-writes` | No `ExecuteUpdate`/`ExecuteDelete` call in `src/` except the paths in `bulk-writes-allowlist.txt` (empty). | T4 — PLATFORM_CORE v1.16 §3.10, PROOF_SPEC v1.3 T4.16 |
 | `check-i18n-parity` | The keys of `web/locales/ar.json` are exactly those of a fresh extraction of `web/src/`; `web/locales/en.json` is that extraction; every plural in `ar.json` gives the six Arabic forms. | i18n task |
 | `check-api-error-codes` | `api-error-codes.json` is the current export of `src/Core/ApiErrorCodes.cs`; no code is a string literal elsewhere in `src/` (except `api-error-codes-literal-allowlist.txt`); every code has its entry `errors.<code>` in `web/src/i18n/apiErrors.ts`, and every entry but `errors.unknown` has its code. | i18n task |
+| `check-schema-dump` | `docs/schema.sql` equals a fresh `pg_dump --schema-only` of the migrated database (`scripts/dump-schema.sh`). | Developer documentation |
 
 ## check-schema-allowlist
 
@@ -121,3 +122,31 @@ never edited. CI runs both modes (the `web` job).
 
 **Adding a code:** a constant in `ApiErrorCodes.cs`, then `checks/local/export-api-error-codes.py`, then its entry in
 `apiErrors` and its translation in `ar.json` — the check fails until all three are done.
+
+## check-schema-dump
+
+**Why it exists:** `docs/schema.sql` gives a reader the whole schema in one file — every table, constraint, index,
+policy and grant — instead of nine migrations to replay in their head (`docs/DATABASE.md`). A schema file written by
+hand drifts from the migrations within weeks and then misleads more than it helps, so this one is generated, and this
+check fails while the committed file is not the current dump.
+
+**What it compares:** the committed `docs/schema.sql` with `scripts/dump-schema.sh` run against the database CI has
+just migrated from clean — `pg_dump --schema-only`, `migrations_meta` excluded, session time zone UTC, a fixed
+`\restrict` key, and the "Dumped from/by" version lines removed, so the result does not depend on the PostgreSQL 18
+minor version. A difference is printed as a unified diff.
+
+**Running it** (repository root, after migrating a clean database; the default reaches `pg_dump` through the
+`docker compose` service, `PG_DUMP` overrides it):
+
+```bash
+checks/local/check-schema-dump.sh
+checks/local/check-schema-dump.sh --self-test
+# against the scripts/dev-up.sh container:
+PG_DUMP='docker exec -i -e PGTZ=UTC platform-core-dev-postgres pg_dump -U migrator -d platform' checks/local/check-schema-dump.sh
+```
+
+`--self-test` compares the fresh dump with an identical copy (must pass) and with a copy whose first `CREATE POLICY`
+line is renamed (must fail and show that line). No file is written outside a temporary directory. CI runs both modes.
+
+**Fixing a failure:** run `scripts/dump-schema.sh` (with the same `PG_DUMP`) on a database migrated from clean, and
+commit `docs/schema.sql` with the migration that changed it.
