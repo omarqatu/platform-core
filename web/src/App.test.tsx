@@ -5,6 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { I18nProvider } from './i18n/I18nProvider';
 import { SessionProvider } from './session/SessionProvider';
+import type { PreferenceStore } from './theme/preferenceStore';
+import { ThemeProvider } from './theme/ThemeProvider';
+
+/** Appearance kept in memory: the tests never touch the document's cookies for it. */
+const noStore: PreferenceStore = { read: () => null, write: () => undefined };
 
 const A = { tenant_id: 'tenant-a', name: 'Al-Amin' };
 const B = { tenant_id: 'tenant-b', name: 'Maan' };
@@ -65,12 +70,14 @@ function LocationProbe() {
 function renderApp(path: string) {
   return render(
     <I18nProvider initial="en">
-      <MemoryRouter initialEntries={[path]}>
-        <SessionProvider>
-          <App />
-          <LocationProbe />
-        </SessionProvider>
-      </MemoryRouter>
+      <ThemeProvider store={noStore}>
+        <MemoryRouter initialEntries={[path]}>
+          <SessionProvider>
+            <App />
+            <LocationProbe />
+          </SessionProvider>
+        </MemoryRouter>
+      </ThemeProvider>
     </I18nProvider>,
   );
 }

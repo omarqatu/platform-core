@@ -19,7 +19,7 @@ web/
       guards.tsx             RequireAuth (→ /login?next=…), RequireTenant (→ /organizations; one subtree per tenant)
       next.ts                safeNext(): the return path after signing in — internal paths only; needsTenant()
     invitations/             pendingInvitation: the token being accepted, in memory only
-    components/              IdentityBar, LanguageSwitcher, ErrorAlert (role="alert", focused)
+    components/              AppShell (top bar, sidebar), AccentPicker, Badge, Icon, LanguageSwitcher, ErrorAlert
     i18n/                    locale, compiled messages, I18nProvider, apiErrors
     screens/
       auth/                  the login screen
@@ -137,6 +137,10 @@ environment sets its own: Development has `http://localhost:5173`; production se
 - **Before first paint:** `main.tsx` sets both attributes before rendering; `ThemeProvider` keeps them in step
   (`useAppearance()`). `src/theme/contrast.ts` has the WCAG arithmetic; `tokens.test.ts` checks every text, UI, focus
   and navigation pair in every mode with every accent.
+- **Shell** (`src/components/AppShell.tsx`, the reference's global shell): on every screen after signing in — the
+  top bar (organization, user, language, dark mode, the accent picker, switching and signing out) and, inside an
+  organization, the dark sidebar with its modules; a bottom bar at phone width. Buttons are `button` (primary),
+  `.btn.secondary` and `.btn.ghost`; a status is a `Badge` — an icon and a word, never a color alone.
 
 ## ESLint
 

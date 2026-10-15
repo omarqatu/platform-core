@@ -14,4 +14,22 @@ export const messages = defineMessages({
   signOut: { id: 'identity.bar.signOut', defaultMessage: 'Sign out' },
   navigation: { id: 'identity.bar.navigation', defaultMessage: 'Main' },
   subscriptions: { id: 'identity.bar.subscriptions', defaultMessage: 'Subscriptions' },
+  // The shell (AppShell): the top bar, the sidebar, the appearance controls.
+  skipToContent: { id: 'shell.topbar.skipToContent', defaultMessage: 'Skip to content' },
+  brand: { id: 'shell.topbar.brand', defaultMessage: 'Platform' },
+  darkMode: { id: 'shell.topbar.darkMode', defaultMessage: 'Dark mode' },
+  accentTitle: { id: 'shell.accent.title', defaultMessage: 'Accent color' },
+  accentSubtitle: { id: 'shell.accent.subtitle', defaultMessage: 'Personal preference' },
+  accentPresets: { id: 'shell.accent.presets', defaultMessage: 'Accent presets' },
+  accentReset: { id: 'shell.accent.reset', defaultMessage: 'Reset to organization default' },
+  accentContrastNote: {
+    id: 'shell.accent.contrastNote',
+    defaultMessage:
+      'High contrast replaces accent colors with black and white. Your choice is kept and returns when you switch modes.',
+  },
+  accentIndigo: { id: 'shell.accent.indigo', defaultMessage: 'Indigo' },
+  accentTeal: { id: 'shell.accent.teal', defaultMessage: 'Teal' },
+  accentRust: { id: 'shell.accent.rust', defaultMessage: 'Rust' },
+  accentBlue: { id: 'shell.accent.blue', defaultMessage: 'Blue' },
+  accentViolet: { id: 'shell.accent.violet', defaultMessage: 'Violet' },
 });
