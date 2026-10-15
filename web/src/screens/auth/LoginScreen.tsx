@@ -3,6 +3,7 @@ import { useIntl, type MessageDescriptor } from 'react-intl';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { ApiError } from '../../api/client';
 import { ErrorAlert } from '../../components/ErrorAlert';
+import { Brand } from '../../components/Brand';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { apiErrors, errorMessage } from '../../i18n/apiErrors';
 import { needsTenant, nextQuery, safeNext } from '../../session/next';
@@ -56,6 +57,7 @@ export function LoginScreen() {
   return (
     <main className="login">
       <div className="toolbar">
+        <Brand />
         <LanguageSwitcher />
       </div>
       <h1>{intl.formatMessage(messages.title)}</h1>

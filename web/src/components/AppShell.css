@@ -43,32 +43,12 @@
   background: var(--surface);
 }
 
-.brand-lockup,
 .context,
 .context-control,
 .shell-controls,
 .icon-button {
   display: flex;
   align-items: center;
-}
-
-.brand-lockup {
-  gap: var(--space-3);
-}
-
-.brand-mark {
-  inline-size: 38px;
-  block-size: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 11px;
-  color: var(--on-brand);
-  background: var(--brand);
-}
-
-.brand-name {
-  font-size: 17px;
-  font-weight: 700;
 }
 
 .context {
@@ -354,7 +334,7 @@
 
 /* Narrower: the brand's name goes, the buttons keep their icon and a hidden label (still their accessible name). */
 @media (max-width: 1120px) {
-  .brand-name {
+  .topbar .brand-name {
     display: none;
   }
 

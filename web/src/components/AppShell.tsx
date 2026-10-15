@@ -5,6 +5,7 @@ import { useLocale } from '../i18n/I18nProvider';
 import { useAuthenticated, useSession } from '../session/SessionProvider';
 import { useAppearance } from '../theme/ThemeProvider';
 import { AccentPicker } from './AccentPicker';
+import { Brand } from './Brand';
 import { Icon } from './Icon';
 import { messages } from './messages';
 import './AppShell.css';
@@ -55,12 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {intl.formatMessage(messages.skipToContent)}
       </a>
       <header className="topbar" aria-label={intl.formatMessage(messages.identityLabel)}>
-        <div className="brand-lockup">
-          <span className="brand-mark">
-            <Icon name="layers" size={20} />
-          </span>
-          <span className="brand-name">{intl.formatMessage(messages.brand)}</span>
-        </div>
+        <Brand />
         <div className="context">
           <div className="context-control">
             <span className="context-icon" aria-hidden="true">
