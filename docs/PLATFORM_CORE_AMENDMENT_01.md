@@ -78,7 +78,7 @@ password_reset_tokens(id, user_id → users, token_hash, requested_at, expires_a
 ```sql
 platform_subscriptions(id, tenant_id, plan_code → plans(code), status, period_start, paid_until date, grace_days, created_at, updated_at,
   UNIQUE (tenant_id))                       -- صف واحد لكل جهة في هذه المرحلة
--- paid_until تاريخ (date) بتوقيت UTC؛ suspend-unpaid يقارن بـ current_date بتوقيت UTC (§5.4). موعد بلا منطقة زمنية خلل ينتظر جهة في بلد آخر.
+-- paid_until تاريخ (date) بتوقيت UTC؛ suspend-unpaid يقارن بـ (now() AT TIME ZONE 'UTC')::date (§5.4) — لا بـ current_date، الذي يتبع TimeZone الجلسة. موعد بلا منطقة زمنية خلل ينتظر جهة في بلد آخر.
 -- status ∈ {active, suspended} — المهلة يحملها grace_days، فلا حالة وسيطة. القالب القياسي.
 -- يُنشأ في bootstrap (provisioner) بخطة trial وpaid_until = [اليوم + 30] — افتراض.
 -- تتغير paid_until/status بالإجراء التشغيلي (provisioner) وحده: mark-paid وsuspend-unpaid (§5.4).
@@ -339,7 +339,7 @@ CREATE POLICY notification_log_status_forward ON notification_log
 
 - `create-tenant --name --owner-email [--plan trial]`: bootstrap من القوالب + `platform_subscriptions` + `tenant_notification_settings` الافتراضية + دعوة `owner` بالبريد (`invited_by IS NULL` — دعوة bootstrap بلا داعٍ بشري، §2.11). المالك يقبل بنفسه؛ والجهة بلا مالك نشط حتى القبول (§0، §3.10 البند أ).
 - `mark-paid --tenant --until [--plan]`: يحدّث `paid_until` و`platform_subscriptions.status` إلى `active`، و`tenants.status` إلى `active`. الطريقة الوحيدة لإرجاع جهة موقوفة.
-- `suspend-unpaid`: يُجدوَل من خارج المنصة. يسرد الجهات النشطة بدور `job_runner` عبر `tenants_for_jobs` (قراءة فقط — دوره في 1.16)، ثم لكل جهة معاملة `provisioner` مستقلة: `paid_until + grace_days < current_date` بتوقيت UTC (§2.4) → `platform_subscriptions.status = suspended` و`tenants.status = suspended`، كتابتان حرجتان (`CriticalWrite`) تحت سياسات §4.1. فشل جهة لا يوقف البقية.
+- `suspend-unpaid`: يُجدوَل من خارج المنصة. يسرد الجهات النشطة بدور `job_runner` عبر `tenants_for_jobs` (قراءة فقط — دوره في 1.16)، ثم لكل جهة معاملة `provisioner` مستقلة: `paid_until + grace_days < (now() AT TIME ZONE 'UTC')::date` (§2.4) → `platform_subscriptions.status = suspended` و`tenants.status = suspended`، كتابتان حرجتان (`CriticalWrite`) تحت سياسات §4.1. فشل جهة لا يوقف البقية.
 - `announce-migration`: يُشغَّل مرة واحدة **بعد التبديل (M3)**، لا قبله ولا أثناء الاستيراد. يرسل لكل مستخدم مُرحَّل (`users.legacy_id IS NOT NULL`) بريد إعلان عادياً يحمل رابطاً إلى صفحة «نسيت كلمة السر» (§6/7). قراءة فقط — `persons` و`users` بمنح `provisioner` القائمة — ولا كتابة؛ والمُرسِل وإعداداته (`credential_ref`) في `src/Ops` لا في `src/Ops.Import`.
 - `src/Ops` يرفض التشغيل إن وجد سلسلة `migrator` في بيئته (نفس حارس Api). أمر الاستيراد في مشروع منفصل، `src/Ops.Import`، يحمل `migrator` وحده (§6).
 

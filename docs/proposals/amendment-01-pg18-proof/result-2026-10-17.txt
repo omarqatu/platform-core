@@ -1,0 +1,76 @@
+PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+policies on the stand-in tables: 20 (the 17 of §4.1, and 3 from 1.16)
+== 1. provider_accounts — UNIQUE NULLS NOT DISTINCT (as owner)
+ two platform rows, same channel → ERROR 23505: duplicate key value violates unique constraint "provider_accounts_tenant_id_channel_key"
+ one platform row + one tenant row, same channel → 2 row(s)
+ two rows, same tenant, same channel → ERROR 23505: duplicate key value violates unique constraint "provider_accounts_tenant_id_channel_key"
+ app_user, tenant A: provider_accounts visible → 1 row(s)
+ app_user, tenant B: provider_accounts visible → 2 row(s)
+ app_user, no tenant: provider_accounts visible → 1 row(s)
+== 2. notification_log — AS RESTRICTIVE FOR UPDATE (app_user, tenant A, scope_all)
+ pending → sent → 1 row(s)
+ pending → failed → 1 row(s)
+ pending → pending → ERROR 42501: new row violates row-level security policy "notification_log_status_forward" for table "notification_log"
+ sent → failed (moving back) → 0 row(s)
+ reading still sees both rows (restrictive is FOR UPDATE only) → 2 row(s)
+ pending → sent, tenant B context → 0 row(s)
+ pending → sent, assigned member with no assignment → 0 row(s)
+ insert pending row, scope_all → 1 row(s)
+ DELETE (no grant) → ERROR 42501: permission denied for table notification_log
+== 3. tenants_provisioner_update / _select (provisioner, app.tenant_id = A)
+ suspend A (UPDATE … WHERE id = A) → 1 row(s)
+ suspend B while in A → 0 row(s)
+ UPDATE with no WHERE, in A → 1 row(s)
+ suspend with no tenant context → 0 row(s)
+ change id (no column grant) → ERROR 42501: permission denied for table tenants
+ change name (no column grant) → ERROR 42501: permission denied for table tenants
+ read tenants, in A → 1 row(s)
+ restore A: suspended → active (mark-paid) → 1 row(s)
+ job_runner: list active tenants (A suspended) → 1 row(s)
+ job_runner: UPDATE tenants (no grant) → ERROR 42501: permission denied for table tenants
+== 4. the rest
+ invitation, invited_by NULL → 1 row(s)
+ invitation, invited_by forged → ERROR 42501: new row violates row-level security policy for table "invitations"
+ invitation, other tenant → ERROR 42501: new row violates row-level security policy for table "invitations"
+ platform_subscriptions insert + update (A) → 1 row(s)
+ notification settings insert (A) → 1 row(s)
+ plans read → 1 row(s)
+ consume token (used_at NULL → now) → 1 row(s)
+ consume again → 0 row(s)
+ un-consume (used_at → NULL) → 0 row(s)
+ app_user reads platform_subscriptions, A → 0 row(s)
+ app_user reads platform_subscriptions, B → 0 row(s)
+ app_user reads platform_subscriptions, reused-connection empty string → 0 row(s)
+== 5. Check 2 NULLIF rule on the deparsed text of every policy
+ notification_log.client_scope: true
+ notification_log.tenant_isolation: true
+ platform_subscriptions.platform_subscriptions_provisioner_select: true
+ platform_subscriptions.platform_subscriptions_provisioner_update: true
+ platform_subscriptions.platform_subscriptions_read: true
+ provider_accounts.provider_accounts_read: true
+ tenant_notification_settings.tenant_isolation: true
+ tenants.tenants_provisioner_select: true
+ tenants.tenants_provisioner_update: true
+ app_user reads platform_subscriptions, A → 1 row(s)
+ app_user reads platform_subscriptions, B → 0 row(s)
+ app_user reads platform_subscriptions, empty string (reused connection) → 0 row(s)
+ app_user UPDATE platform_subscriptions (no grant) → ERROR 42501: permission denied for table platform_subscriptions
+ provisioner suspends A's subscription (in A) → 1 row(s)
+ provisioner updates A's subscription while in B → 0 row(s)
+ mark-paid: paid_until + status (in A) → 1 row(s)
+ suspend-unpaid predicate, UTC current_date → 0 row(s)
+ tenants_provisioner_update WITH CHECK: move A's id to B (UPDATE(id) granted for the test) → ERROR 42501: new row violates row-level security policy for table "tenants"
+== NULLIF rule, every policy that reads a context variable
+ invitations.invitations_provisioner_insert: true
+ notification_log.client_scope: true
+ notification_log.tenant_isolation: true
+ platform_subscriptions.platform_subscriptions_provisioner_insert: true
+ platform_subscriptions.platform_subscriptions_provisioner_select: true
+ platform_subscriptions.platform_subscriptions_provisioner_update: true
+ platform_subscriptions.platform_subscriptions_read: true
+ provider_accounts.provider_accounts_read: true
+ tenant_notification_settings.tenant_isolation: true
+ tenant_notification_settings.tenant_notification_settings_provisioner_insert: true
+ tenants.tenants_provisioner_insert: true
+ tenants.tenants_provisioner_select: true
+ tenants.tenants_provisioner_update: true

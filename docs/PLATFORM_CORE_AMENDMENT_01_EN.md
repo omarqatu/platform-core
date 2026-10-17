@@ -81,7 +81,7 @@ password_reset_tokens(id, user_id → users, token_hash, requested_at, expires_a
 ```sql
 platform_subscriptions(id, tenant_id, plan_code → plans(code), status, period_start, paid_until date, grace_days, created_at, updated_at,
   UNIQUE (tenant_id))                       -- one row per tenant at this stage
--- paid_until is a date in UTC; suspend-unpaid compares against current_date in UTC (§5.4). A deadline with no time zone is a defect waiting for a tenant in another country.
+-- paid_until is a date in UTC; suspend-unpaid compares against (now() AT TIME ZONE 'UTC')::date (§5.4) — not current_date, which follows the session TimeZone. A deadline with no time zone is a defect waiting for a tenant in another country.
 -- status ∈ {active, suspended} — the grace is carried by grace_days, so no intermediate status. The standard template.
 -- Created at bootstrap (provisioner) with the trial plan and paid_until = [today + 30] — an assumption.
 -- paid_until/status change through the operations procedure (provisioner) alone: mark-paid and suspend-unpaid (§5.4).
@@ -342,7 +342,7 @@ No path reads `provider_accounts` or writes `platform_subscriptions` from the AP
 
 - `create-tenant --name --owner-email [--plan trial]`: bootstrap from the templates + `platform_subscriptions` + the default `tenant_notification_settings` + an `owner` invitation by email (`invited_by IS NULL` — a bootstrap invitation with no human inviter, §2.11). The owner accepts in person; and the tenant has no active owner until the acceptance (§0, §3.10 item a).
 - `mark-paid --tenant --until [--plan]`: updates `paid_until`, and `platform_subscriptions.status` to `active`, and `tenants.status` to `active`. The only way to restore a suspended tenant.
-- `suspend-unpaid`: scheduled from outside the platform. Lists the active tenants as `job_runner` through `tenants_for_jobs` (read only — its 1.16 role), then for each tenant a separate `provisioner` transaction: `paid_until + grace_days < current_date` in UTC (§2.4) → `platform_subscriptions.status = suspended` and `tenants.status = suspended`, two critical writes (`CriticalWrite`) under the §4.1 policies. A tenant failing does not stop the rest.
+- `suspend-unpaid`: scheduled from outside the platform. Lists the active tenants as `job_runner` through `tenants_for_jobs` (read only — its 1.16 role), then for each tenant a separate `provisioner` transaction: `paid_until + grace_days < (now() AT TIME ZONE 'UTC')::date` (§2.4) → `platform_subscriptions.status = suspended` and `tenants.status = suspended`, two critical writes (`CriticalWrite`) under the §4.1 policies. A tenant failing does not stop the rest.
 - `announce-migration`: run once **after the cutover (M3)**, not before it and not during the import. Sends every migrated user (`users.legacy_id IS NOT NULL`) a plain announcement email carrying a link to the "forgot password" page (§6/7). Read only — `persons` and `users` under `provisioner`'s existing grants — and no writing; and the sender and its settings (`credential_ref`) are in `src/Ops`, not in `src/Ops.Import`.
 - `src/Ops` refuses to run if it finds a `migrator` string in its environment (the same guard as Api). The import command is in a separate project, `src/Ops.Import`, which carries `migrator` alone (§6).
 
