@@ -7,7 +7,7 @@
 
 ## §0 Status and authority
 
-**In force:** from the date this file is merged. The corresponding items in `OPEN_ITEMS.md`: 42–49 (and item 50 for the enforcement of §4.1).
+**In force:** from the date this file is merged. The corresponding items in `OPEN_ITEMS.md`: 42–52.
 
 **What it amends:** the frozen PLATFORM_CORE v1.16. The rule is **addition**: tables, columns, grants, policies and paths, and recorded decisions; each item here names the paragraph it attaches to. **And it amends** the following paragraphs of 1.16 — no others — by the project owner's decision of 2026-10-17:
 
