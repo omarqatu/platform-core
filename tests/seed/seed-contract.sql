@@ -128,6 +128,15 @@ BEGIN
 END
 $seed$;
 
+-- A3 (Amendment 01 §2.6): the platform's delivery account. Its rows are migrator's to seed and no application
+-- role can write them; a real deployment seeds its own (docs/operations.md). sender_id is a test value, and
+-- credential_ref is a settings key name — the secret is never here, and there is no secret to put here: the CI
+-- run has no SMTP server, so the dispatcher's send fails and is logged, which is the point of taking it off the
+-- response path. Outside the row-count assertion above: it adds to the contract, it does not change it.
+INSERT INTO provider_accounts (id, tenant_id, channel, provider_code, sender_id, credential_ref, is_active, created_at)
+VALUES (uuidv7(), NULL, 'email', 'smtp', 'no-reply@platform.test', 'platform-email', true, now())
+ON CONFLICT DO NOTHING;
+
 SELECT 'seed contract: ' || (SELECT count(*) FROM tenants) || ' tenants, ' || (SELECT count(*) FROM persons) || ' persons, '
        || (SELECT count(*) FROM memberships) || ' memberships, ' || (SELECT count(*) FROM roles) || ' roles, '
        || (SELECT count(*) FROM scope_assignments) || ' assignments, ' || (SELECT count(*) FROM clients) || ' clients, '

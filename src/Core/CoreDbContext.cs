@@ -27,6 +27,7 @@ public class CoreDbContext : DbContext
     public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<AuthAttempt> AuthAttempts => Set<AuthAttempt>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<ProviderAccount> ProviderAccounts => Set<ProviderAccount>();
     public DbSet<MembershipScope> MembershipScopes => Set<MembershipScope>();
     public DbSet<ScopeAssignment> ScopeAssignments => Set<ScopeAssignment>();
     public DbSet<MembershipAuth> MembershipAuths => Set<MembershipAuth>();
@@ -81,6 +82,7 @@ public class CoreDbContext : DbContext
             token.ToTable("password_reset_tokens");
             token.Property(x => x.UsedAt).IsConcurrencyToken();
         });
+        modelBuilder.Entity<ProviderAccount>().ToTable("provider_accounts");
         modelBuilder.Entity<MembershipScope>().ToTable("membership_scope");
         modelBuilder.Entity<ScopeAssignment>().ToTable("scope_assignments");
         modelBuilder.Entity<MembershipAuth>().ToTable("membership_auth").Property(x => x.ProviderConfig).HasColumnType("jsonb");

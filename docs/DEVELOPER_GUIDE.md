@@ -707,9 +707,34 @@ one from the request; the plaintext token is only ever hashed and matched.
 Neither path writes an audit entry (`user_password_credentials` is never audited, `security_stamp` is on the
 exemption list, `password_reset_tokens` is outside it) — OPEN_ITEMS 52 until the identity audit log exists.
 
-**`POST /api/auth/password/forgot` is not built yet.** It is the only path that mints a token, and it needs the
-address to send to: `authenticator` has no read on `persons`, and there is no sender. It lands with the e-mail
-sender (OPEN_ITEMS 53). Until then a token is created only by the operations path that will come with it.
+### Asking for a recovery link: `POST /api/auth/password/forgot`
+
+The only path that mints a token, and the only one keyed by an address rather than by a session or a username.
+One `authenticator` unit of work (`PasswordPaths.BeginResetAsync`), and **always `204`** — for an address with an
+account, one without, and one nobody could ever hold. The only other answer is the ip ceiling's `429`, which
+depends on the caller's own address and so says nothing about anybody else's.
+
+Four things make the 204 uniform in more than its status code:
+
+1. **The lookup is raw SQL.** Amendment 01 §3 grants `authenticator` `SELECT (id, email)` on `persons` and nothing
+   more, so a statement that reads any other column of it — a tracked EF query does — is refused with `42501`.
+   The statement is written out, which also pins it to `persons_email_normalized_key`, so a capital letter does
+   not lose somebody their account. This is the read-side companion of the rule in §6 (OPEN_ITEMS 55): under a
+   grant that withholds part of a table, the statement says exactly what it reads.
+2. **Every request writes one `auth_attempts` row**, found or not, so the escalating delay of §5.2 is a function
+   of (address + ip) alone. A limiter that only charged for the addresses that exist would be the oracle the
+   uniform answer is there to prevent.
+3. **Nothing waits on the e-mail provider.** The message goes to `Core.Notifications.INotificationDispatch`,
+   which hands it to the sender outside the request. Without that, the response would carry an SMTP round trip
+   for an address with an account and nothing for one without — the leak of OPEN_ITEMS 51.
+4. **A floor** (`Identity:ForgotPassword:MinimumResponseTime`) holds every answer to the same point, which covers
+   the one remaining difference: a token insert and the consumption of any outstanding token. That closes
+   OPEN_ITEMS 51 to the floor's granularity; the floor is honest only while the work stays well under it, which
+   is why the provider is not in the path.
+
+The newest request is the only live one: outstanding tokens for that user are **consumed**, not deleted — no
+application role holds `DELETE` on the table. An address behind two active accounts mints nothing and answers the
+same 204 (OPEN_ITEMS 57).
 
 ---
 
@@ -1095,6 +1120,7 @@ and a mapping here — do not return 500s for expected situations.
 |---|---|---|
 | `POST /api/auth/login` | own UoW | — |
 | `POST /api/auth/logout` | no DB | — |
+| `POST /api/auth/password/forgot` | own UoW | — (an address) |
 | `POST /api/auth/password/reset` | own UoW ×2 | — (the token) |
 | `PUT /api/me/password` | own UoW ×2 | session |
 | `GET /api/me` | no active tenant | session |

@@ -27,6 +27,27 @@ CALL prune_auth_attempts();
   the `migrator` connection runs on the operations network. The application network cannot
   reach the `migrator` account (`pg_hba.conf`).
 
+## The platform's delivery account (Amendment 01 §2.6)
+
+Nothing is sent until `provider_accounts` holds the platform's row for the channel, and no application
+role can write one: the rows are `migrator`'s, seeded. A deployment seeds its own once, as `migrator`:
+
+```sql
+INSERT INTO provider_accounts (id, tenant_id, channel, provider_code, sender_id, credential_ref, is_active, created_at)
+VALUES (uuidv7(), NULL, 'email', 'smtp', 'no-reply@<your domain>', 'platform-email', true, now());
+```
+
+- **`tenant_id IS NULL` is the platform's row**, one per channel — `UNIQUE NULLS NOT DISTINCT` refuses a second.
+  The per-tenant override is a reserved slot at this stage; no path writes one.
+- **`credential_ref` is a settings key name, never a secret.** The row above names `platform-email`, and the Api
+  reads the credentials from `Notifications:Email:Providers:platform-email` — `Host`, `Port`, `UseStartTls`,
+  `Username`, `Password` — wherever that deployment keeps its settings, beside the connection strings. Put a
+  secret in this table and every member of every tenant is one vulnerability away from it (§2.6).
+- **Turning a channel off** is `UPDATE provider_accounts SET is_active = false …` as `migrator`. The sender then
+  reports every send as failed and logs it; nothing throws, and no path that sends is broken by it.
+- **After changing a row**, the Api holds it for `Notifications:ProviderAccounts:CacheFor` (5 minutes by
+  default) before reading it again.
+
 ## `password_reset_tokens` retention (Amendment 01 §2.2)
 
 The recovery tokens follow the same policy as `auth_attempts`: rows older than **90 days** are

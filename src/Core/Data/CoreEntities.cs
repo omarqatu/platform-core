@@ -99,6 +99,20 @@ public sealed class PasswordResetToken
     public string? RequestIp { get; set; }
 }
 
+// Amendment 01 §2.6: the platform's delivery account, with a reserved per-tenant slot (tenant_id NULL = the
+// platform). credential_ref names a settings key; the secret is never a column here.
+public sealed class ProviderAccount
+{
+    public Guid Id { get; set; }
+    public Guid? TenantId { get; set; }
+    public string Channel { get; set; } = "";
+    public string ProviderCode { get; set; } = "";
+    public string SenderId { get; set; } = "";
+    public string CredentialRef { get; set; } = "";
+    public bool IsActive { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
 public sealed class MembershipScope
 {
     public Guid Id { get; set; }

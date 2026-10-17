@@ -9,9 +9,10 @@ namespace Conformance;
 /// <summary>
 /// [B] Password recovery and change (PLATFORM_CORE Amendment 01 §2.1, §2.2, §5.1; OPEN_ITEMS 47), over SQL and
 /// HTTP alone. The tokens are written as <c>authenticator</c> — the role the amendment gives that write — with the
-/// hash of a value this test knows, because the forgot path that would mint one is not built in this task (it
-/// waits for the e-mail sender, OPEN_ITEMS 53): the contract proven here is the reset endpoint's, not the way the
-/// token reached its owner. Every test works on a tenant and an account of its own, so the seed contract stays as
+/// hash of a value this test knows: the contract proven here is the reset endpoint's, not the way the token
+/// reached its owner. Since A3 a token can also be minted through `POST /api/auth/password/forgot`, but that
+/// path delivers it by e-mail and to nobody else, so a test cannot read it — `T3_ForgotPasswordTests` proves
+/// that path by what it writes. Every test works on a tenant and an account of its own, so the seed contract stays as
 /// PROOF_SPEC §7 states it.
 /// </summary>
 public class T3_PasswordTests

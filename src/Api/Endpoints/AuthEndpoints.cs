@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using Core;
 using Core.Data;
 using Core.Http;
 using Core.Identity;
+using Core.Notifications;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +11,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Api.Endpoints;
 
 public sealed record LoginRequest(string? Username, string? Password);
+
+/// <summary>Amendment 01 §5.1: the address a recovery link is asked for.</summary>
+public sealed record ForgotPasswordRequest(string? Email);
 
 /// <summary>Amendment 01 §5.1: the recovery token, and the password it sets.</summary>
 public sealed record ResetPasswordRequest(string? Token, string? NewPassword);
@@ -26,6 +31,7 @@ public static class AuthEndpoints
     private const int MaxUsername = 256;
     private const int MaxPassword = 1024;
     private const int MaxToken = 256;
+    private const int MaxEmail = 320;   // the longest address RFC 5321 admits: 64 + '@' + 255.
 
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
@@ -90,6 +96,54 @@ public static class AuthEndpoints
                     select new MeTenant(t.Id, t.Name)).SingleOrDefaultAsync(ct);
             return Results.Ok(new MeResponse(username, active));
         }).RequireAuthorization().WithMetadata(new WithoutActiveTenantAttribute());
+
+        // Asking for a recovery link (Amendment 01 §5.1): one authenticator unit of work, no session, and the
+        // same 204 for every address — one that has an account, one that does not, and one that is not an
+        // address at all. The only other answer is the ip ceiling's 429, which depends on the caller's address
+        // alone and so tells it nothing about anyone else (§5.2).
+        //
+        // The timing is uniform too, which is what closes OPEN_ITEMS 51: nothing here waits on the e-mail
+        // provider — the message is handed to the dispatcher, which sends it outside the request — so the two
+        // cases differ only by a token insert, and the floor below covers that difference. The limiter's
+        // escalating delay is added after it, and it is a function of (address + ip) alone, because every
+        // request writes the same auth_attempts row whether or not the address resolved.
+        app.MapPost("/auth/password/forgot", async (ForgotPasswordRequest body, HttpContext http,
+            AuthenticatorDbContext authenticator, INotificationDispatch dispatch, IOptions<LoginLimits> limits,
+            IOptions<ForgotPasswordSettings> forgot, CancellationToken ct) =>
+        {
+            var started = Stopwatch.GetTimestamp();
+            var settings = forgot.Value;
+
+            // A malformed body is the one case answered before the floor: it reaches no table and no address,
+            // so its timing reveals nothing about any account.
+            if (body is not { Email: { Length: > 0 and <= MaxEmail } email })
+                return Results.Json(new { error = ApiErrorCodes.InvalidRequest }, statusCode: StatusCodes.Status400BadRequest);
+
+            var outcome = await PasswordPaths.BeginResetAsync(
+                authenticator, email, http.Connection.RemoteIpAddress?.ToString(), limits.Value,
+                settings.TokenLifetime, ct);
+
+            if (outcome.RefusedTooManyAttempts)
+                return Results.Json(new { error = ApiErrorCodes.TooManyAttempts }, statusCode: StatusCodes.Status429TooManyRequests);
+
+            if (outcome.Mail is { } mail)
+                dispatch.Enqueue(new NotificationMessage(
+                    NotificationChannel.Email, mail.Address,
+                    "Reset your password",
+                    $"""
+                     A password reset was asked for this address.
+
+                     Open this link to set a new password; it stops working at {mail.ExpiresAt:u} or as soon as
+                     another reset is asked for:
+
+                     {settings.ResetLinkFor(mail.Token)}
+
+                     If this was not you, nothing has changed and no answer is needed.
+                     """));
+
+            await UniformTiming.HoldAsync(started, settings.MinimumResponseTime, outcome.Delay, ct);
+            return Results.NoContent();
+        }).WithMetadata(new OwnUnitsOfWorkAttribute());
 
         // Setting a password from a recovery token (Amendment 01 §5.1), two units of work and no session:
         // UoW-1, as authenticator, verifies the token and consumes it; UoW-2, as app_user in the context of the

@@ -82,7 +82,7 @@ Closed by the manifest PR:
   is built across several PRs; changing the generator was not enough without a way to adopt its policies one PR at a
   time.
 
-Closed by the A3 PR (the amendment text):
+Closed by the A3 PR:
 - **53.** `POST /api/auth/password/forgot`: the address, and who may read it. Amendment 01 contradicted itself — §5.1
   makes `forgot` an `authenticator` unit of work keyed by the address, while its §3 matrix carried v1.16's `persons`
   row verbatim, giving `authenticator` nothing on the table where the address lives. Resolved in the governing text,
@@ -95,6 +95,21 @@ Closed by the A3 PR (the amendment text):
   **ninth row** is added for §4.3-a/3, whose "three resolution tables" become four. §4.3-a/4 is untouched: this is a
   read, not a write. The policy is extracted as pending until the code PR lists it in
   `checks/core/amendment-policies-built.json`.
+- **51.** Forgot-password: the response time reveals whether an account exists. **Closed, and by a change of
+  shape rather than by padding.** The leak was a provider round trip on one branch and nothing on the other; a
+  floor alone would have had to hide a latency nobody controls, which is the half-fix. So the send left the
+  request: `Core.Notifications.INotificationDispatch` takes the message and the sender runs outside the
+  response, leaving the two branches differing only by a token insert and the consumption of any outstanding
+  token. A floor (`Identity:ForgotPassword:MinimumResponseTime`, 1.5 s by default, a marked assumption) then
+  covers that difference, and the limiter's escalating delay is added identically either way because **every**
+  request writes its `auth_attempts` row, found or not. Proven in `[W]`
+  (`T3_ForgotPasswordTests.TheAnswerTakesTheSameTime_…`: each answer at or above the floor, the two medians
+  within half of it) and in `[B]` (the uniform 204 and the token that is minted only where there is an account).
+  **The residue, stated:** the floor is honest while the work stays well under it; if the database slowed past
+  it, the difference would show again. The floor overruns nothing today and the work on the path is two small
+  statements. **For the project owner:** Amendment 01 §5.1's table still says "the response time is not"
+  uniform, with a reference to this item. That line is now false; whether the amendment records the closure is
+  a text decision, not one this PR took.
 
 ## For the project owner — a decision after T8
 
@@ -265,15 +280,6 @@ Closed by the A3 PR (the amendment text):
   until launch; the Development and CI values are deliberately lenient (see item 54). The forgot path's half of
   §5.2 travels with that path (item 53).
 
-### 51. Forgot-password: the response time reveals whether an account exists
-
-- **Origin:** the review of Amendment 01 (§5.1), recorded by the project owner on 2026-10-17. A pre-launch item.
-- **The finding:** `POST /api/auth/password/forgot` always answers 204, but not in the same time: for an existing
-  account it hashes and inserts a token and sends an email; for a missing one it returns at once. The latency tells
-  an attacker which addresses have accounts — the enumeration the uniform 204 is there to prevent.
-- **Before launch:** a constant-time response path — the response time must not depend on whether the account
-  exists. The amendment's design does not change.
-
 ### 52. No audit trail for a password change until the identity audit log exists
 
 - **Origin:** the review of Amendment 01 (§2.1, §5.1), recorded by the project owner on 2026-10-17. A pre-launch item.
@@ -337,6 +343,15 @@ Closed by the A3 PR (the amendment text):
 - **The decision:** email, WhatsApp (a hosted gateway such as GreenAPI), SMS (an API), Telegram (a bot); email and
   WhatsApp first, built inside M1 before the cutover (option A). Tables in §2.5–2.7, grants in §3.
 - **Related:** item 22 (the invitation is sent by email alone) is met through the same sender (§5.5).
+- **As built (A3):** the interface and the **email** channel. `Core.Notifications.INotificationSender` with one
+  implementation per channel; `EmailNotificationSender` over SMTP, the account from the platform's
+  `provider_accounts` row (§2.6) and the secret from the settings key its `credential_ref` names. A delivery that
+  cannot happen is reported, never thrown — a channel failing must not stop the others (§5.3) nor turn `forgot`'s
+  uniform 204 into a 500. `INotificationDispatch` hands a message to the sender outside the request that asked
+  for it, which is what makes a constant-time `forgot` reachable (item 51).
+- **Still open:** WhatsApp, SMS and Telegram — the three remaining channels of D3, in that order; the outbox of
+  §5.5 (`notification_log`, the delivery job's `pending → sent|failed`), which has no table yet; and invitation
+  delivery by e-mail (M2/b), which this task left alone — see item 60.
 
 ### 45. Three layers of delivery; provider secrets outside the database (D3′)
 
@@ -445,6 +460,55 @@ Closed by the A3 PR (the amendment text):
 - **If it is ever to be narrowed:** the only shapes that would work are outside this amendment — resolving against
   a separate, derived address-to-user table that holds nothing else, or moving the lookup behind a rate-limited
   intermediary that never returns rows. Both are a design change, not a policy edit.
+
+### 57. One address, two active accounts: which one does recovery mean?
+
+- **Origin:** A3 (`forgot`), found while building the lookup.
+- **The finding:** `persons.email` is unique, but `users.person_id` is **not** — one person may hold an
+  `employee` account and a `customer` one (`users.user_type`), both active. Neither v1.16 nor Amendment 01 says
+  which of them `POST /api/auth/password/forgot` recovers, and the path cannot ask: it answers 204 and says
+  nothing.
+- **As built:** exactly one active account → a token. Two or more → **nothing is minted**, and the answer is the
+  same 204 as for an address nobody holds. Not an error, because an error would be the oracle the uniform answer
+  prevents; and not a token for each, because the e-mail could not say which account it was for.
+- **For the project owner:** a person in that position cannot recover either account today. The options are a
+  token per account with the account named in the e-mail, recovery keyed by username for such a person, or a rule
+  that one address holds one account. Nothing is built until the decision; the seed and the live data have no
+  such person today.
+
+### 58. Which role resolves the provider account for a sessionless send
+
+- **Origin:** A3 (the sender), found while wiring `forgot`.
+- **The finding:** Amendment 01 §3 grants `SELECT` on `provider_accounts` to `app_user` alone, and §2.6 says
+  "`app_user` reads this table in every delivery transaction" — written for the per-tenant delivery job. But
+  `forgot` is an `authenticator` unit of work (§5.1), and `authenticator` has nothing on that table, so the path
+  that sends cannot read what to send with. The amendment does not say who reads it when there is no session.
+- **As built:** `Core.Notifications.PlatformProviderAccounts` reads the platform's row as `app_user` in a
+  read-only unit of work with **no user and no tenant**, which is exactly what the `provider_accounts_read`
+  policy's first arm (`tenant_id IS NULL`) admits — run on a real engine, `docs/proposals/a3-forgot-pg-proof`
+  case 3b. It is a separate unit of work from the identity one, it reads platform configuration and nothing of
+  any tenant's, and the result is cached, so it is not in the `forgot` path at all in the usual case.
+- **For the project owner:** whether that reading is what §2.6 intends, or whether the amendment should name the
+  role for a sessionless send, is a text decision. The code does not wait on it; a different answer changes where
+  the read lives, not what it reads.
+
+### 59. The password-reset screen does not exist
+
+- **Origin:** A3, stated rather than discovered: this task is the API and the sender.
+- **The finding:** `forgot` now sends a link built from `Identity:ForgotPassword:ResetLinkTemplate`, and the page
+  it points at (`/app/password/reset#token=…`) is not in `web/`. The token is in the fragment, as the invitation
+  link's rule requires (DEVELOPER_GUIDE §9), so it never reaches a server log — but nothing renders it yet.
+- **What is needed:** the two screens of this path — asking for a link, and setting the password from one — in
+  both languages, with their message ids and the Arabic in `web/locales/ar.json` (§15). A branch of its own.
+
+### 60. Invitation delivery by e-mail is not built (M2/b)
+
+- **Origin:** A3, scope. The sender it needs now exists.
+- **The finding:** an invitation's link is still copied by hand from the response (DEVELOPER_GUIDE §9). With
+  `INotificationSender` in place, sending it is a small change — but not a free one: it decides what the e-mail
+  says in both languages, and it must keep the link out of `audit_log` (M2/b), which is a surface this task did
+  not open. Left out deliberately rather than half-done.
+- **Related:** items 22 and 44.
 
 ## For the next version of the document — not for the code
 
