@@ -32,7 +32,7 @@
 - The application generates every key and timestamp; no `DEFAULT`/identity/generated (§3.5).
 - The consent principle: no membership without acceptance (§0). **The migration (§6) does not breach it:** the migrated users accepted their membership in the live system, and the migration is a move, not a recruitment — so their memberships are created `active` directly, with no invitation.
 - `job_runner` in its 1.16 role (§3.4, §8): reading the active tenants to start the fan-out, and no writing.
-- The ten checks and their inputs; the grants the amendment adds enter `grants.json` in the code PR. The policies of §4.1 do not reach the manifest today (§4.1, OPEN_ITEMS 50).
+- The ten checks and their inputs; the grants the amendment adds enter `grants.json` in the code PR. The policies of §4.1 enter the manifest when they are built (§4.1).
 
 **The amendment's scope:** what the stage "receiving the subscription system" needs, per the approved roadmap — no more. The billing engine, the gateways, public self-registration, brands/partners, §9, SSO, the customer portal: outside it (§7).
 
@@ -102,7 +102,7 @@ provider_accounts(id, tenant_id NULL, channel, provider_code, sender_id, credent
 -- At this stage only the platform's rows are seeded (migrator). Tenant rows: a reserved slot, no path writes them.
 ```
 
-Why: `app_user` reads this table in every delivery transaction; had it carried the providers' keys, every tenant member would be one vulnerability away from the platform's keys. The reference to the settings keeps the secret where the connection strings live. **`NULLS NOT DISTINCT`:** without it, `UNIQUE` does not prevent two platform rows for the same channel, because `NULL` does not equal `NULL`. **The read policy** needs a wording outside the template: `tenant_id = app.tenant_id OR tenant_id IS NULL` — a named policy that must enter the manifest (Check 2), and does not reach it today (§4.1, OPEN_ITEMS 50).
+Why: `app_user` reads this table in every delivery transaction; had it carried the providers' keys, every tenant member would be one vulnerability away from the platform's keys. The reference to the settings keeps the secret where the connection strings live. **`NULLS NOT DISTINCT`:** without it, `UNIQUE` does not prevent two platform rows for the same channel, because `NULL` does not equal `NULL`. **The read policy** needs a wording outside the template: `tenant_id = app.tenant_id OR tenant_id IS NULL` — a named policy that enters the manifest (Check 2) when it is built (§4.1).
 
 ### 2.7 `notification_log` — per tenant, and scoped (to the module, beside `subscriptions`)
 
@@ -184,26 +184,110 @@ The rows from 1.16 are carried over verbatim. What is new is **in bold** and mar
 
 ## §4 New policies and new permissions
 
-### 4.1 Policies outside the two templates (they must enter the manifest for Check 2, and do not reach it today — OPEN_ITEMS 50)
+### 4.1 Policies outside the two templates (they enter the manifest for Check 2 when built)
 
-Every policy with explicit `FOR` and `TO` and `NULLIF` on `current_setting`. The names are provisional.
+Every policy with explicit `FOR` and `TO` and `NULLIF` on `current_setting`, and the text below is the text extracted into the manifest verbatim. The two tables that enter the manifest with a policy outside the templates (`tenant_notification_settings`, `notification_log`) state their templates explicitly, because a manifest table's policy set is checked whole.
 
-| Policy | Table | FOR / TO | Condition |
-| --- | --- | --- | --- |
-| `password_reset_tokens_authenticator_select` | password_reset_tokens | SELECT / authenticator | `true` — the role sees every token; the match is by the hash in the query |
-| `password_reset_tokens_authenticator_insert` | password_reset_tokens | INSERT / authenticator | `true` |
-| `password_reset_tokens_authenticator_use` | password_reset_tokens | UPDATE / authenticator | `used_at IS NULL` → WITH CHECK `used_at IS NOT NULL` — the only write is consumption |
-| `plans_read` | plans | SELECT / app_user, provisioner, job_runner | `true` (catalog) |
-| `platform_subscriptions_read` | platform_subscriptions | SELECT / app_user | The standard template (`tenant_id = NULLIF(app.tenant_id)`) |
-| `platform_subscriptions_provisioner_*` | platform_subscriptions | INSERT, SELECT, UPDATE / provisioner | `tenant_id = NULLIF(app.tenant_id)`, as in bootstrap |
-| `tenants_provisioner_select` | tenants | SELECT / provisioner | `id = NULLIF(app.tenant_id)` |
-| `tenants_provisioner_update` | tenants | UPDATE / provisioner | `id = NULLIF(app.tenant_id)` → WITH CHECK `id = NULLIF(app.tenant_id)` |
-| `invitations_provisioner_insert` | invitations | INSERT / provisioner | `tenant_id = NULLIF(app.tenant_id)` and `status = 'pending'` and `invited_by IS NULL` — the `provisioner` path forges no inviter |
-| `provider_accounts_read` | provider_accounts | SELECT / app_user | `tenant_id IS NULL OR tenant_id = NULLIF(app.tenant_id)` |
-| `tenant_notification_settings_*` | tenant_notification_settings | The standard template / app_user + INSERT / provisioner | — |
-| `notification_log_*` | notification_log | SELECT, INSERT, UPDATE / app_user — and for UPDATE an `AS RESTRICTIVE FOR UPDATE` policy: `status = 'pending'` → WITH CHECK `status IN ('sent','failed')` | Both templates (`tenant_isolation` + `client_scope`) |
+```sql
+-- ===== authenticator — the recovery tokens (§2.2) =====
+CREATE POLICY password_reset_tokens_authenticator_select ON password_reset_tokens
+  FOR SELECT TO authenticator
+  USING (true);   -- the role sees every token; the match is by the hash in the query
 
-**Enforcement — not automatic yet:** `checks/core/generate-manifest.py` extracts the manifest from the text of 1.16 alone, and only from `CREATE POLICY` inside sql blocks; and the policies above are written as a table in an amendment. So they **do not reach the manifest, and Check 2 does not enforce their text**, until the generator is changed to read the amendments and these policies are written as `CREATE POLICY` in sql blocks (OPEN_ITEMS 50 — changing the check's inputs is the project owner's decision). And until then: a table carrying policies outside the two templates and absent from the manifest fails Check 2 (outside the manifest, "the templates alone"), so changing the generator is a precondition for the first code PR that adds these policies.
+CREATE POLICY password_reset_tokens_authenticator_insert ON password_reset_tokens
+  FOR INSERT TO authenticator
+  WITH CHECK (true);
+
+CREATE POLICY password_reset_tokens_authenticator_use ON password_reset_tokens
+  FOR UPDATE TO authenticator
+  USING (used_at IS NULL)
+  WITH CHECK (used_at IS NOT NULL);   -- the only write is consumption
+
+-- ===== the catalog (§2.3) =====
+CREATE POLICY plans_read ON plans
+  FOR SELECT TO app_user, provisioner, job_runner
+  USING (true);
+
+-- ===== platform_subscriptions (§2.4) =====
+CREATE POLICY platform_subscriptions_read ON platform_subscriptions
+  FOR SELECT TO app_user
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));   -- the template's condition, FOR SELECT alone: app_user is granted SELECT only
+
+CREATE POLICY platform_subscriptions_provisioner_insert ON platform_subscriptions
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY platform_subscriptions_provisioner_select ON platform_subscriptions
+  FOR SELECT TO provisioner
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY platform_subscriptions_provisioner_update ON platform_subscriptions
+  FOR UPDATE TO provisioner
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+-- ===== provisioner — the operations procedure (§5.4) =====
+CREATE POLICY tenants_provisioner_select ON tenants
+  FOR SELECT TO provisioner
+  USING (id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY tenants_provisioner_update ON tenants
+  FOR UPDATE TO provisioner
+  USING (id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
+  WITH CHECK (id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY invitations_provisioner_insert ON invitations
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+              AND status = 'pending'
+              AND invited_by IS NULL);   -- a bootstrap invitation: the provisioner path forges no inviter (§2.11)
+
+-- ===== delivery (§2.5–§2.7) =====
+CREATE POLICY provider_accounts_read ON provider_accounts
+  FOR SELECT TO app_user
+  USING (tenant_id IS NULL
+         OR tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));   -- the platform's row, or the current tenant's (§2.6)
+
+CREATE POLICY tenant_isolation ON tenant_notification_settings
+  FOR ALL TO app_user
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY tenant_notification_settings_provisioner_insert ON tenant_notification_settings
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY tenant_isolation ON notification_log
+  FOR ALL TO app_user
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY client_scope ON notification_log
+  AS RESTRICTIVE FOR ALL TO app_user
+  USING (
+    COALESCE((SELECT NULLIF(current_setting('app.scope_all', true), '')::boolean), false)
+    OR EXISTS (
+      SELECT 1 FROM scope_assignments sa
+      WHERE sa.tenant_id     = notification_log.tenant_id
+        AND sa.scope_ref_id  = notification_log.scope_ref_id
+        AND sa.membership_id = (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+        AND sa.active))
+  WITH CHECK (
+    COALESCE((SELECT NULLIF(current_setting('app.scope_all', true), '')::boolean), false)
+    OR EXISTS (
+      SELECT 1 FROM scope_assignments sa
+      WHERE sa.tenant_id     = notification_log.tenant_id
+        AND sa.scope_ref_id  = notification_log.scope_ref_id
+        AND sa.membership_id = (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+        AND sa.active));
+
+CREATE POLICY notification_log_status_forward ON notification_log
+  AS RESTRICTIVE FOR UPDATE TO app_user
+  USING (status = 'pending')
+  WITH CHECK (status IN ('sent', 'failed'));   -- the status only moves forward: pending → sent|failed
+```
+
+**Enforcement:** `checks/core/generate-manifest.py` reads 1.16, then its amendments in the order of their numbers, and requires the text of every `CREATE POLICY` to match between the Arabic and the translation (comments aside); the English text is what enters the manifest. **A policy from this section enters the manifest when it is built:** the code PR that creates it adds its name (`table.policy`) to `checks/core/amendment-policies-built.json` and regenerates the manifest in the same PR; what is not built yet is reported as "pending" and required by neither Check 2 nor Check 3. And a name that enters that file never leaves it except by an explicit project-owner decision, recorded in the PR. The local check `check-manifest-extraction` refuses a manifest that does not match the extraction.
 
 ### 4.2 New permissions (to §5)
 

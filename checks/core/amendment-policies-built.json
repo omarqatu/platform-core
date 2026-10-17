@@ -1,0 +1,4 @@
+{
+  "_comment": "The amendment policies the schema implements, as \"table.policy\", per amendment number (PLATFORM_CORE Amendment 01 §4.1). checks/core/generate-manifest.py puts a policy from an amendment into the manifest only once it is listed here; the rest is reported as pending, and neither Check 2 nor Check 3 requires it. The code PR that creates a policy lists it here and regenerates the manifest in the same PR. A name that enters this file never leaves it except by an explicit project-owner decision, recorded in the PR — removing one silences Checks 2 and 3 for that policy.",
+  "01": []
+}

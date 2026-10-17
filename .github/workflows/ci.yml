@@ -78,6 +78,13 @@ jobs:
           bash checks/local/check-no-bulk-writes.sh
           bash checks/local/check-no-bulk-writes.sh --self-test
 
+      # checks/core/manifest.json (Check 2's input) is the extraction of v1.16 and its amendments, the Arabic and the
+      # English stating the same policies (Amendment 01 §4.1). A local check with a name; needs no database.
+      - name: Local check — check-manifest-extraction, and its self-test
+        run: |
+          bash checks/local/check-manifest-extraction.sh
+          bash checks/local/check-manifest-extraction.sh --self-test
+
       # A fresh migrator password per run: the T0.3 scan searches the Api image
       # for this exact value. Every holder of the migrator connection string
       # (the migration tool, the test suites) takes it from the environment.

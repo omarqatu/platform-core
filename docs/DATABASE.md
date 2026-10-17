@@ -654,8 +654,11 @@ and record which ran (`migrations_meta.__EFMigrationsHistory`). The EF model (`C
    one migration history for the whole database.
 3. **Update the check inputs** if you added or changed a policy, a grant or a chain:
    `checks/core/grants.json`, `checks/core/policy-chains.json`, and (for core tables) the manifest — which is
-   *extracted from PLATFORM_CORE*, not hand-edited (`checks/core/generate-manifest.py`). Changing these is changing
-   what the governing document says: it is a project-owner decision, raised in the PR.
+   *extracted from PLATFORM_CORE and its amendments*, not hand-edited (`checks/core/generate-manifest.py`;
+   `check-manifest-extraction` fails otherwise). A policy an amendment states enters the manifest when the PR that
+   creates it lists it as `table.policy` in `checks/core/amendment-policies-built.json` and regenerates the manifest;
+   until then it is pending. Changing these is changing what the governing document says: it is a project-owner
+   decision, raised in the PR.
 4. **Migrate a clean database** and run the checks:
    ```bash
    scripts/dev-down.sh && scripts/dev-up.sh          # recreates the database and migrates it
