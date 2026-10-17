@@ -23,11 +23,15 @@ public class T3_PasswordPathTests(WhiteBoxFixture fixture) : IAsyncLifetime
         ON CONFLICT (user_id) DO UPDATE SET password_hash = excluded.password_hash, updated_at = now();
         """, ("u", fixture.W1User), ("h", PasswordHashing.Hash(FirstPassword)));
 
+    // What this test changes, it restores: the rows it created, and the stamp it moved — the fixture's users are
+    // shared with every other test in the collection, and one of them (T1) presents W1User's stamp as its cookie
+    // would.
     public async Task DisposeAsync() => await ExecuteAsMigratorAsync(
         """
         DELETE FROM password_reset_tokens WHERE user_id = @u;
         DELETE FROM user_password_credentials WHERE user_id = @u;
-        """, ("u", fixture.W1User));
+        UPDATE users SET security_stamp = @s WHERE id = @u;
+        """, ("u", fixture.W1User), ("s", fixture.W1UserStamp));
 
     [Fact]
     public async Task ResetPath_UoW2_RunsWithTheTokensUserAlone_AndWritesNoAuditEntry()
