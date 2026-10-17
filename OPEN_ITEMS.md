@@ -541,58 +541,80 @@ Closed by the password-screens PR:
 - **For the project owner:** whether the test should assert over every entity type or only over every entity the
   application inserts is yours to settle; and A1's hole is not A3's to close inside A3.
 
-### 62. The platform has no password rule at all — and that predates these screens
+### 62. The password rule, decided: minimum length 12, no composition rules
 
-- **Origin:** the password screens (OPEN_ITEMS 59), found while looking for the rules the new screens were meant
-  to match. **The gap is not these screens': it has shipped since invitation acceptance was built.**
-- **The finding:** nothing anywhere checks a password beyond its being present.
-  - The API accepts **1 to 1024 bytes**: every one of the three endpoints tests only
-    `{ Length: > 0 and <= MaxPassword }` (`src/Api/Endpoints/AuthEndpoints.cs`), and so does bootstrap. There is
-    no minimum length, no composition rule, no check against a common-password list, nothing.
-  - No screen checks more than `required`: not the invitation-acceptance screen
-    (`web/src/screens/invitations/AcceptInvitationScreen.tsx`), which is where accounts are actually created
-    today, and not the two new ones.
-  - So a one-character password is accepted by the platform, and has been since acceptance shipped.
-- **What these screens did:** nothing, deliberately. They check that the two fields match and no more; inventing
-  a minimum in the interface would be a product rule written in the wrong layer, and one that the API would not
-  enforce for anyone who did not use the interface.
-- **For the project owner:** the rule is yours to set — whether there is one, what it is, and whether it is
-  checked in the API alone or in both layers (it has to be in the API either way). It touches the acceptance
-  screen and bootstrap as much as recovery, so whatever is decided is one change across all of them, not a
-  change to the recovery screens.
+- **Origin:** the password screens (OPEN_ITEMS 59), which found that nothing anywhere checked a password beyond
+  its being present. **Decided by the project owner on 2026-10-17. This is a specification, not an open
+  question** — what is left is building it, in a PR of its own.
+- **What was found:** the API accepted **1 to 1024 bytes** on every password endpoint
+  (`{ Length: > 0 and <= MaxPassword }`), and no screen checked more than `required` — the invitation-acceptance
+  screen included, which is where accounts are actually created today. A one-character password was accepted,
+  and had been since acceptance shipped.
+- **The rule:**
+  - **Minimum length 12.** The maximum stays 1024 (`MaxPassword`).
+  - **No composition rules**: no required symbol, no required digit, no required case. Length beats complexity,
+    and composition rules push people into predictable shapes.
+  - **Server-side first**, as a rejection with **its own error code**; the screens check the same rule
+    afterwards, so the interface explains it before the round trip. The server is the enforcement; the screen is
+    the courtesy.
+  - **It covers the invitation-acceptance screen**, not only the recovery ones.
+  - **Existing passwords are not forced to rotate.** Whether they ever are is a separate question the project
+    owner has not answered.
+- **Four entry points, not three** — every one of them writes a password and every one needs the check:
+  1. `POST /api/auth/password/reset`
+  2. `PUT /api/me/password`
+  3. `POST /api/invitations/accept` (the new-account branch)
+  4. **`POST /api/provision/tenants`** — **name it loudly.** It is registered in `Development` and `CI` only
+     (T4.17), which is exactly why it gets forgotten — and it is what creates the accounts every test runs on.
+- **Three things the building PR should know, found while reading this path:**
+  - **The seed contract will not notice the rule, and that is correct.** `tests/seed/seed-contract.sql` writes
+    hashes directly as `migrator`; it never passes the API, so no endpoint check applies to it. Its passwords
+    (`Seed:PasswordFormat` = `{0}-seed-password`) are over 12 characters anyway.
+  - **The e2e fixtures look safe — check them before pushing.** `ownOrganization` builds
+    `e2e-<label>-<base36>-password`, and `web/e2e/password.spec.ts` only appends `-reset` / `-changed` to an
+    already-long password. All over 12 today. Verify rather than assume.
+  - **A new error code needs its full four-file recipe**, or `check-api-error-codes` fails:
+    `src/Core/ApiErrorCodes.cs`, `checks/local/export-api-error-codes.py`, `web/src/i18n/apiErrors.ts`, and the
+    Arabic in `web/locales/ar.json`.
+- **Scope:** its own small PR, before launch. Not folded into a PR that happens to open these files for another
+  reason: a specification does not ride along in someone else's change.
 
-### 63. `POST /auth/password/reset` takes unlimited attempts against a token
+### 63. `POST /auth/password/reset` takes unlimited attempts against a token — accepted, by decision
 
 - **Origin:** the password screens (OPEN_ITEMS 59), found while establishing which error codes the reset screen
-  can actually receive.
+  can actually receive. **Left open by the project owner's decision on 2026-10-17, not by omission.**
 - **The finding:** Amendment 01 §5.2 puts the attempt limiter on `login` and on `forgot` — "the same mechanism
-  for `forgot`, by (the email + `ip`)" — and says nothing about `reset`. The endpoint matches the implementation:
-  it reads the token, answers `invalid_token` or `invalid_request`, and never counts an attempt or writes an
-  `auth_attempts` row. There is no ip ceiling on it and no delay, so a caller may try tokens against it as fast
-  as the server answers. (The screen therefore does **not** handle `too_many_attempts`: it cannot arrive.)
-- **Why it is probably fine:** the token is 32 random bytes and only its SHA-256 is stored; the live window is
-  30 minutes and the newest request consumes the older tokens. Guessing one is not a practical attack.
-- **Why it is written down anyway:** "probably fine" should be a decision somebody made, not a line nobody
-  noticed was missing. The cheap version is the ip ceiling `forgot` already uses, which costs one
-  `auth_attempts` read on a path that is otherwise unmetered.
-- **For the project owner:** to be settled with the launch numbers of §5.2 (OPEN_ITEMS 16, 54).
+  for `forgot`, by (the email + `ip`)" — and says nothing about `reset`. The endpoint matches the document: it
+  reads the token, answers `invalid_token` or `invalid_request`, and never counts an attempt or writes an
+  `auth_attempts` row. There is no ip ceiling on it and no delay. (The screen therefore does **not** handle
+  `too_many_attempts`: it cannot arrive.)
+- **The decision:** a 32-byte single-use token with a 30-minute life makes guessing impractical, so the absence
+  of a limiter here is accepted. The limiter question is **settled with the launch numbers, alongside item 54**
+  (and item 16's).
+- **Why it stays written down:** so that "probably fine" is a decision somebody made and dated, not a line
+  nobody noticed was missing. The cheap version, if the launch numbers want it, is the ip ceiling `forgot`
+  already uses — one `auth_attempts` read on a path that is otherwise unmetered.
 
 ### 64. `PUT /me/password` answers 401 for a wrong *current* password, which is the wrong code
 
 - **Origin:** the password screens (OPEN_ITEMS 59), found while building the change-password screen.
-- **The finding:** 401 is the interface's signal that the session is over — `api/client.ts` sends every 401 but
-  login's to the session, which drops the state, aborts everything in flight and shows "Your session has ended".
-  `PUT /me/password` returns `401 invalid_credentials` when the *current* password is wrong, which is not a
-  statement about the session at all: the caller is signed in, and stays signed in. Taken at face value it signs
-  a user out of a working session for a typo.
-- **What this PR did:** the smallest correct client fix — a 401 ends the session unless the code is
-  `invalid_credentials` (`web/src/api/client.ts`). A stale security stamp on the same request is
-  `session_expired` and still ends the session, so the two cases stay apart. Covered by a unit test for each.
-- **What should happen instead:** the endpoint should answer with a code that means "this credential is wrong",
-  not "this session is over" — 403, or 422 as a validation refusal. Amendment 01 §5.1 does not name the status,
-  so this is not a conflict with the document; it is a gap in it. When it is changed, the client's exception
-  comes out with it, rather than becoming permanent.
-- **For the project owner:** the status code, and whether the amendment should name it.
+  **Decided by the project owner on 2026-10-17: 403 is the right code; fixed in the first backend PR that
+  touches this area, not in a PR of its own.**
+- **The finding:** 401 is the interface's signal that the session is over — `api/client.ts` sends 401s to the
+  session, which drops the state, aborts everything in flight and shows "Your session has ended".
+  `PUT /me/password` returns `401 invalid_credentials` when the *current* password is wrong, which says nothing
+  about the session: the caller is signed in and stays signed in. Taken at face value it signs a user out of a
+  working session for a typo.
+- **What the password-screens PR did:** the smallest correct client fix — a 401 ends the session unless the code
+  is `invalid_credentials` (`web/src/api/client.ts`). A stale security stamp on the same request is
+  `session_expired` and still ends the session, so the two cases stay apart. One unit test each.
+- **What the fixing PR must do — both halves, in the same PR:** change the status to **403**, *and* remove the
+  client's `invalid_credentials` exception with it. Left behind, that exception becomes dead code nobody can
+  explain: it guards a 401 the server no longer sends, and the comment explaining it points at an item that is
+  closed. It is referenced from `web/src/api/client.ts`, `docs/DEVELOPER_GUIDE.md` §15 and `web/README.md` —
+  all three mention this item by number, and all three come out together.
+- **Amendment 01 §5.1 names no status for this case**, so this is a gap in the document rather than a conflict
+  with it; whether the amendment should name it is the project owner's call.
 
 ## For the next version of the document — not for the code
 
