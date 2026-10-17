@@ -25,6 +25,7 @@
     "username_taken",
     "already_member",
     "role_templates_unavailable",
-    "invalid_token"
+    "invalid_token",
+    "password_too_short"
   ]
 }

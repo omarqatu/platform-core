@@ -33,4 +33,10 @@ export const messages = defineMessages({
   accentRust: { id: 'shell.accent.rust', defaultMessage: 'Rust' },
   accentBlue: { id: 'shell.accent.blue', defaultMessage: 'Blue' },
   accentViolet: { id: 'shell.accent.violet', defaultMessage: 'Violet' },
+  // The password rule, said before it is broken (OPEN_ITEMS 62). Shared by every screen that sets a password —
+  // the two recovery screens and invitation acceptance — so the rule is explained in one wording everywhere.
+  passwordRule: {
+    id: 'common.password.rule',
+    defaultMessage: 'At least 12 characters. No symbol, digit or capital letter is required.',
+  },
 });

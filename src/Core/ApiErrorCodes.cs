@@ -46,4 +46,8 @@ public static class ApiErrorCodes
     // Password recovery (Amendment 01 §5.1): unknown, used or expired — one code, so the response says nothing
     // about which.
     public const string InvalidToken = "invalid_token";
+
+    // The password rule (OPEN_ITEMS 62): shorter than PasswordPolicy.MinimumLength. Length is the whole rule, so
+    // the code says length and nothing vaguer; a composition rule, if one ever arrives, gets a code of its own.
+    public const string PasswordTooShort = "password_too_short";
 }

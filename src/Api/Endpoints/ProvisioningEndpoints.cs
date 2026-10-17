@@ -1,6 +1,7 @@
 using Core;
 using Core.Data;
 using Core.Http;
+using Core.Identity;
 using Core.Provisioning;
 
 namespace Api.Endpoints;
@@ -24,7 +25,7 @@ public static class ProvisioningEndpoints
     public static bool IsBootstrapEnvironment(string environment) => BootstrapEnvironments.Contains(environment, StringComparer.Ordinal);
 
     private const int MaxText = 256;
-    private const int MaxPassword = 1024;
+    private const int MaxPassword = PasswordPolicy.MaximumLength;
 
     /// <summary>
     /// Registers POST /provision/tenants when the guard admits the environment; returns whether it did. The guard is
@@ -44,6 +45,12 @@ public static class ProvisioningEndpoints
                     Password: { Length: > 0 and <= MaxPassword } password,
                 })
                 return InvalidRequest();
+            // The password rule holds here too (OPEN_ITEMS 62). This route exists in Development and CI only
+            // (T4.17), which is exactly why it is easy to forget — and it is what creates the accounts the
+            // tests sign in as, so leaving it out would mean the suite proves the rule on accounts the rule
+            // never touched.
+            if (PasswordPolicy.IsTooShort(password))
+                return PasswordTooShort();
 
             db.ClientAddress = http.Connection.RemoteIpAddress?.ToString();
             var result = await Bootstrap.RunAsync(db, new BootstrapRequest(tenantName, fullName, email, username, password), ct);
@@ -75,6 +82,10 @@ public static class ProvisioningEndpoints
                         Username: { Length: > 0 and <= MaxText } username, Password: { Length: > 0 and <= MaxPassword } password,
                     })
                     return InvalidRequest();
+                // The new-account branch writes a password, so the rule applies to it (OPEN_ITEMS 62). The
+                // signed-in branch writes none — it accepts the invitation as the account that already exists.
+                if (PasswordPolicy.IsTooShort(password))
+                    return PasswordTooShort();
                 account = new NewAccount(email, fullName, username, password);
             }
 
@@ -86,4 +97,7 @@ public static class ProvisioningEndpoints
 
     private static IResult InvalidRequest() =>
         Results.Json(new { error = ApiErrorCodes.InvalidRequest }, statusCode: StatusCodes.Status400BadRequest);
+
+    private static IResult PasswordTooShort() =>
+        Results.Json(new { error = ApiErrorCodes.PasswordTooShort }, statusCode: StatusCodes.Status400BadRequest);
 }

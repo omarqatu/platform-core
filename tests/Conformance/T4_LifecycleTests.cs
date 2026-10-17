@@ -203,7 +203,9 @@ public class T4_LifecycleTests
         var name = "T4 t4-8 failed " + World.Tag();
         using var anonymous = new Browser();
         var failed = await anonymous.Client.PostAsJsonAsync("/provision/tenants",
-            new { tenant_name = name, full_name = "x", email = World.Account("t4-8-failed").Email, username = world.Owner.Username, password = "x-password" });
+            // The password is twelve characters because the rule now refuses fewer (OPEN_ITEMS 62): a ten-character
+            // value would be rejected at the boundary and this test would never reach the conflict it is about.
+            new { tenant_name = name, full_name = "x", email = World.Account("t4-8-failed").Email, username = world.Owner.Username, password = "twelvechars!" });
         Assert.Equal(HttpStatusCode.Conflict, failed.StatusCode);
         Assert.Equal(0, await Seed.CountAsMigratorAsync("SELECT count(*) FROM tenants WHERE name = @n", ("n", name)));
     }

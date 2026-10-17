@@ -25,8 +25,9 @@ public class T3_PasswordTests
 
     private static string HashOf(string token) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
-    /// <summary>A recovery token for a user, written as authenticator — its only writes are this table and auth_attempts.</summary>
-    private static async Task<string> IssueTokenAsync(Guid userId, TimeSpan? lifetime = null, DateTime? usedAt = null)
+    /// <summary>A recovery token for a user, written as authenticator — its only writes are this table and
+    /// auth_attempts. Internal rather than private so T3_PasswordRuleTests issues its tokens the same way.</summary>
+    internal static async Task<string> IssueTokenAsync(Guid userId, TimeSpan? lifetime = null, DateTime? usedAt = null)
     {
         var token = NewToken();
         await using var connection = await Target.OpenAsync(Target.Authenticator);
