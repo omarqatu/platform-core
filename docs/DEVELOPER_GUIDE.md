@@ -1243,6 +1243,38 @@ Api__Origin=http://localhost:5173 dotnet test tests/Conformance -c Release --no-
 Conformance's job tests run the Worker from `src/Worker/bin/Release/net10.0/Worker.dll` — build in Release first.
 If a run leaves the database in a strange state, `scripts/dev-down.sh && scripts/dev-up.sh` gives you a clean one.
 
+### No .NET SDK on the machine? Docker has one — try it before reporting anything unprovable
+
+Three sessions in a row reported "no .NET SDK here" as a hard limit and ticked nothing they could not run. It was
+not a limit. **Nothing is reported as unprovable locally until Docker has actually been tried**, and the report
+says which was tried — pulling an image is not the same as having an SDK, and neither is having `docker` on the
+PATH while the daemon is down (`sudo dockerd &` starts it).
+
+The whole stack runs out of `mcr.microsoft.com/dotnet/sdk:10.0` with the repository mounted. This is what the
+password-screens PR used to reproduce a red CI e2e step and prove its fix:
+
+```bash
+sudo dockerd &                                   # if the daemon is not already up
+docker compose up -d --wait postgres             # PostgreSQL 18, as CI starts it
+
+# The SDK in a container. Behind an inspecting proxy, NuGet needs its CA, or restore fails with UntrustedRoot:
+#   -e HTTPS_PROXY="$HTTPS_PROXY" -v /path/to/ca-bundle.crt:/ca.crt:ro -e SSL_CERT_FILE=/ca.crt
+dock() { docker run --rm --network host -v "$PWD:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 "$@"; }
+dock dotnet run --project src/Migrations -c Release
+docker compose exec -T postgres psql -X -q -v ON_ERROR_STOP=1 -U migrator -d platform < tests/seed/seed-contract.sql
+
+# The Api, serving the interface built by node on the host (cd web && npm run build).
+# --no-launch-profile, or launchSettings.json overrides the port and the environment.
+docker run -d --name api --network host -v "$PWD:/src" -w /src   -e ASPNETCORE_URLS=http://127.0.0.1:5080 -e ASPNETCORE_ENVIRONMENT=CI -e Session__RequireHttps=false   -e Security__AllowedOrigins__0=http://127.0.0.1:5080 -e Web__Root=/src/web/dist   -e "ConnectionStrings__app_user=Host=localhost;Port=5432;Database=platform;Username=app_user;Password=app_user_dev"   -e "ConnectionStrings__authenticator=Host=localhost;Port=5432;Database=platform;Username=authenticator;Password=authenticator_dev"   -e "ConnectionStrings__provisioner=Host=localhost;Port=5432;Database=platform;Username=provisioner;Password=provisioner_dev"   mcr.microsoft.com/dotnet/sdk:10.0 dotnet run --project src/Api -c Release --no-launch-profile
+
+cd web && PW_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome \
+  ConnectionStrings__migrator='Host=127.0.0.1;Port=5432;Database=platform;Username=migrator;Password=migrator_dev' \
+  npx playwright test            # PW_CHROMIUM_PATH only where Chromium is already installed elsewhere
+```
+
+The same container runs `dotnet test` for Conformance and the white-box suite. The database it leaves behind holds
+the e2e fixtures' own organizations, exactly as a CI run would; throw it away with `docker compose down -v`.
+
 ### The rule about tests
 
 > **Never edit a test to make it pass** (PROOF_SPEC rule 3). A test that looks wrong → stop, explain in the PR, the

@@ -128,7 +128,10 @@ Closed by the password-screens PR:
   wording for every address, with no redirect and nothing timed in the browser, which is what keeps A3's uniform
   204 uniform where the user can see it. Three items were raised in the building of it: **62** (no password rule
   exists anywhere, and that predates these screens), **63** (`reset` is unlimited against a token) and **64**
-  (`PUT /me/password` answers 401 for a wrong *current* password).
+  (`PUT /me/password` answers 401 for a wrong *current* password). It also found, through CI rather than through
+  reading, that `session_expired` never reached the user on a cold load — the client read every boot 401 as "not
+  signed in" — and fixed it; and it established that a container with no .NET SDK can still run the whole stack
+  through Docker, which DEVELOPER_GUIDE §16 now says in the place the next session will look.
 
 ## For the project owner — a decision after T8
 
