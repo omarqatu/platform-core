@@ -59,7 +59,7 @@ Every table carrying `tenant_id` follows the standard template (`tenant_isolatio
 
 ### 2.1 `users.security_stamp` — a new column (to §4.2)
 
-`security_stamp app_id NOT NULL`. The application generates it when the user is created and changes it on every password change. It enters the cookie; `UnitOfWorkMiddleware` compares it with the row on every request (one read, under the existing `user_self_read`); a mismatch = an expired session (401). Writing it through `user_self_update` is a self-identity write, so it joins the exception list of automatic auditing (1.16 §7) beside `last_login_at, language, theme`. **The migration:** a `NOT NULL` column on a table that has rows → a backfill with a value for every row inside the same migration, then a row-count check (1.16 §3.4, condition 2).
+`security_stamp app_id NOT NULL`. The application generates it when the user is created and changes it on every password change. It enters the cookie; `UnitOfWorkMiddleware` compares it with the row on every request (one read, under the existing `user_self_read`); a mismatch = an expired session (401). Writing it through `user_self_update` is a self-identity write, so it joins the exception list of automatic auditing (1.16 §7) beside `last_login_at, language, theme` — so a password change leaves no audit trace until the identity audit log exists (OPEN_ITEMS 52). **The migration:** a `NOT NULL` column on a table that has rows → a backfill with a value for every row inside the same migration, then a row-count check (1.16 §3.4, condition 2).
 
 ### 2.2 `password_reset_tokens` — a global table (to §4.2, beside `auth_attempts`)
 
@@ -227,7 +227,7 @@ Inserted by the same recipe as the guide's §11: the permission, the templates, 
 
 | Path | Kind | Permission | Note |
 | --- | --- | --- | --- |
-| `POST /api/auth/password/forgot` | own UoW (authenticator) | — | Always 204; rate limit (§5.2); email through the sender |
+| `POST /api/auth/password/forgot` | own UoW (authenticator) | — | Always 204; rate limit (§5.2); email through the sender. The 204 is uniform; the response time is not (OPEN_ITEMS 51) |
 | `POST /api/auth/password/reset` | own UoW ×2 | — | UoW-1 authenticator verifies the token and consumes it; UoW-2 app_user (`app.user_id` = the token's owner — the named exception to §4.3-b, §0) updates the hash and changes `security_stamp`; no cookie is issued |
 | `PUT /api/me/password` | own UoW ×2 | session | Verifying the current one (authenticator), then the update (app_user); the cookie is issued again with the new stamp |
 | `GET /api/tenant/subscription` | normal | `core.billing.read` | The plan, the status, `paid_until` |

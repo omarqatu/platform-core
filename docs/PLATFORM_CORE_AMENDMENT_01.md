@@ -56,7 +56,7 @@
 
 ### 2.1 `users.security_stamp` — عمود جديد (إلى §4.2)
 
-`security_stamp app_id NOT NULL`. يولّده التطبيق عند إنشاء المستخدم ويغيّره عند كل تغيير لكلمة السر. يدخل الكوكي؛ `UnitOfWorkMiddleware` يقارنه مع الصف في كل طلب (قراءة واحدة تحت `user_self_read` الموجودة)؛ اختلافه = جلسة منتهية (401). كتابته عبر `user_self_update` كتابة هوية ذاتية، فتنضم إلى قائمة الاستثناء من التدقيق التلقائي (1.16 §7) بجوار `last_login_at, language, theme`. **الترحيل:** عمود `NOT NULL` على جدول فيه صفوف → backfill بقيمة لكل صف داخل نفس الترحيل، ثم فحص عدد الصفوف (1.16 §3.4، الشرط 2).
+`security_stamp app_id NOT NULL`. يولّده التطبيق عند إنشاء المستخدم ويغيّره عند كل تغيير لكلمة السر. يدخل الكوكي؛ `UnitOfWorkMiddleware` يقارنه مع الصف في كل طلب (قراءة واحدة تحت `user_self_read` الموجودة)؛ اختلافه = جلسة منتهية (401). كتابته عبر `user_self_update` كتابة هوية ذاتية، فتنضم إلى قائمة الاستثناء من التدقيق التلقائي (1.16 §7) بجوار `last_login_at, language, theme` — فلا أثر تدقيق لتغيير كلمة السر حتى يوجد سجل تدقيق الهوية (OPEN_ITEMS 52). **الترحيل:** عمود `NOT NULL` على جدول فيه صفوف → backfill بقيمة لكل صف داخل نفس الترحيل، ثم فحص عدد الصفوف (1.16 §3.4، الشرط 2).
 
 ### 2.2 `password_reset_tokens` — جدول عام (إلى §4.2، بجوار `auth_attempts`)
 
@@ -224,7 +224,7 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 
 | المسار | النوع | الصلاحية | ملاحظة |
 | --- | --- | --- | --- |
-| `POST /api/auth/password/forgot` | own UoW (authenticator) | — | 204 دائماً؛ حدّ معدل (§5.2)؛ بريد عبر المُرسِل |
+| `POST /api/auth/password/forgot` | own UoW (authenticator) | — | 204 دائماً؛ حدّ معدل (§5.2)؛ بريد عبر المُرسِل. الـ 204 موحّد وزمن الرد ليس موحّداً (OPEN_ITEMS 51) |
 | `POST /api/auth/password/reset` | own UoW ×2 | — | UoW-1 authenticator يتحقق من الرمز ويستهلكه؛ UoW-2 app_user (`app.user_id` = صاحب الرمز — الاستثناء المسمّى على §4.3-ب، §0) يحدّث الـ hash ويغيّر `security_stamp`؛ لا كوكي يُصدر |
 | `PUT /api/me/password` | own UoW ×2 | session | التحقق من الحالية (authenticator) ثم التحديث (app_user)؛ الكوكي يُعاد إصداره بالختم الجديد |
 | `GET /api/tenant/subscription` | normal | `core.billing.read` | الخطة، الحالة، `paid_until` |

@@ -229,6 +229,25 @@ Closed by the API-path PR:
 - **Amendment 01 §5.2** keeps this direction and extends it: the same limiter also covers the forgot-password path
   (`POST /api/auth/password/forgot`), by (email + IP). The numbers stay open.
 
+### 51. Forgot-password: the response time reveals whether an account exists
+
+- **Origin:** the review of Amendment 01 (§5.1), recorded by the project owner on 2026-10-17. A pre-launch item.
+- **The finding:** `POST /api/auth/password/forgot` always answers 204, but not in the same time: for an existing
+  account it hashes and inserts a token and sends an email; for a missing one it returns at once. The latency tells
+  an attacker which addresses have accounts — the enumeration the uniform 204 is there to prevent.
+- **Before launch:** a constant-time response path — the response time must not depend on whether the account
+  exists. The amendment's design does not change.
+
+### 52. No audit trail for a password change until the identity audit log exists
+
+- **Origin:** the review of Amendment 01 (§2.1, §5.1), recorded by the project owner on 2026-10-17. A pre-launch item.
+- **The gap:** a password reset or change writes identity state — `user_password_credentials` (never audited, v1.16
+  §7), `users.security_stamp` (on the exception list of automatic auditing, Amendment 01 §2.1) and
+  `password_reset_tokens` (outside automatic auditing, §2.2). None of these writes is recorded anywhere today:
+  `audit_log` is a tenant log, and these are not tenant data.
+- **Before launch:** the identity audit log v1.16 §7 already lists as a pre-launch item, covering at least password
+  resets and changes.
+
 ## For production — outside the proof
 
 ### 18. Persistent Data Protection keys
