@@ -26,9 +26,13 @@ public sealed record CategoriesResponse(IReadOnlyList<CategoryItem> Categories);
 public sealed record CreateSubscriptionRequest(Guid? ClientId, string? ServiceName, DateOnly? EndsOn, Guid? CategoryId,
     Guid? SubcategoryId, string? Provider, string? Cost, string? Currency, string? BillingCycle, bool? AutoRenew, string? LoginUrl);
 
-/// <summary>Editing a subscription: every field but its client, which a subscription does not change.</summary>
+/// <summary>
+/// Editing a subscription: every field but its client, which a subscription does not change. <see cref="ClientId"/>
+/// is read only to refuse it: an edit that names a client is a move between clients — a scope crossing inside the
+/// tenant — and is answered 400 invalid_value, loudly, rather than silently ignored. Never write it to the row.
+/// </summary>
 public sealed record UpdateSubscriptionRequest(string? ServiceName, DateOnly? EndsOn, Guid? CategoryId, Guid? SubcategoryId,
-    string? Provider, string? Cost, string? Currency, string? BillingCycle, bool? AutoRenew, string? LoginUrl);
+    string? Provider, string? Cost, string? Currency, string? BillingCycle, bool? AutoRenew, string? LoginUrl, Guid? ClientId = null);
 
 /// <summary>
 /// The module's API (PROOF_SPEC T5; Amendment 02 §3): the client list, the subscription list, one subscription,
@@ -123,8 +127,8 @@ public static partial class SubscriptionEndpoints
             InTenantAsync(http, db, session, async (c, t) =>
             {
                 await Permissions.RequireAsync(c, Write, t);
-                if (Validate(body.ServiceName, body.EndsOn, body.CategoryId, body.Provider, body.Cost, body.Currency, body.BillingCycle,
-                        body.AutoRenew, body.LoginUrl) is not { } fields)
+                if (body.ClientId is not null || Validate(body.ServiceName, body.EndsOn, body.CategoryId, body.Provider, body.Cost,
+                        body.Currency, body.BillingCycle, body.AutoRenew, body.LoginUrl) is not { } fields)
                     return Results.Json(new { error = ApiErrorCodes.InvalidValue }, statusCode: StatusCodes.Status400BadRequest);
                 var subscription = CriticalWrite.Require(await c.Subscriptions.SingleOrDefaultAsync(x => x.Id == id, t), "subscriptions update");
                 if (!await SubcategoryFitsAsync(c, fields.CategoryId, body.SubcategoryId, t))

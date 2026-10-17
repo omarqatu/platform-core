@@ -268,17 +268,47 @@ public class T5_ClassificationTests
             "SELECT count(*) FROM audit_log WHERE tenant_id = @t AND entity_type = 'subscriptions' AND entity_id = @i AND action = 'update' AND actor_id = @u",
             ("t", world.TenantId), ("i", id), ("u", world.Owner.UserId)));
 
-        // Editing never moves a subscription to another client: the edit carries no client, and one sent anyway is
-        // not read — even toward a client the caller sees.
-        var q = await world.ClientAsync("Q");
-        var (moved, _) = await world.Owner.Browser.PutAsync($"/subscriptions/{id}", Edit(software, b => b["client_id"] = q));
-        Assert.Equal(HttpStatusCode.NoContent, moved);
-        Assert.Equal(1, await Seed.CountAsMigratorAsync("SELECT count(*) FROM subscriptions WHERE id = @i AND scope_ref_id = @p", ("i", id), ("p", p)));
 
         // The same rules as creating.
         var (refused, body) = await world.Owner.Browser.PutAsync($"/subscriptions/{id}", Edit(software, b => b["billing_cycle"] = "Yearly"));
         Assert.Equal(HttpStatusCode.BadRequest, refused);
         Assert.Contains("invalid_value", body);
+    }
+
+    // ---- Editing never moves a subscription between clients — a scope crossing inside the tenant, the class of bug
+    // the second axis exists to prevent. An edit that names a client is refused, whichever client it names (one the
+    // caller sees, one outside their scope, or the same one), nothing else in the edit is applied, and the row keeps
+    // its scope_ref_id. This guards the edit contract itself: a later change that starts reading client_id fails here.
+    [Fact]
+    public async Task Editing_ThatNamesAClient_IsRefused_AndTheSubscriptionKeepsItsClient()
+    {
+        using var world = await World.BootstrapAsync("a02-move");
+        var p = await world.ClientAsync("P");
+        var q = await world.ClientAsync("Q");
+        var r = await world.ClientAsync("R");
+        var other = await Seed.CategoryAsync("other");
+        var id = await CreateAsync(world, Body(p, other));
+        using var assigned = await world.JoinAsync("a02-move-assigned", "operator", "assigned");
+        foreach (var client in new[] { p, q })
+            Assert.Equal(HttpStatusCode.NoContent, (await world.Owner.Browser.PutAsync(
+                $"/scope/memberships/{assigned.MembershipId}/assignments/{client}", new { active = true, reason = "a02" })).Status);
+
+        var attempts = new (Browser By, Guid To)[]
+        {
+            (world.Owner.Browser, q),   // the owner, to a client they see
+            (assigned.Browser, q),      // an assigned member, to another client of theirs
+            (assigned.Browser, r),      // an assigned member, to a client outside their scope
+            (world.Owner.Browser, p),   // naming the client it already has
+        };
+        foreach (var (by, to) in attempts)
+        {
+            var (status, body) = await by.PutAsync($"/subscriptions/{id}", Edit(other, b => { b["client_id"] = to; b["service_name"] = "moved"; }));
+            Assert.Equal(HttpStatusCode.BadRequest, status);
+            Assert.Contains("invalid_value", body);
+        }
+
+        Assert.Equal(1, await Seed.CountAsMigratorAsync(
+            "SELECT count(*) FROM subscriptions WHERE id = @i AND scope_ref_id = @p AND service_name = 'a02'", ("i", id), ("p", p)));
     }
 
     // The second axis on reading and editing one subscription: an assigned member reads and edits their client's,
@@ -347,8 +377,10 @@ public class T5_ClassificationTests
 
     private static Dictionary<string, object?> Edit(Guid category, Action<Dictionary<string, object?>>? change = null)
     {
-        var body = Body(Guid.Empty, category, change);
+        // The change last, so an edit can be made to carry a client_id on purpose (the move test).
+        var body = Body(Guid.Empty, category);
         body.Remove("client_id");
+        change?.Invoke(body);
         return body;
     }
 

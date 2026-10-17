@@ -1201,8 +1201,9 @@ essentials:
   `http(s)` link) are said beside the field before the request. **Money is a decimal string on the wire, both
   ways** (`"cost": "12.500"`): a JSON number is read by the browser as binary floating point, so the cost goes from
   the field to `decimal` to `numeric(14,3)` as text, and a cost sent as a number is refused (`400 invalid_value`).
-  Editing ignores any `client_id` in the body: there is no path from `PUT` to `scope_ref_id`. The end date and the cost are text fields written
-  left-to-right, and a digit typed on an Arabic keyboard becomes a Western one as it is typed
+  An edit that names a `client_id` is refused (`400 invalid_value`): moving a subscription between clients is a
+  scope crossing inside the tenant, and there is no path from `PUT` to `scope_ref_id`. The end date and the cost
+  are text fields written left-to-right, and a digit typed on an Arabic keyboard becomes a Western one as it is typed
   (`subscriptionForm.westernDigits`) — a native date picker would show the browser's own digits (OPEN_ITEMS 78).
   The list shows both actions to every member, because the interface does not know the caller's permissions: a
   viewer's attempt is refused by the server (OPEN_ITEMS 77).
