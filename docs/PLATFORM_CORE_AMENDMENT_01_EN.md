@@ -20,9 +20,10 @@
 | §3.4 (the `authenticator` row) | "resolves credentials + logs attempts (its only write)" | And it reads the platform's delivery account in `provider_accounts` — that row alone (§2.6, §4.1): `forgot` sends with no session, and no other role is on its path; it adds no write, so "its only write" stands as it is (§4.3-a/4) |
 | §4.4/3 | "Exactly two confined paths, no more" | A third path: the operations procedure `src/Ops`, as `provisioner` (§5.4) |
 | §4.4/5 | "No third path writes across isolation boundaries" | The operations procedure is the named third: one tenant per transaction, and its audit in the same transaction, like the two paths (§4.4/4) |
-| §3.4 (the `migrator` row) | "migrations only" | And with them the import command in `src/Ops.Import` (§6) — a data-migration tool for a single purpose, under the three conditions of §3.4 |
 | §3.10 item a | "The last active owner": no tenant is left without an active owner | A tenant created by `create-tenant` has no active owner until an `owner` invitation is accepted (§5.4); item a applies to it from the first acceptance |
 | §4.1 (the `invitations` definition) | `invited_by` is the inviting user's id (`NOT NULL` in the schema) | `invited_by` accepts `NULL`, meaning "a bootstrap invitation, with no human inviter" (§2.11) |
+
+**What Amendment 02 withdrew from this table (2026-10-17):** the `migrator` row of 1.16 §3.4 alone — it left because the import command that justified it fell with §6 (Amendment 02 §0). The `migrator` row returns to its text in 1.16: "migrations only". The other nine rows stand as they are.
 
 **The chain of authority after it:** PLATFORM_CORE v1.16 + the amendments in their order (01, 02…) → PROOF_SPEC v1.3 → the code → the guides. A conflict between 1.16 and an amendment outside the paragraphs the amendment names as amended = an error in the amendment, until the project owner decides otherwise. This line is added to `CLAUDE.md`.
 
@@ -32,7 +33,7 @@
 - The five roles, no membership between roles, `BYPASSRLS` for migrator alone, no `SECURITY DEFINER` (§3.4).
 - The two standard policy templates, `NULLIF`, `AS RESTRICTIVE` for narrowing, a composite FK between two tables carrying `tenant_id` (§3.3).
 - The application generates every key and timestamp; no `DEFAULT`/identity/generated (§3.5).
-- The consent principle: no membership without acceptance (§0). **The migration (§6) does not breach it:** the migrated users accepted their membership in the live system, and the migration is a move, not a recruitment — so their memberships are created `active` directly, with no invitation.
+- The consent principle: no membership without acceptance (§0). ~~**The migration (§6) does not breach it:** the migrated users accepted their membership in the live system, and the migration is a move, not a recruitment — so their memberships are created `active` directly, with no invitation.~~ **Fell with §6** (Amendment 02 §0): there are no migrated users, so no membership is created without an invitation — the principle applies with no exception.
 - `job_runner` in its 1.16 role (§3.4, §8): reading the active tenants to start the fan-out, and no writing.
 - The ten checks and their inputs; the grants the amendment adds enter `grants.json` in the code PR. The policies of §4.1 enter the manifest when they are built (§4.1).
 
@@ -44,11 +45,11 @@ The project owner's decisions of 2026-10-17. Each one has a corresponding item i
 
 | # | The decision | Effect on 1.16 | OPEN_ITEMS |
 | --- | --- | --- | --- |
-| D1 | **Succession:** the platform succeeds the live subscription system (SYSTEM_DESIGN 2.0). Only the data is migrated; no code is carried over. The old system is read-only until the cutover, then switched off | Settles the open condition in §0 | 42 |
+| D1 | **Succession:** the platform succeeds the live subscription system. The decision stands, and **the description of the live system is corrected, 2026-10-17** (Amendment 02 §0): it is not SYSTEM_DESIGN 2.0 (TypeScript/PG16) as written here and in every document until that day, but **an Excel workbook + n8n + GreenAPI**. And no data is migrated automatically — it is entered by hand (Amendment 02 §0, E7); and the switch-off is disabling a workflow in n8n | Settles the open condition in §0 | 42 |
 | D2 | **Creating tenants in production** by an operations procedure as `provisioner` (bootstrap from the templates + an `owner` invitation the owner accepts). No public self-registration | A third path for `provisioner` — **amends §4.4/3, §4.4/5 and §3.10 item a** (§0) | 43 |
 | D3 | **Delivery channels:** email, WhatsApp (a hosted gateway such as GreenAPI), SMS (API), Telegram (Bot). Email + WhatsApp first. **Option A:** built inside M1, before the cutover | New tables (§2), grants (§3) | 44 |
 | D3′ | **Three layers of delivery:** the platform's provider account by default, with a possible per-tenant override later; enabling the channels and their timing per tenant; the contact details per client. **Provider secrets are not in the database** (§2.6) | — | 45 |
-| D4 | **Audit of the migrated rows — settled 2026-10-17:** **no `audit_log` entry for the import**; `migrator` does not become a fourth writer (1.16 §7). The record is the row-count report the command writes outside the database, and `legacy_id` for tracing (§6) | — (§7 as it stands) | 46 |
+| D4 | ~~**Audit of the migrated rows:** no `audit_log` entry for the import; the record is the row-count report and `legacy_id` for tracing (§6)~~ — **withdrawn** with §6 (Amendment 02 §0): there is no import, so there are no migrated rows to audit. And `migrator` did not become a fourth writer and will not (1.16 §7 as it stands) | — | 46 |
 | D5 | **OPEN_ITEMS 27 is deferred:** measure again after 10 real tenants; the threshold and the two alternatives are fixed | — | 27 |
 | D6 | **Password recovery and change** through three paths and two units of work (authenticator then app_user), with a `security_stamp` that ends every session when the password changes. **Closes OPEN_ITEMS 36 in part:** a copy of the cookie stays valid after logout | §2.1, §2.2, §3, §5 — **amends §4.3-a/2, §4.3-a/4, §4.3-b** (§0) | 47 (a cross-reference to 36 and 16) |
 | D7 | **The platform subscription register (layer 1):** plans without prices, one subscription per tenant with `paid_until`, suspension by a scheduled operations command, read access for the owner and the admin (`core.billing.read`, §4.2). The engine and the gateways are deferred; they are built on top of this, not instead of it | §2.3, §2.4, §3, §4, §5 | 48 |
@@ -127,17 +128,21 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 
 `status ∈ {active, cancelled, renewed}` (`NOT NULL`, under the same backfill rule as §2.1), `renewed_from_id NULL → subscriptions(tenant_id, id)` (composite). Renewal = a new subscription pointing to the old one; cancellation = a status change. **No DELETE** — it stays as in 1.16 for modules, but the module does not use it.
 
-### 2.10 `legacy_id` — temporary
+### 2.10 `legacy_id` — ~~temporary~~ **removed (Amendment 02 §0)**
 
-A `legacy_id text NULL` column on `clients`, `subscriptions`, `tenants` and `users`, added by a numbered schema migration before the import, filled by the import command (§6), and dropped by a later migration after the cutover. Its presence after the switch-off is an error.
+~~A `legacy_id text NULL` column on `clients`, `subscriptions`, `tenants` and `users`, added by a numbered schema migration before the import, filled by the import command (§6), and dropped by a later migration after the cutover. Its presence after the switch-off is an error.~~
+
+**Withdrawn — Amendment 02 §0.** The column existed to match migrated rows against the old system's keys. There is no import, so there is no matching and no column. **It was never built; no numbered migration drops it.**
 
 ### 2.11 `invitations.invited_by` accepts `NULL` (amends the §4.1 definition — §0)
 
 `NULL` = a bootstrap invitation, with no human inviter: the `owner` invitation that `create-tenant` writes (§5.4) for a tenant that has no user yet. Every other invitation carries its inviter: `invitations_insert` (1.16 §3.9) requires `invited_by = app.user_id`, so `app_user` writes no invitation without an inviter, and `invitations_provisioner_insert` (§4.1) requires `invited_by IS NULL`, so the `provisioner` path forges no inviter.
 
-### 2.12 The migrated user with no password — a marked assumption
+### 2.12 The migrated user with no password — ~~a marked assumption~~ **withdrawn (Amendment 02 §0)**
 
-The import (§6/3) creates for every migrated user a `user_password_credentials` row in a "no password" state: **no input matches it, and the verifier rejects it without throwing.** This is a rule, not an implementation; and it is **an assumption to be proven on PostgreSQL 18 in the code PR** before anything is built on it, like the other marked assumptions.
+~~The import (§6/3) creates for every migrated user a `user_password_credentials` row in a "no password" state: **no input matches it, and the verifier rejects it without throwing.**~~
+
+**Withdrawn — Amendment 02 §0.** The state existed for migrated users alone, and there are none. The only user is created by a `create-tenant` invitation and sets their password on acceptance (§5.1). The marked assumption falls unproven, because nothing is built on it any more.
 
 ## §3 The complete updated grants matrix (replaces §3.8 when merged)
 
@@ -357,8 +362,8 @@ No path reads `provider_accounts` or writes `platform_subscriptions` from the AP
 - `create-tenant --name --owner-email [--plan trial]`: bootstrap from the templates + `platform_subscriptions` + the default `tenant_notification_settings` + an `owner` invitation by email (`invited_by IS NULL` — a bootstrap invitation with no human inviter, §2.11). The owner accepts in person; and the tenant has no active owner until the acceptance (§0, §3.10 item a).
 - `mark-paid --tenant --until [--plan]`: updates `paid_until`, and `platform_subscriptions.status` to `active`, and `tenants.status` to `active`. The only way to restore a suspended tenant.
 - `suspend-unpaid`: scheduled from outside the platform. Lists the active tenants as `job_runner` through `tenants_for_jobs` (read only — its 1.16 role), then for each tenant a separate `provisioner` transaction: `paid_until + grace_days < (now() AT TIME ZONE 'UTC')::date` (§2.4) → `platform_subscriptions.status = suspended` and `tenants.status = suspended`, two critical writes (`CriticalWrite`) under the §4.1 policies. A tenant failing does not stop the rest.
-- `announce-migration`: run once **after the cutover (M3)**, not before it and not during the import. Sends every migrated user (`users.legacy_id IS NOT NULL`) a plain announcement email carrying a link to the "forgot password" page (§6/7). Read only — `persons` and `users` under `provisioner`'s existing grants — and no writing; and the sender and its settings (`credential_ref`) are in `src/Ops`, not in `src/Ops.Import`.
-- `src/Ops` refuses to run if it finds a `migrator` string in its environment (the same guard as Api). The import command is in a separate project, `src/Ops.Import`, which carries `migrator` alone (§6).
+- ~~`announce-migration`~~ — **withdrawn (Amendment 02 §0).** It sent every migrated user an announcement email after the cutover. There are no migrated users, so there is no command.
+- `src/Ops` refuses to run if it finds a `migrator` string in its environment (the same guard as Api). ~~The import command is in a separate project, `src/Ops.Import`, which carries `migrator` alone (§6).~~ **Fell with §6** (Amendment 02 §0): there is no `src/Ops.Import`, and the guard stays as it is.
 
 Suspension takes effect immediately, by the nature of 1.16: `POST /tenants/{id}/select` refuses the suspended tenant on the next request.
 
@@ -368,7 +373,13 @@ Suspension takes effect immediately, by the nature of 1.16: `POST /tenants/{id}/
 
 **Delivery at least once (at-least-once), not exactly once:** the UNIQUE prevents a duplicate **row**, not a duplicate **send** — if the provider accepted the message and `sent` was not saved, the row stayed `pending` and was sent again in the next run. And the status update is a critical write (`CriticalWrite`): zero rows affected = an error thrown, not a silent success.
 
-## §6 Migration from the live system — binding rules
+## §6 Migration from the live system — binding rules ~~(in force)~~ **— withdrawn in full**
+
+> **Withdrawn by the project owner's decision of 2026-10-17 — see `docs/PLATFORM_CORE_AMENDMENT_02.md` §0.**
+> There is no automated import: the data (4 clients, 25 subscriptions) is entered by hand through the interface after stage (b) of the build order (Amendment 02 §7).
+> With this section fall: `src/Ops.Import`, the `import-legacy` command, the dry run, `legacy_id` (§2.10), the "no password" state (§2.12), the `announce-migration` command (§5.4), the amendment to the `migrator` row (§0), and the seeding of `notification_log` with `sent` rows.
+> **And item 3 below is corrected:** "each live account = a tenant" is wrong — the three accounts in the live system are **clients**, not tenants (Amendment 02 §0, §1).
+> The text below is kept for historical context alone, and is not in force.
 
 An application of the conditions of 1.16 §3.4 (the `BYPASSRLS` exception) to the only import case allowed. **The import is a command in a separate project, `src/Ops.Import`, as `migrator` — not a numbered migration:** a numbered migration runs in CI, in dev and in every environment, so it would have needed production data in the repository.
 
@@ -414,7 +425,7 @@ An application of the conditions of 1.16 §3.4 (the `BYPASSRLS` exception) to th
 
 **The approved answers:**
 
-1. **D4** (amended 2026-10-17; it was one entry per tenant): no `audit_log` entry for the import; the row-count report outside the database, and `legacy_id` for tracing (§6/5).
+1. ~~**D4** (amended 2026-10-17; it was one entry per tenant): no `audit_log` entry for the import; the row-count report outside the database, and `legacy_id` for tracing (§6/5).~~ **Withdrawn with §6** (Amendment 02 §0).
 2. **The limits:** 30 min for the token; 5 s for the provider; `grace_days` 7; `trial` 30 days — all settings, not constants. **The login limit** (amended 2026-10-17; it was 10 attempts/15 min): in the direction recorded in OPEN_ITEMS 16, and its numbers are settled at launch (§5.2).
 3. **`core.billing.read`:** owner and admin.
 4. **The operator** creates and edits clients (`clients.write`); disabling is `clients.manage`, for owner/admin.
