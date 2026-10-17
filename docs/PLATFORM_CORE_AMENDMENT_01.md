@@ -10,7 +10,8 @@
 
 | فقرة 1.16 | نصّها في 1.16 | التعديل |
 | --- | --- | --- |
-| §4.3-أ/2 | `INSERT` على `auth_attempts` «الكتابة الوحيدة» لـ `authenticator` | يُضاف `INSERT` و`UPDATE (used_at)` على `password_reset_tokens` (§2.2، §3): الاستعادة تبدأ بلا جلسة، ولا دور غيره يعمل بلا جلسة |
+| §4.3-أ/2 | «grants: `SELECT` على `users`، `user_password_credentials`، `membership_auth`؛ و`INSERT` + `SELECT` على `auth_attempts` فقط — الكتابة الوحيدة» لـ `authenticator` | يُضاف `INSERT` و`UPDATE (used_at)` على `password_reset_tokens` (§2.2، §3): الاستعادة تبدأ بلا جلسة، ولا دور غيره يعمل بلا جلسة. **ويُضاف `SELECT (id, email)` على `persons` — العمودان وحدهما** (§3، §5.1): `forgot` يحلّ عنوان بريد بلا جلسة، والعنوان يسكن `persons`؛ فتعداد قراءاته الثلاث في 1.16 لم يعد مغلقاً |
+| §4.3-أ/3 | «policies TO authenticator في الـ manifest: قراءة `USING (true)` على جداول الحلّ **الثلاثة**» | أربعة: `persons` ينضم إليها بسياسة `persons_authenticator_read` (§4.1) — جدول حلّ رابع يخدم `forgot` وحده، وحصرُه على العمودين بالـ grant لا بالسياسة (§3) |
 | §4.3-أ/4 | «لا يكتب على جداول الهوية نفسها شيئاً» | يكتب `password_reset_tokens` وحده؛ لا يلمس `users` ولا `user_password_credentials` |
 | §4.3-ب | `app.user_id` يُضبط من الجلسة المصادَقة | استثناء مسمّى واحد: في `POST /api/auth/password/reset` تأخذ UoW-2 `app.user_id` من صاحب الرمز الذي تحققت منه UoW-1 واستهلكته (§5.1) |
 | §4.4/3 | «مساران محصوران اثنان لا غير» | مسار ثالث: الإجراء التشغيلي `src/Ops` بدور `provisioner` (§5.4) |
@@ -141,7 +142,7 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 | الجدول | app_user | authenticator | provisioner | job_runner |
 |---|---|---|---|---|
 | tenants | SELECT | — | INSERT، **SELECT، UPDATE (status) (الملحق 01 — §5.4)** | SELECT |
-| persons | SELECT | — | **SELECT**، INSERT | — |
+| persons | SELECT | **SELECT (أعمدة: id, email فقط) (الملحق 01 — §5.1)** | **SELECT**، INSERT | — |
 | users | SELECT، UPDATE (أعمدة: last_login_at, language, theme فقط) **+ security_stamp (الملحق 01 — §2.1)** | SELECT | **SELECT**، INSERT | — |
 | user_password_credentials | UPDATE (password_hash, updated_at — **1.12**) **بلا SELECT** | SELECT | INSERT | — |
 | memberships | SELECT، UPDATE (status) — **والسياسات تحصر الانتقالات (1.16، 3.10)** | — | **SELECT**، INSERT، **UPDATE (status) — العودة وحدها (1.16، D9)** | — |
@@ -173,6 +174,7 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 - **`provisioner` على `invitations` (INSERT):** `create-tenant` يكتب دعوة `owner` للجهة الجديدة، و`invited_by IS NULL` — دعوة bootstrap بلا داعٍ بشري (§2.11)، لا مستخدم جلسة أبداً. الجهة بلا مالك نشط حتى تُقبل الدعوة (يعدّل §3.10 البند أ — §0).
 - **`job_runner` على `plans` (SELECT):** قراءة كتالوج عام. القرار 1 أزال كتابات `job_runner` لا قراءاته؛ ومهمة لاحقة تقرأ الكتالوج لا تعيد فتح المصفوفة.
 - **`authenticator` على `password_reset_tokens`:** الاستعادة تبدأ بلا جلسة، وهو الدور الوحيد الذي يعمل بلا جلسة. **هذا يعدّل §4.3-أ/2 و§4.3-أ/4** (§0)، لا يضيف إليهما. الكتابة محصورة في الرمز نفسه؛ لا يلمس كلمة السر — التحديث يتم كـ `app_user` بسياق المستخدم صاحب الرمز عبر `password_self_update` الموجودة (استثناء §4.3-ب، §0).
+- **`authenticator` على `persons` (SELECT على `id` و`email` وحدهما):** `forgot` يبدأ بعنوان بريد ولا جلسة بعد، والعنوان يسكن `persons` وحده. **ولا دور آخر يصلح لحلّ بلا جلسة:** `app_user` لا يرى إلا صفّه عبر `person_self`، وهي مشروطة بـ `app.user_id` الذي لا وجود له قبل المصادقة؛ وكل سياسات `provisioner` مشروطة بـ `app.tenant_id` ولا جهة معروفة قبل الحلّ، و`provisioner` مسار محصور بلا HTTP (§4.4)؛ و`job_runner` بلا منح على `persons` أصلاً؛ و`migrator` ممنوع على التطبيق (§3.4). فيبقى `authenticator`، الدور الوحيد الذي يعمل بلا جلسة (§4.3-أ). **هذا يعدّل §4.3-أ/2 و§4.3-أ/3** (§0)، لا يضيف إليهما؛ **و§4.3-أ/4 يبقى على حاله**: قراءة لا كتابة، فلا يكتب على جداول الهوية نفسها شيئاً. والقراءة محصورة بالعمودين: لا اسم ولا هاتف — `persons.email` معرّف هوية فريد عالمياً بنصّ 1.16 §3.3، وتسرّب وجوده مقبول ومعالَج بردّ موحّد، أما بقية PII فيمنعها المنح العمودي لا السياسة.
 - **`app_user` على `provider_accounts` (SELECT فقط):** المهمة الخلفية تعمل لكل جهة كـ `app_user` (1.16 §8)، وتحتاج معرفة أي مزوّد. لا أسرار في الجدول (§2.6).
 - **`notification_log` (outbox):** المهمة تكتب السطر `pending` وتغلق المعاملة؛ خطوة الإرسال تحدّثه إلى `sent|failed` في معاملة قصيرة. لا DELETE؛ سياسة مقيِّدة تسمح بالانتقال `pending → sent|failed` فقط. الإعادة = سطر جديد.
 - **`provisioner` على `tenant_notification_settings` (INSERT):** يهيئ الإعدادات الافتراضية مع bootstrap كما يهيئ الأدوار من القوالب. لا SELECT: لا يحتاج قراءتها.
@@ -183,9 +185,14 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 
 ### 4.1 سياسات خارج القالبين (تدخل الـ manifest لـ Check 2 حين تُبنى)
 
-كل سياسة بـ `FOR` و`TO` صريحين و`NULLIF` على `current_setting`، والنصّ أدناه هو النصّ الذي يُستخرج إلى الـ manifest حرفياً. الجدولان اللذان يدخلان الـ manifest بسياسة خارج القالبين (`tenant_notification_settings`، `notification_log`) يكتبان قالبيهما صراحةً، لأن مجموعة سياسات جدول الـ manifest تُفحص كاملة.
+كل سياسة بـ `FOR` و`TO` صريحين و`NULLIF` على `current_setting`، والنصّ أدناه هو النصّ الذي يُستخرج إلى الـ manifest حرفياً. الجدولان اللذان يدخلان الـ manifest بسياسة خارج القالبين (`tenant_notification_settings`، `notification_log`) يكتبان قالبيهما صراحةً، لأن مجموعة سياسات جدول الـ manifest تُفحص كاملة. و`persons` ليس منها: مجموعته في الـ manifest مكتوبة في 1.16 كاملةً، وسياسة الملحق تنضم إليها.
 
 ```sql
+-- ===== authenticator — حلّ العنوان بلا جلسة (§5.1) =====
+CREATE POLICY persons_authenticator_read ON persons
+  FOR SELECT TO authenticator
+  USING (true);   -- الحصر على العمودين (id, email) بالـ grant لا بالسياسة؛ والسطح محصور بنائياً بمسار المصادقة
+
 -- ===== authenticator — رموز الاستعادة (§2.2) =====
 CREATE POLICY password_reset_tokens_authenticator_select ON password_reset_tokens
   FOR SELECT TO authenticator

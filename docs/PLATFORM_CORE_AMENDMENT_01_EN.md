@@ -13,7 +13,8 @@
 
 | 1.16 paragraph | Its text in 1.16 | The amendment |
 | --- | --- | --- |
-| §4.3-a/2 | `INSERT` on `auth_attempts`, "its only write", for `authenticator` | `INSERT` and `UPDATE (used_at)` on `password_reset_tokens` are added (§2.2, §3): recovery starts with no session, and no other role works without a session |
+| §4.3-a/2 | "Grants: SELECT on users, user_password_credentials, membership_auth; and INSERT + SELECT on auth_attempts only — its only write", for `authenticator` | `INSERT` and `UPDATE (used_at)` on `password_reset_tokens` are added (§2.2, §3): recovery starts with no session, and no other role works without a session. **And `SELECT (id, email)` on `persons` is added — those two columns alone** (§3, §5.1): `forgot` resolves an email address with no session, and the address lives in `persons`; so the enumeration of the role's three reads in 1.16 is no longer closed |
+| §4.3-a/3 | "Policies TO authenticator in the manifest: a read policy USING (true) on the **three** resolution tables" | Four: `persons` joins them with the `persons_authenticator_read` policy (§4.1) — a fourth resolution table, serving `forgot` alone, confined to the two columns by the grant and not by the policy (§3) |
 | §4.3-a/4 | "It writes nothing to the identity tables themselves" | It writes `password_reset_tokens` alone; it touches neither `users` nor `user_password_credentials` |
 | §4.3-b | `app.user_id` is set from the authenticated session | One named exception: in `POST /api/auth/password/reset`, UoW-2 takes `app.user_id` from the owner of the token that UoW-1 verified and consumed (§5.1) |
 | §4.4/3 | "Exactly two confined paths, no more" | A third path: the operations procedure `src/Ops`, as `provisioner` (§5.4) |
@@ -144,7 +145,7 @@ The rows from 1.16 are carried over verbatim. What is new is **in bold** and mar
 | Table | app_user | authenticator | provisioner | job_runner |
 |---|---|---|---|---|
 | tenants | SELECT | — | INSERT, **SELECT, UPDATE (status) (Amendment 01 — §5.4)** | SELECT |
-| persons | SELECT | — | **SELECT**, INSERT | — |
+| persons | SELECT | **SELECT (columns: id, email only) (Amendment 01 — §5.1)** | **SELECT**, INSERT | — |
 | users | SELECT, UPDATE (columns: last_login_at, language, theme only) **+ security_stamp (Amendment 01 — §2.1)** | SELECT | **SELECT**, INSERT | — |
 | user_password_credentials | UPDATE (password_hash, updated_at — **1.12**) **with no SELECT** | SELECT | INSERT | — |
 | memberships | SELECT, UPDATE (status) — **the policies confine the transitions (1.16, 3.10)** | — | **SELECT**, INSERT, **UPDATE (status) — return only (1.16, D9)** | — |
@@ -176,6 +177,7 @@ The rows from 1.16 are carried over verbatim. What is new is **in bold** and mar
 - **`provisioner` on `invitations` (INSERT):** `create-tenant` writes an `owner` invitation for the new tenant, with `invited_by IS NULL` — a bootstrap invitation with no human inviter (§2.11), never a session user. The tenant has no active owner until the invitation is accepted (amends §3.10 item a — §0).
 - **`job_runner` on `plans` (SELECT):** reading a global catalog. Decision 1 removed `job_runner`'s writes, not its reads; and a later job reading the catalog does not reopen the matrix.
 - **`authenticator` on `password_reset_tokens`:** recovery starts with no session, and it is the only role that works without a session. **This amends §4.3-a/2 and §4.3-a/4** (§0); it does not add to them. The write is confined to the token itself; it does not touch the password — the update happens as `app_user` in the context of the token's owner, through the existing `password_self_update` (the §4.3-b exception, §0).
+- **`authenticator` on `persons` (SELECT on `id` and `email` alone):** `forgot` starts from an email address with no session yet, and the address lives in `persons` alone. **And no other role can serve a sessionless lookup:** `app_user` sees only its own row through `person_self`, which is conditioned on `app.user_id` — and there is none before authentication; every `provisioner` policy is conditioned on `app.tenant_id`, and no tenant is known before the lookup, and `provisioner` is a confined path with no HTTP surface (§4.4); `job_runner` has no grant on `persons` at all; and `migrator` is forbidden to the application (§3.4). What remains is `authenticator`, the only role that works without a session (§4.3-a). **This amends §4.3-a/2 and §4.3-a/3** (§0); it does not add to them. **And §4.3-a/4 stays as it is:** a read, not a write — it still writes nothing to the identity tables themselves. The read is confined to the two columns: no name, no phone — `persons.email` is a globally unique identity identifier by the text of 1.16 §3.3, whose existence leaking is accepted and answered with a uniform response, while the rest of the PII is withheld by the column grant, not by the policy.
 - **`app_user` on `provider_accounts` (SELECT only):** the background job runs per tenant as `app_user` (1.16 §8) and needs to know which provider. No secrets in the table (§2.6).
 - **`notification_log` (outbox):** the job writes the row `pending` and closes the transaction; the send step updates it to `sent|failed` in a short transaction. No DELETE; a restrictive policy allows the transition `pending → sent|failed` only. A retry = a new row.
 - **`provisioner` on `tenant_notification_settings` (INSERT):** it initializes the default settings with bootstrap, as it initializes the roles from the templates. No SELECT: it does not need to read them.
@@ -186,9 +188,14 @@ The rows from 1.16 are carried over verbatim. What is new is **in bold** and mar
 
 ### 4.1 Policies outside the two templates (they enter the manifest for Check 2 when built)
 
-Every policy with explicit `FOR` and `TO` and `NULLIF` on `current_setting`, and the text below is the text extracted into the manifest verbatim. The two tables that enter the manifest with a policy outside the templates (`tenant_notification_settings`, `notification_log`) state their templates explicitly, because a manifest table's policy set is checked whole.
+Every policy with explicit `FOR` and `TO` and `NULLIF` on `current_setting`, and the text below is the text extracted into the manifest verbatim. The two tables that enter the manifest with a policy outside the templates (`tenant_notification_settings`, `notification_log`) state their templates explicitly, because a manifest table's policy set is checked whole. `persons` is not one of them: its set is written whole in 1.16, and the amendment's policy joins it.
 
 ```sql
+-- ===== authenticator — the sessionless address lookup (§5.1) =====
+CREATE POLICY persons_authenticator_read ON persons
+  FOR SELECT TO authenticator
+  USING (true);   -- the two columns (id, email) are confined by the grant, not by the policy; the surface is structurally confined to the authentication path
+
 -- ===== authenticator — the recovery tokens (§2.2) =====
 CREATE POLICY password_reset_tokens_authenticator_select ON password_reset_tokens
   FOR SELECT TO authenticator

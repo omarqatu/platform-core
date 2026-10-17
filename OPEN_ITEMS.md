@@ -82,6 +82,20 @@ Closed by the manifest PR:
   is built across several PRs; changing the generator was not enough without a way to adopt its policies one PR at a
   time.
 
+Closed by the A3 PR (the amendment text):
+- **53.** `POST /api/auth/password/forgot`: the address, and who may read it. Amendment 01 contradicted itself — §5.1
+  makes `forgot` an `authenticator` unit of work keyed by the address, while its §3 matrix carried v1.16's `persons`
+  row verbatim, giving `authenticator` nothing on the table where the address lives. Resolved in the governing text,
+  before any code, because the manifest is extracted from it: §3 grants `authenticator` `SELECT (id, email)` on
+  `persons` — those two columns alone — with a justification line naming why no other role can serve a sessionless
+  lookup (`app_user` needs `app.user_id`, every `provisioner` policy needs `app.tenant_id`, `job_runner` has no
+  grant, `migrator` is forbidden to the application); §4.1 states `persons_authenticator_read` as a `CREATE POLICY`
+  in the sql block, matching Arabic and English; and §0 records the amended v1.16 paragraphs honestly — the §4.3-a/2
+  row is widened to its full 1.16 text, because that text enumerates the role's reads as a closed list, and a
+  **ninth row** is added for §4.3-a/3, whose "three resolution tables" become four. §4.3-a/4 is untouched: this is a
+  read, not a write. The policy is extracted as pending until the code PR lists it in
+  `checks/core/amendment-policies-built.json`.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -376,21 +390,6 @@ Closed by the manifest PR:
 - **Origin:** Amendment 01, D9.
 - **For the document:** merge the amendments into a v2.0 when they accumulate or the second module starts. Until then
   the authority is v1.16 plus its amendments in order (`CLAUDE.md`).
-
-### 53. `POST /api/auth/password/forgot`: the address, and who may read it
-
-- **Origin:** A1 (the code PR for item 47), recorded by the project owner on 2026-10-17 when the path was deferred.
-- **The conflict found:** Amendment 01 §5.1 makes `forgot` an `authenticator` unit of work and §5.2 keys its limiter
-  by (email + IP), but the amendment's own grants matrix (§3) carries v1.16's `persons` row verbatim —
-  `authenticator` has no read on `persons`, where the address lives, and no policy on it either. No other role can
-  resolve an address with no session: `app_user` sees only its own row (`user_self_read`), and every `provisioner`
-  policy requires `app.tenant_id`.
-- **The decision (2026-10-17):** `forgot` is deferred to **A3, with the e-mail sender** — a token nobody receives is
-  not a feature — and the conflict is resolved there **by the narrow grant**: `GRANT SELECT (id, email) ON persons
-  TO authenticator` plus a new §4.1 policy, written into the amendment **first**, because the manifest is extracted
-  from its text (`checks/core/generate-manifest.py`).
-- **Until then:** nothing mints a recovery token; `POST /api/auth/password/reset` consumes one that exists, and the
-  `[B]` tests write their own as `authenticator`. Item 51 (the response time of `forgot`) stays open behind this one.
 
 ### 54. The limiter's numbers, and T3.5's two arms
 
