@@ -78,6 +78,8 @@ Closed by the API-path PR:
   terms; the whole transaction's ratio stays within 1.5 (median 1.386). `docs/measurements/README.md` has every run.
 - **Not fixed in T8** (the spec). **The decision:** a materialized assignment table, or a `SECURITY DEFINER` function
   for `client_scope` (§4.8, 13-i) — or a measurement on a dedicated database host first; the threshold itself stays.
+- **Deferred (Amendment 01, D5 — the project owner's decision of 2026-10-17):** measure again after ten real tenants;
+  the threshold and the two alternatives stay as they are.
 
 ## From the i18n task — the web interface (web/)
 
@@ -148,6 +150,9 @@ Closed by the API-path PR:
   expires.
 - **When needed:** server-side revocation — a session id or a security stamp in the cookie, checked on every request
   against a store (and a "log out everywhere"). Not built.
+- **Partly closed once Amendment 01 is built (D6, §2.1, §5.2):** `users.security_stamp` in the cookie, compared on
+  every request, ends every session when the password changes. Logging out does not change the stamp, so a copied
+  cookie still survives logout until it expires: this item stays open for that part.
 
 ## From invitation acceptance
 
@@ -184,6 +189,7 @@ Closed by the API-path PR:
   module is active for the tenant (`tenant_modules.is_active`, §5); no tenant has a `tenant_modules` row.
 - **For the real module:** each endpoint refuses when the module is not active for the tenant, and bootstrap (or an
   activation path) writes `tenant_modules`.
+- **Deferred (Amendment 01, D8 — the project owner's decision of 2026-10-17):** until the second module.
 
 ### 26. Spec item i — what disabling an assignment does beyond visibility
 
@@ -220,6 +226,27 @@ Closed by the API-path PR:
   lockout lets anyone lock out a known user), and a ceiling per IP. The checks read
   `auth_attempts`, as §4.3-a/2 says.
 - **The numbers** (delays, windows, ceilings) are settled at launch.
+- **Amendment 01 §5.2** keeps this direction and extends it: the same limiter also covers the forgot-password path
+  (`POST /api/auth/password/forgot`), by (email + IP). The numbers stay open.
+
+### 51. Forgot-password: the response time reveals whether an account exists
+
+- **Origin:** the review of Amendment 01 (§5.1), recorded by the project owner on 2026-10-17. A pre-launch item.
+- **The finding:** `POST /api/auth/password/forgot` always answers 204, but not in the same time: for an existing
+  account it hashes and inserts a token and sends an email; for a missing one it returns at once. The latency tells
+  an attacker which addresses have accounts — the enumeration the uniform 204 is there to prevent.
+- **Before launch:** a constant-time response path — the response time must not depend on whether the account
+  exists. The amendment's design does not change.
+
+### 52. No audit trail for a password change until the identity audit log exists
+
+- **Origin:** the review of Amendment 01 (§2.1, §5.1), recorded by the project owner on 2026-10-17. A pre-launch item.
+- **The gap:** a password reset or change writes identity state — `user_password_credentials` (never audited, v1.16
+  §7), `users.security_stamp` (on the exception list of automatic auditing, Amendment 01 §2.1) and
+  `password_reset_tokens` (outside automatic auditing, §2.2). None of these writes is recorded anywhere today:
+  `audit_log` is a tenant log, and these are not tenant data.
+- **Before launch:** the identity audit log v1.16 §7 already lists as a pre-launch item, covering at least password
+  resets and changes.
 
 ## For production — outside the proof
 
@@ -241,6 +268,98 @@ Closed by the API-path PR:
   mandatory for every request that carries the session cookie: a request is exempt only because it authenticates
   without a cookie, never by its path, its caller or a configuration switch.
 - **Not built now.**
+
+## From Amendment 01 — product readiness (the project owner's decisions of 2026-10-17)
+
+### 42. Succession: the platform replaces the live subscription system (D1)
+
+- **Origin:** Amendment 01, D1. It settles the condition v1.16 §0 left open ("two separate products until an explicit
+  succession decision").
+- **The decision:** data moves, no code. The live system (SYSTEM_DESIGN 2.0) is read-only until the cutover, then
+  switched off.
+- **To build:** the import (§6), in the order of `docs/ROADMAP_SUBSCRIPTIONS.md`.
+
+### 43. The operations procedure: a third provisioner path (D2)
+
+- **Origin:** Amendment 01, D2, §5.4. It **amends** v1.16 §4.4/3 and §4.4/5 ("two paths, no third").
+- **The decision:** tenants are created in production by `src/Ops` (the `provisioner` and `job_runner` strings only;
+  it refuses to run if it sees `migrator`), with no HTTP path and no public self-registration: `create-tenant`,
+  `mark-paid` (the only way back from suspension), `suspend-unpaid` (scheduled outside the platform; lists the
+  active tenants as `job_runner`, then one `provisioner` transaction per tenant), and `announce-migration` (once,
+  after the M3 cutover; item 47).
+- **The owner invitation (decided 2026-10-17):** `provisioner` gets `INSERT` on `invitations`, and
+  `invitations.invited_by` becomes nullable: `NULL` means a bootstrap invitation, with no human inviter (this
+  **amends** the `invitations` definition in v1.16 §4.1). `invitations_provisioner_insert` requires
+  `invited_by IS NULL` and `status = 'pending'`, so the provisioner path cannot forge an inviter; `invitations_insert`
+  still requires `invited_by = app.user_id` for `app_user`. The tenant has no active owner until the invitation is
+  accepted: this **amends** v1.16 §3.10 item a. Both are declared in the amendment's §0.
+- **For the migration PR, not the amendment:** any code that reads `invited_by` (display, audit) must handle `NULL`.
+
+### 44. Delivery channels (D3)
+
+- **Origin:** Amendment 01, D3.
+- **The decision:** email, WhatsApp (a hosted gateway such as GreenAPI), SMS (an API), Telegram (a bot); email and
+  WhatsApp first, built inside M1 before the cutover (option A). Tables in §2.5–2.7, grants in §3.
+- **Related:** item 22 (the invitation is sent by email alone) is met through the same sender (§5.5).
+
+### 45. Three layers of delivery; provider secrets outside the database (D3′)
+
+- **Origin:** Amendment 01, D3′, §2.6.
+- **The decision:** the platform's provider account by default, a per-tenant override later; per-tenant channels and
+  timing; per-client contact details. `provider_accounts.credential_ref` names a key in the Worker/Api settings — no
+  secret in the database.
+- **Not built:** per-tenant `provider_accounts` rows are a reserved slot with no path that writes them (§7).
+
+### 46. Audit of the migrated rows (D4)
+
+- **Origin:** Amendment 01, D4, answered 2026-10-17.
+- **The decision (revised 2026-10-17):** no `audit_log` entry for the import at all — `migrator` does not become a
+  fourth audit writer (v1.16 §7 stays as it is). The record is the row-count report the import command writes outside
+  the database, plus `legacy_id` for tracing until it is dropped.
+
+### 47. Password recovery and change (D6) — see items 36 and 16
+
+- **Origin:** Amendment 01, D6, §2.1, §2.2, §5.1. It **amends** v1.16 §4.3-a/2 and §4.3-a/4 (`authenticator` writes
+  `password_reset_tokens`) and §4.3-b (in `POST /api/auth/password/reset`, UoW-2 takes `app.user_id` from the
+  consumed token).
+- **The security stamp:** item 36 — it closes that item only in part.
+- **The attempt limiter:** item 16 — the same direction, extended to the forgot-password path.
+- **Migrated users (decided 2026-10-17, §2.12, §6/3 and §6/7):** the import (`src/Ops.Import`, `migrator` only)
+  creates a `user_password_credentials` row in a no-password state that no input matches and that the verifier
+  rejects without throwing — a marked assumption, to be proven on PostgreSQL 18 in the code PR. So
+  `password_self_update` stays valid and `provisioner` needs no new grant.
+- **Their first password:** the import sends nothing, issues no tokens and does not call forgot; it creates the
+  no-password row and stops. A separate `src/Ops` command, `announce-migration`, run only after the M3 cutover, sends
+  each migrated user a plain announcement email carrying a link to the forgot page, and each user starts the flow
+  themselves — no new token kind, no new lifetime, no per-IP ceiling reached (§5.2), and the 30-minute lifetime starts
+  from the user's own request. `src/Ops.Import` holds no provider configuration.
+
+### 48. The platform subscription register — layer 1 (D7)
+
+- **Origin:** Amendment 01, D7, §2.3, §2.4.
+- **The decision:** plans without prices, one `platform_subscriptions` row per tenant with `paid_until`, suspension by
+  the scheduled `suspend-unpaid` command (§5.4), read by the owner and admin (`core.billing.read`). Billing engine and
+  gateways later, built on top of this, not instead of it.
+- **Statuses:** `active` and `suspended` only; `grace_days` carries the grace (`past_due` dropped 2026-10-17 — a status
+  nobody writes is worse than one that does not exist).
+- **Assumptions still marked:** the plan codes [`trial`, `standard`], `trial` length [30] days, `grace_days` [7].
+
+### 49. The amendment stands apart from v1.16 (D9)
+
+- **Origin:** Amendment 01, D9.
+- **For the document:** merge the amendments into a v2.0 when they accumulate or the second module starts. Until then
+  the authority is v1.16 plus its amendments in order (`CLAUDE.md`).
+
+### 50. The manifest does not read amendments — §4.1's policies are not machine-enforced
+
+- **Origin:** Amendment 01, §4.1 (decision 5 of the project owner, 2026-10-17).
+- **The gap:** `checks/core/generate-manifest.py` extracts the manifest from one document — v1.16 (its `_EN.md`) — and
+  only from `CREATE POLICY` statements inside sql blocks (item 19). Amendment 01 states its policies as a table, so
+  none reaches `manifest.json`, and Check 2 does not compare their text.
+- **Consequence:** a table carrying policies outside the templates and absent from the manifest fails Check 2
+  ("outside the manifest, the templates alone"), so this item blocks the first code PR that adds those policies.
+- **To build (a change to check inputs — the project owner's decision):** the generator reads v1.16 and its
+  amendments in order, and the amendment states each §4.1 policy as a `CREATE POLICY` inside an sql block.
 
 ## For the next version of the document — not for the code
 

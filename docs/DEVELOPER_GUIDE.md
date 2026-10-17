@@ -747,6 +747,8 @@ A module is a project (`Modules.<Name>`) that owns some tables and endpoints, de
 database. A foreign key between two modules would make them inseparable later — that is accepted, but each such FK is a
 conscious decision.
 
+> **Current stage:** the subscriptions module is being brought onto the platform under `docs/PLATFORM_CORE_AMENDMENT_01.md` (additions to v1.16), in the order of `docs/ROADMAP_SUBSCRIPTIONS.md`. This section describes the module as built today.
+
 ### Anatomy of `Modules.Subscriptions`
 
 | Piece | File | Notes |
@@ -1024,6 +1026,8 @@ and a mapping here — do not return 500s for expected situations.
 | `GET /api/subscriptions` | module | `subscriptions.read` |
 | `POST /api/subscriptions` | module | `subscriptions.write` |
 | `GET /api/unified/subscriptions` | fan-out | `subscriptions.read` per tenant |
+
+> The endpoints in `docs/PLATFORM_CORE_AMENDMENT_01.md` §5.1 (password recovery and change, the tenant's platform subscription, module settings, clients, renewal and cancellation, the notification log) are specified, not built. None appears here until its PR lands.
 
 ---
 
