@@ -425,6 +425,27 @@ Closed by the A3 PR (the amendment text):
 - **For the project owner:** whether v1.16 §3.8 or an amendment should state the rule beside the grant itself,
   rather than leaving it in the guide, is a documentation decision — the code and the tests do not wait on it.
 
+### 56. `authenticator` reads all of `persons`; the risk is accepted, not mitigated by a policy
+
+- **Origin:** A3 (the amendment text for item 53), stated by the project owner on 2026-10-17 as a condition of
+  approving the grant.
+- **The finding:** `persons_authenticator_read` is `USING (true)` (Amendment 01 §4.1). The grant
+  `SELECT (id, email)` narrows the **columns**; nothing narrows the **rows**. `authenticator` can therefore read
+  every address on the platform, not just the one `forgot` is resolving — and `persons.email` is a globally unique
+  identity identifier (v1.16 §3.3), so a compromise of that role is an enumeration of every address we hold.
+- **Why no row-narrowing policy:** a policy would have to name the subject row, and the subject is not known until
+  the lookup the policy itself governs. No session variable identifies it beforehand — that is the whole point of a
+  sessionless path. The condition is not expressible, not merely unwritten.
+- **Accepted by the project owner (2026-10-17):** the login path has stood on the same ground since v1.16 —
+  `users`, `user_password_credentials` and `membership_auth` are all `USING (true)` to this role (§4.3-a/3) — so
+  `persons` is a fourth resolution table, not a new kind of exposure. **The mitigation is the role's own
+  containment:** a separate connection with a separate role (§4.3-a/1), no session, a surface structurally confined
+  to the authentication path, and the column grant that withholds the name and the phone. Check 6 fails if the
+  column grant ever widens.
+- **If it is ever to be narrowed:** the only shapes that would work are outside this amendment — resolving against
+  a separate, derived address-to-user table that holds nothing else, or moving the lookup behind a rate-limited
+  intermediary that never returns rows. Both are a design change, not a policy edit.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12
