@@ -14,6 +14,7 @@
     "invitations":               { "app_user": ["SELECT", "INSERT"], "provisioner": ["SELECT"] },
     "auth_attempts":             { "authenticator": ["SELECT", "INSERT"] },
     "password_reset_tokens":     { "authenticator": ["SELECT", "INSERT"] },
+    "provider_accounts":         { "app_user": ["SELECT"], "authenticator": ["SELECT"] },
     "audit_log":                 { "app_user": ["SELECT", "INSERT"], "provisioner": ["INSERT"] },
     "roles":                     { "app_user": ["SELECT", "INSERT", "UPDATE", "DELETE"], "provisioner": ["SELECT", "INSERT"] },
     "role_permissions":          { "app_user": ["SELECT", "INSERT", "DELETE"], "provisioner": ["INSERT"] },
@@ -33,7 +34,8 @@
     "scope_assignments":         { "app_user": { "UPDATE": ["active"] }, "provisioner": { "UPDATE": ["active"] } },
     "invitations":               { "app_user": { "UPDATE": ["status"] }, "provisioner": { "UPDATE": ["status"] } },
     "tenant_modules":            { "app_user": { "UPDATE": ["is_active"] } },
-    "password_reset_tokens":     { "authenticator": { "UPDATE": ["used_at"] } }
+    "password_reset_tokens":     { "authenticator": { "UPDATE": ["used_at"] } },
+    "persons":                   { "authenticator": { "SELECT": ["id", "email"] } }
   },
   "database": { "CONNECT": ["app_user", "authenticator", "job_runner", "provisioner"], "TEMPORARY": [] },
   "schemas": { "public": { "USAGE": ["app_user", "authenticator", "job_runner", "provisioner"], "CREATE": [] } },

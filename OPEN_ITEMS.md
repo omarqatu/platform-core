@@ -82,6 +82,42 @@ Closed by the manifest PR:
   is built across several PRs; changing the generator was not enough without a way to adopt its policies one PR at a
   time.
 
+Closed by the A3 PR:
+- **53.** `POST /api/auth/password/forgot`: the address, and who may read it. Amendment 01 contradicted itself — §5.1
+  makes `forgot` an `authenticator` unit of work keyed by the address, while its §3 matrix carried v1.16's `persons`
+  row verbatim, giving `authenticator` nothing on the table where the address lives. Resolved in the governing text,
+  before any code, because the manifest is extracted from it: §3 grants `authenticator` `SELECT (id, email)` on
+  `persons` — those two columns alone — with a justification line naming why no other role can serve a sessionless
+  lookup (`app_user` needs `app.user_id`, every `provisioner` policy needs `app.tenant_id`, `job_runner` has no
+  grant, `migrator` is forbidden to the application); §4.1 states `persons_authenticator_read` as a `CREATE POLICY`
+  in the sql block, matching Arabic and English; and §0 records the amended v1.16 paragraphs honestly — the §4.3-a/2
+  row is widened to its full 1.16 text, because that text enumerates the role's reads as a closed list, and a
+  **ninth row** is added for §4.3-a/3, whose "three resolution tables" become four. §4.3-a/4 is untouched: this is a
+  read, not a write. The policy is extracted as pending until the code PR lists it in
+  `checks/core/amendment-policies-built.json`.
+- **51.** Forgot-password: the response time reveals whether an account exists. **Closed, and by a change of
+  shape rather than by padding.** The leak was a provider round trip on one branch and nothing on the other; a
+  floor alone would have had to hide a latency nobody controls, which is the half-fix. So the send left the
+  request: `Core.Notifications.INotificationDispatch` takes the message and the sender runs outside the
+  response, leaving the two branches differing only by a token insert and the consumption of any outstanding
+  token. A floor (`Identity:ForgotPassword:MinimumResponseTime`, 1.5 s by default, a marked assumption) then
+  covers that difference, and the limiter's escalating delay is added identically either way because **every**
+  request writes its `auth_attempts` row, found or not. Proven in `[W]`
+  (`T3_ForgotPasswordTests.TheAnswerTakesTheSameTime_…`: each answer at or above the floor, the two medians
+  within half of it) and in `[B]` (the uniform 204 and the token that is minted only where there is an account).
+  **The residue, stated:** the floor is honest while the work stays well under it; if the database slowed past
+  it, the difference would show again. The floor overruns nothing today and the work on the path is two small
+  statements. **For the project owner:** Amendment 01 §5.1's table still says "the response time is not"
+  uniform, with a reference to this item. That line is now false; whether the amendment records the closure is
+  a text decision, not one this PR took.
+- **58 was raised and then withdrawn, so it is not an item.** It asked which role resolves the provider account
+  for a sessionless send, the amendment naming only `app_user`. The first answer here was to read the platform
+  row as `app_user` with neither a user nor a tenant set. The project owner rejected it: an application role
+  running contextless on a sessionless path is a surface no document describes, and it was a reading of §2.6
+  rather than its text — the same lesson as item 53. So the amendment says it instead (`SELECT` on
+  `provider_accounts` to `authenticator`, `provider_accounts_authenticator_read` `USING (tenant_id IS NULL)`,
+  §0's tenth amended paragraph), and there is nothing left to carry. The number is retired, not reused.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -251,15 +287,6 @@ Closed by the manifest PR:
   until launch; the Development and CI values are deliberately lenient (see item 54). The forgot path's half of
   §5.2 travels with that path (item 53).
 
-### 51. Forgot-password: the response time reveals whether an account exists
-
-- **Origin:** the review of Amendment 01 (§5.1), recorded by the project owner on 2026-10-17. A pre-launch item.
-- **The finding:** `POST /api/auth/password/forgot` always answers 204, but not in the same time: for an existing
-  account it hashes and inserts a token and sends an email; for a missing one it returns at once. The latency tells
-  an attacker which addresses have accounts — the enumeration the uniform 204 is there to prevent.
-- **Before launch:** a constant-time response path — the response time must not depend on whether the account
-  exists. The amendment's design does not change.
-
 ### 52. No audit trail for a password change until the identity audit log exists
 
 - **Origin:** the review of Amendment 01 (§2.1, §5.1), recorded by the project owner on 2026-10-17. A pre-launch item.
@@ -323,6 +350,15 @@ Closed by the manifest PR:
 - **The decision:** email, WhatsApp (a hosted gateway such as GreenAPI), SMS (an API), Telegram (a bot); email and
   WhatsApp first, built inside M1 before the cutover (option A). Tables in §2.5–2.7, grants in §3.
 - **Related:** item 22 (the invitation is sent by email alone) is met through the same sender (§5.5).
+- **As built (A3):** the interface and the **email** channel. `Core.Notifications.INotificationSender` with one
+  implementation per channel; `EmailNotificationSender` over SMTP, the account from the platform's
+  `provider_accounts` row (§2.6) and the secret from the settings key its `credential_ref` names. A delivery that
+  cannot happen is reported, never thrown — a channel failing must not stop the others (§5.3) nor turn `forgot`'s
+  uniform 204 into a 500. `INotificationDispatch` hands a message to the sender outside the request that asked
+  for it, which is what makes a constant-time `forgot` reachable (item 51).
+- **Still open:** WhatsApp, SMS and Telegram — the three remaining channels of D3, in that order; the outbox of
+  §5.5 (`notification_log`, the delivery job's `pending → sent|failed`), which has no table yet; and invitation
+  delivery by e-mail (M2/b), which this task left alone — see item 60.
 
 ### 45. Three layers of delivery; provider secrets outside the database (D3′)
 
@@ -377,21 +413,6 @@ Closed by the manifest PR:
 - **For the document:** merge the amendments into a v2.0 when they accumulate or the second module starts. Until then
   the authority is v1.16 plus its amendments in order (`CLAUDE.md`).
 
-### 53. `POST /api/auth/password/forgot`: the address, and who may read it
-
-- **Origin:** A1 (the code PR for item 47), recorded by the project owner on 2026-10-17 when the path was deferred.
-- **The conflict found:** Amendment 01 §5.1 makes `forgot` an `authenticator` unit of work and §5.2 keys its limiter
-  by (email + IP), but the amendment's own grants matrix (§3) carries v1.16's `persons` row verbatim —
-  `authenticator` has no read on `persons`, where the address lives, and no policy on it either. No other role can
-  resolve an address with no session: `app_user` sees only its own row (`user_self_read`), and every `provisioner`
-  policy requires `app.tenant_id`.
-- **The decision (2026-10-17):** `forgot` is deferred to **A3, with the e-mail sender** — a token nobody receives is
-  not a feature — and the conflict is resolved there **by the narrow grant**: `GRANT SELECT (id, email) ON persons
-  TO authenticator` plus a new §4.1 policy, written into the amendment **first**, because the manifest is extracted
-  from its text (`checks/core/generate-manifest.py`).
-- **Until then:** nothing mints a recovery token; `POST /api/auth/password/reset` consumes one that exists, and the
-  `[B]` tests write their own as `authenticator`. Item 51 (the response time of `forgot`) stays open behind this one.
-
 ### 54. The limiter's numbers, and T3.5's two arms
 
 - **Origin:** A1 (the code PR for item 47), recorded by the project owner on 2026-10-17.
@@ -425,6 +446,94 @@ Closed by the manifest PR:
   `migrator`, so it is not affected.
 - **For the project owner:** whether v1.16 §3.8 or an amendment should state the rule beside the grant itself,
   rather than leaving it in the guide, is a documentation decision — the code and the tests do not wait on it.
+
+### 56. `authenticator` reads all of `persons`; the risk is accepted, not mitigated by a policy
+
+- **Origin:** A3 (the amendment text for item 53), stated by the project owner on 2026-10-17 as a condition of
+  approving the grant.
+- **The finding:** `persons_authenticator_read` is `USING (true)` (Amendment 01 §4.1). The grant
+  `SELECT (id, email)` narrows the **columns**; nothing narrows the **rows**. `authenticator` can therefore read
+  every address on the platform, not just the one `forgot` is resolving — and `persons.email` is a globally unique
+  identity identifier (v1.16 §3.3), so a compromise of that role is an enumeration of every address we hold.
+- **Why no row-narrowing policy:** a policy would have to name the subject row, and the subject is not known until
+  the lookup the policy itself governs. No session variable identifies it beforehand — that is the whole point of a
+  sessionless path. The condition is not expressible, not merely unwritten.
+- **Accepted by the project owner (2026-10-17):** the login path has stood on the same ground since v1.16 —
+  `users`, `user_password_credentials` and `membership_auth` are all `USING (true)` to this role (§4.3-a/3) — so
+  `persons` is a fourth resolution table, not a new kind of exposure. **The mitigation is the role's own
+  containment:** a separate connection with a separate role (§4.3-a/1), no session, a surface structurally confined
+  to the authentication path, and the column grant that withholds the name and the phone. Check 6 fails if the
+  column grant ever widens.
+- **If it is ever to be narrowed:** the only shapes that would work are outside this amendment — resolving against
+  a separate, derived address-to-user table that holds nothing else, or moving the lookup behind a rate-limited
+  intermediary that never returns rows. Both are a design change, not a policy edit.
+
+### 57. One address, two active accounts: which one does recovery mean?
+
+- **Origin:** A3 (`forgot`), found while building the lookup.
+- **The finding:** `persons.email` is unique, but `users.person_id` is **not** — one person may hold an
+  `employee` account and a `customer` one (`users.user_type`), both active. Neither v1.16 nor Amendment 01 says
+  which of them `POST /api/auth/password/forgot` recovers, and the path cannot ask: it answers 204 and says
+  nothing.
+- **As built:** exactly one active account → a token. Two or more → **nothing is minted**, and the answer is the
+  same 204 as for an address nobody holds. Not an error, because an error would be the oracle the uniform answer
+  prevents; and not a token for each, because the e-mail could not say which account it was for.
+- **The project owner's decision (2026-10-17):** the behaviour above is **approved as it stands** — silence beats
+  an oracle — and the item **stays open by that decision**, not for want of one. What is still to be settled is
+  the eventual answer: a token per account with the account named in the e-mail, recovery keyed by username for
+  such a person, or a rule that one address holds one account. Nothing is built until then; the seed and the live
+  data have no such person today.
+
+### 59. The password-reset screen does not exist
+
+- **Origin:** A3, stated rather than discovered: this task is the API and the sender.
+- **The finding:** `forgot` now sends a link built from `Identity:ForgotPassword:ResetLinkTemplate`, and the page
+  it points at (`/app/password/reset#token=…`) is not in `web/`. The token is in the fragment, as the invitation
+  link's rule requires (DEVELOPER_GUIDE §9), so it never reaches a server log — but nothing renders it yet.
+- **What is needed:** the two screens of this path — asking for a link, and setting the password from one — in
+  both languages, with their message ids and the Arabic in `web/locales/ar.json` (§15). A branch of its own.
+
+### 60. Invitation delivery by e-mail is not built (M2/b)
+
+- **Origin:** A3, scope. The sender it needs now exists.
+- **The finding:** an invitation's link is still copied by hand from the response (DEVELOPER_GUIDE §9). With
+  `INotificationSender` in place, sending it is a small change — but not a free one: it decides what the e-mail
+  says in both languages, and it must keep the link out of `audit_log` (M2/b), which is a surface this task did
+  not open. Left out deliberately rather than half-done.
+- **Related:** items 22 and 44.
+
+### 61. `Test28c_EveryEntityTypeInsert_SendsNoReturning` covers 19 of 21 entity types — and the real hole is A1's
+
+- **Origin:** A3, found while reading why the entity-count tripwires failed. **The gap itself is A1's**, merged
+  2026-10-17 in PR #22: A1 added `password_reset_tokens` and the application inserts into it, and this test has
+  never covered that insert. A3 found it; A3 did not cause it, and did not fix it (below).
+- **The finding:** the test's name promises every entity type. What it does is insert a hand-written list of
+  entities and assert `Assert.Equal(19, tablesInserted.Count)` — where `tablesInserted` counts the tables that
+  **received** an insert. A new entity therefore cannot fail it: it is simply absent from both sides of the
+  comparison, and the count stays 19. It stayed 19 across A1 and A3 with nobody noticing.
+- **Which absence matters, and which does not:**
+  - `provider_accounts` (A3): **defensible.** No application role holds `INSERT` on it — the rows are
+    `migrator`'s, seeded (§2.6) — so there is no command of ours that could carry a `RETURNING`. Nothing to
+    cover.
+  - `password_reset_tokens` (A1): **a real hole.** `authenticator` holds `INSERT` and the application uses it —
+    `PasswordPaths.BeginResetAsync` mints a token on every `forgot`. That insert has never been checked for
+    `RETURNING`, which is the one thing this test exists to prevent (§3.5, Test 28).
+- **What it would take to make the test live up to its name:** derive the list from the model instead of writing
+  it by hand — enumerate `db.Model.GetEntityTypes()` and require every one of them either to have received an
+  insert in the test or to be named in a short, declared exclusion list with its reason ("no application role
+  inserts it"). Then the assertion is `Assert.Empty(entityTypes - inserted - excluded)` rather than a count, a
+  new entity fails the test until somebody places it on one side or the other, and the name becomes true.
+  **The reason it was hand-written is real and has to be designed around:** the rows are not arbitrary — foreign
+  keys, policies and the `app_id`/`app_ts` domains mean each entity needs a valid parent graph and a context
+  that admits the write, which is why the existing test builds a throwaway tenant, person, module and template
+  first. The exclusion list is what keeps that from becoming unbounded.
+- **The trap to close either way:** a test whose name claims "every" while a hardcoded count says otherwise reads
+  as coverage that does not exist — worse than no test, because nobody looks again.
+- **What does cover the new entity meanwhile:** `T2_Test28.Test28b_Model_EveryPropertyIsValueGeneratedNever` and
+  `T5_ModuleModelTests.Test28b_ModuleModel_EveryPropertyIsValueGeneratedNever` build their set by `SelectMany`
+  over every entity type's properties, so `provider_accounts` is genuinely inside those two.
+- **For the project owner:** whether the test should assert over every entity type or only over every entity the
+  application inserts is yours to settle; and A1's hole is not A3's to close inside A3.
 
 ## For the next version of the document — not for the code
 

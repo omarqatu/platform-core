@@ -1,0 +1,250 @@
+                          case                           
+---------------------------------------------------------
+ 1a. lookup with the grant but no policy (expect 0 rows)
+(1 row)
+
+ id | email 
+----+-------
+(0 rows)
+
+                        case                        
+----------------------------------------------------
+ 2a. the lookup, as forgot issues it (expect layla)
+(1 row)
+
+                  id                  |       email       
+--------------------------------------+-------------------
+ 00000000-0000-0000-0000-00000000a001 | layla@example.com
+(1 row)
+
+                                              case                                              
+------------------------------------------------------------------------------------------------
+ 2b. the normalized match finds a stored address with case and a trailing space (expect khaled)
+(1 row)
+
+                  id                  |        email        
+--------------------------------------+---------------------
+ 00000000-0000-0000-0000-00000000a002 | Khaled@Example.com 
+(1 row)
+
+                                    case                                     
+-----------------------------------------------------------------------------
+ 2c. SELECT * (expect: permission denied — the column grant, not the policy)
+(1 row)
+
+psql:/var/lib/postgresql/proof/02-behaviour.sql:24: ERROR:  permission denied for table persons
+                            case                            
+------------------------------------------------------------
+ 2d. a column outside the grant (expect: permission denied)
+(1 row)
+
+psql:/var/lib/postgresql/proof/02-behaviour.sql:27: ERROR:  permission denied for table persons
+                                       case                                       
+----------------------------------------------------------------------------------
+ 2e. a WHERE over an ungranted column (expect: permission denied — a WHERE reads)
+(1 row)
+
+psql:/var/lib/postgresql/proof/02-behaviour.sql:30: ERROR:  permission denied for table persons
+                                               case                                                
+---------------------------------------------------------------------------------------------------
+ 2f. the whole path: address -> person -> user, both tables in one statement (expect layla active)
+(1 row)
+
+                  id                  | status 
+--------------------------------------+--------
+ 00000000-0000-0000-0000-0000000000b1 | active
+(1 row)
+
+                           case                           
+----------------------------------------------------------
+ 2g. an address with no account (expect 0 rows, no error)
+(1 row)
+
+ id 
+----
+(0 rows)
+
+                                   case                                    
+---------------------------------------------------------------------------
+ 2h. the token insert this role makes after the lookup (expect INSERT 0 1)
+(1 row)
+
+                                           case                                            
+-------------------------------------------------------------------------------------------
+ 2i. the row count the whole of persons gives this role (the accepted risk, OPEN_ITEMS 56)
+(1 row)
+
+ every_person_is_readable 
+--------------------------
+                        2
+(1 row)
+
+                                   case                                    
+---------------------------------------------------------------------------
+ 2j. writing persons (expect: permission denied — SELECT alone is granted)
+(1 row)
+
+psql:/var/lib/postgresql/proof/02-behaviour.sql:48: ERROR:  permission denied for table persons
+                                     case                                     
+------------------------------------------------------------------------------
+ 3a. app_user with no app.tenant_id, before the policy exists (expect 0 rows)
+(1 row)
+
+ channel | credential_ref 
+---------+----------------
+(0 rows)
+
+                                      case                                       
+---------------------------------------------------------------------------------
+ 3b. the same read with the policy and still no tenant (expect the platform row)
+(1 row)
+
+ channel | provider_code |        credential_ref        
+---------+---------------+------------------------------
+ email   | smtp          | Notifications:Email:Platform
+(1 row)
+
+                                   case                                    
+---------------------------------------------------------------------------
+ 3c. with a tenant set, the platform row is still reachable (expect 1 row)
+(1 row)
+
+ visible 
+---------
+       1
+(1 row)
+
+                           case                           
+----------------------------------------------------------
+ 3d. app_user cannot write it (expect: permission denied)
+(1 row)
+
+psql:/var/lib/postgresql/proof/02-behaviour.sql:73: ERROR:  permission denied for table provider_accounts
+                                              case                                              
+------------------------------------------------------------------------------------------------
+ 3e. a second platform row for the same channel (expect: unique violation — NULLS NOT DISTINCT)
+(1 row)
+
+psql:/var/lib/postgresql/proof/02-behaviour.sql:78: ERROR:  duplicate key value violates unique constraint "provider_accounts_tenant_id_channel_key"
+DETAIL:  Key (tenant_id, channel)=(null, email) already exists.
+                            case                            
+------------------------------------------------------------
+ 4a. the grant with no policy for this role (expect 0 rows)
+(1 row)
+
+ channel | credential_ref 
+---------+----------------
+(0 rows)
+
+                                              case                                              
+------------------------------------------------------------------------------------------------
+ 4b. with the policy: the platform row, as the sender reads it (expect 1 row, the platform one)
+(1 row)
+
+ tenant_id | channel | provider_code |       sender_id        |        credential_ref        
+-----------+---------+---------------+------------------------+------------------------------
+           | email   | smtp          | no-reply@platform.test | Notifications:Email:Platform
+(1 row)
+
+                                     case                                      
+-------------------------------------------------------------------------------
+ 4c. the tenant row exists and is still invisible to this role (expect 0 rows)
+(1 row)
+
+ id 
+----
+(0 rows)
+
+                                              case                                              
+------------------------------------------------------------------------------------------------
+ 4d. setting a tenant in the context changes nothing: the policy never reads one (expect 1 row)
+(1 row)
+
+ visible 
+---------
+       1
+(1 row)
+
+                               case                               
+------------------------------------------------------------------
+ 4e. this role cannot write it either (expect: permission denied)
+(1 row)
+
+psql:/var/lib/postgresql/proof/02-behaviour.sql:111: ERROR:  permission denied for table provider_accounts
+Pager usage is off.
+SET
+                                         case                                         
+--------------------------------------------------------------------------------------
+ -- 1. the exact statement BeginResetAsync sends, for a seeded address (expect 1 row)
+(1 row)
+
+                Value                 
+--------------------------------------
+ 1d1f56ac-2749-6447-daf7-508f30565fa4
+(1 row)
+
+                                  case                                   
+-------------------------------------------------------------------------
+ -- 2. the same for an address with no account (expect 0 rows, no error)
+(1 row)
+
+ Value 
+-------
+(0 rows)
+
+                         case                          
+-------------------------------------------------------
+ -- 3. it uses the normalized unique index, not a scan
+(1 row)
+
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Nested Loop
+   Join Filter: ((p.id)::uuid = u.person_id)
+   ->  Index Scan using persons_email_normalized_key on persons p
+         Index Cond: (lower(btrim(email)) = 'omar@seed.test'::text)
+   ->  Seq Scan on users u
+         Filter: (status = 'active'::text)
+(6 rows)
+
+                                          case                                          
+----------------------------------------------------------------------------------------
+ -- 4. a tracked EF read of persons would read every column (expect: permission denied)
+(1 row)
+
+psql:/var/lib/postgresql/fq.sql:20: ERROR:  permission denied for table persons
+                                       case                                       
+----------------------------------------------------------------------------------
+ -- 5. reading the outstanding tokens of a user, as the path does (expect 0 rows)
+(1 row)
+
+ id 
+----
+(0 rows)
+
+RESET
+Pager usage is off.
+                           case                            
+-----------------------------------------------------------
+ -- A. insert two live tokens for a user, as authenticator
+(1 row)
+
+psql:/var/lib/postgresql/up.sql:6: ERROR:  duplicate key value violates unique constraint "password_reset_tokens_token_hash_key"
+                                               case                                                
+---------------------------------------------------------------------------------------------------
+ -- B. the supersession statement: a raw UPDATE with a WHERE, under UPDATE(used_at) + table SELECT
+(1 row)
+
+UPDATE 0
+                                         case                                          
+---------------------------------------------------------------------------------------
+ -- C. running it again affects zero rows and raises nothing (the race, made harmless)
+(1 row)
+
+UPDATE 0
+                                   case                                   
+--------------------------------------------------------------------------
+ -- D. writing any other column is still refused (the column grant holds)
+(1 row)
+
+psql:/var/lib/postgresql/up.sql:17: ERROR:  permission denied for table password_reset_tokens

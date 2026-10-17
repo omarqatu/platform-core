@@ -4,6 +4,7 @@ using Api.Endpoints;
 using Core.Data;
 using Core.Http;
 using Core.Identity;
+using Core.Notifications;
 using Core.Provisioning;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Modules.Subscriptions;
@@ -61,6 +62,23 @@ builder.Services.AddDbContext<ProvisionerDbContext>(options => options.UseCoreDa
 // The attempt limiter (Amendment 01 §5.2, OPEN_ITEMS 16): every number is configuration, and every one is a
 // marked assumption until the project owner settles it at launch.
 builder.Services.Configure<LoginLimits>(builder.Configuration.GetSection("Identity:LoginLimits"));
+
+// POST /auth/password/forgot (Amendment 01 §5.1): the token's life, and the floor that keeps the answer's
+// timing from saying whether the address has an account (OPEN_ITEMS 51). Marked assumptions, like the limiter's.
+builder.Services.Configure<ForgotPasswordSettings>(builder.Configuration.GetSection("Identity:ForgotPassword"));
+
+// The sender (Amendment 01 §5.5): one implementation per channel, email first (D3). The account comes from the
+// platform's provider_accounts row and the secret from the settings key its credential_ref names — never from
+// the database (§2.6). The dispatcher takes the provider round trip off the request path, which is what lets
+// forgot answer in the same time either way.
+builder.Services.Configure<EmailSenderOptions>(builder.Configuration.GetSection("Notifications:Email"));
+builder.Services.Configure<PlatformProviderOptions>(builder.Configuration.GetSection("Notifications:ProviderAccounts"));
+builder.Services.Configure<NotificationDispatchOptions>(builder.Configuration.GetSection("Notifications:Dispatch"));
+builder.Services.AddSingleton<IPlatformProviderAccounts, PlatformProviderAccounts>();
+builder.Services.AddSingleton<INotificationSender, EmailNotificationSender>();
+builder.Services.AddSingleton<NotificationDispatch>();
+builder.Services.AddSingleton<INotificationDispatch>(s => s.GetRequiredService<NotificationDispatch>());
+builder.Services.AddHostedService<NotificationDispatcher>();
 
 // The session: an HTTP-only cookie carrying user_id, the active tenant and the security stamp (PROOF_SPEC T3,
 // Amendment 01 §2.1).

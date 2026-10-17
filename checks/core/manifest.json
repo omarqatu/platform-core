@@ -15,7 +15,8 @@
       "CREATE POLICY persons_provisioner_select ON persons\n  FOR SELECT TO provisioner\n  USING (true);",
       "CREATE POLICY persons_provisioner_insert ON persons\n  FOR INSERT TO provisioner\n  WITH CHECK (true);",
       "CREATE POLICY person_self ON persons\n  FOR SELECT TO app_user\n  USING (EXISTS (\n    SELECT 1 FROM users u\n    WHERE u.person_id = persons.id\n      AND u.id = (SELECT NULLIF(current_setting('app.user_id', true), '')::uuid)));",
-      "CREATE POLICY person_visible_via_membership ON persons\n  FOR SELECT TO app_user\n  USING (EXISTS (\n    SELECT 1 FROM users u\n    JOIN memberships m ON m.user_id = u.id\n    WHERE u.person_id = persons.id\n      AND m.tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)\n  ));"
+      "CREATE POLICY person_visible_via_membership ON persons\n  FOR SELECT TO app_user\n  USING (EXISTS (\n    SELECT 1 FROM users u\n    JOIN memberships m ON m.user_id = u.id\n    WHERE u.person_id = persons.id\n      AND m.tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)\n  ));",
+      "CREATE POLICY persons_authenticator_read ON persons\n  FOR SELECT TO authenticator\n  USING (true);   -- the two columns (id, email) are confined by the grant, not by the policy; the surface is structurally confined to the authentication path"
     ],
     "users": [
       "CREATE POLICY users_provisioner_select ON users\n  FOR SELECT TO provisioner\n  USING (true);",
@@ -115,6 +116,10 @@
       "CREATE POLICY password_reset_tokens_authenticator_select ON password_reset_tokens\n  FOR SELECT TO authenticator\n  USING (true);   -- the role sees every token; the match is by the hash in the query",
       "CREATE POLICY password_reset_tokens_authenticator_insert ON password_reset_tokens\n  FOR INSERT TO authenticator\n  WITH CHECK (true);",
       "CREATE POLICY password_reset_tokens_authenticator_use ON password_reset_tokens\n  FOR UPDATE TO authenticator\n  USING (used_at IS NULL)\n  WITH CHECK (used_at IS NOT NULL);   -- the only write is consumption"
+    ],
+    "provider_accounts": [
+      "CREATE POLICY provider_accounts_read ON provider_accounts\n  FOR SELECT TO app_user\n  USING (tenant_id IS NULL\n         OR tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));   -- the platform's row, or the current tenant's (§2.6)",
+      "CREATE POLICY provider_accounts_authenticator_read ON provider_accounts\n  FOR SELECT TO authenticator\n  USING (tenant_id IS NULL);   -- the platform's row alone: this role has no tenant in its context, and it reads no current_setting, so the NULLIF rule has nothing to apply to"
     ]
   }
 }

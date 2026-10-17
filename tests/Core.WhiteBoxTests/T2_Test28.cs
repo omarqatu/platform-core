@@ -71,7 +71,9 @@ public class T2_Test28(WhiteBoxFixture fixture)
             .Select(p => $"{p.Table}.{p.Column} = {p.ValueGenerated}")
             .ToList();
 
-        Assert.Equal(20, entities.Count);
+        // 21 since A3 added ProviderAccount (Amendment 01 §2.6) — the inventory is the tripwire: a new
+        // entity has to be noticed here before the assertion below can speak for it.
+        Assert.Equal(21, entities.Count);
         Assert.Empty(generated);
     }
 

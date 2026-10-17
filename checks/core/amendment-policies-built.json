@@ -3,6 +3,9 @@
   "01": [
     "password_reset_tokens.password_reset_tokens_authenticator_select",
     "password_reset_tokens.password_reset_tokens_authenticator_insert",
-    "password_reset_tokens.password_reset_tokens_authenticator_use"
+    "password_reset_tokens.password_reset_tokens_authenticator_use",
+    "persons.persons_authenticator_read",
+    "provider_accounts.provider_accounts_read",
+    "provider_accounts.provider_accounts_authenticator_read"
   ]
 }

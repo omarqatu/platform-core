@@ -111,7 +111,7 @@ M0 قرارات ◆ M1 تكافؤ ◆ M2 إنتاج ◆ M3 ترحيل ◆ M4 ب�
 ### د. سجل اشتراك المنصة — الطبقة 1
 
 - `plans` كتالوج يزرعه migrator (أسماء، لا أسعار) · `platform_subscriptions(tenant_id, plan_code, status ∈ {active, suspended}, period_start, paid_until date UTC, grace_days)` بالقالب القياسي.
-- الإجراء التشغيلي (أ) يسجّل الدفعة اليدوية (`mark-paid --until`). و`suspend-unpaid` — **أمر تشغيلي مجدول خارجياً، لا مهمة خلفية** — يوقف الجهة حين `paid_until + grace_days < current_date` بتوقيت UTC، جهةً جهة في معاملة لكل واحدة (الملحق §5.4). المالك والـ admin يريان الحالة (`core.billing.read`).
+- الإجراء التشغيلي (أ) يسجّل الدفعة اليدوية (`mark-paid --until`). و`suspend-unpaid` — **أمر تشغيلي مجدول خارجياً، لا مهمة خلفية** — يوقف الجهة حين `paid_until + grace_days < (now() AT TIME ZONE 'UTC')::date`، جهةً جهة في معاملة لكل واحدة (الملحق §5.4). المالك والـ admin يريان الحالة (`core.billing.read`).
 - المحرك والبوابات مؤجلان إلى الملحق 02 (الملحق §7): لا فواتير ولا دفعات ولا واجهة بوابة في هذه المرحلة.
 
 ### هـ. أمن قبل الجمهور
