@@ -50,6 +50,15 @@ jobs:
           bash checks/local/check-api-error-codes.sh
           bash checks/local/check-api-error-codes.sh --self-test
 
+      # OPEN_ITEMS 62, 65: the rule's minimum is one number, repeated in the interface so the screens can
+      # state it. A screen that says one number while the server enforces another reads as a broken product.
+      # A local check with a name, not one of the ten (checks/local/README.md); needs no database.
+      - name: Local check — check-password-policy, and its self-test
+        working-directory: .
+        run: |
+          bash checks/local/check-password-policy.sh
+          bash checks/local/check-password-policy.sh --self-test
+
       - name: Typecheck
         run: npm run typecheck
 

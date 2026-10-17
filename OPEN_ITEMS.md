@@ -145,6 +145,13 @@ Closed by the password-rule PR:
   guards against is answered by `/app/password/forgot`, which now exists.
   The item's three notes held: the seed contract never passes the API, the e2e fixtures were all over twelve
   (checked, not assumed — one Conformance fixture was not, see the PR), and the error code took all four files.
+- **65.** The rule's number is repeated for the interface's sake, and `check-password-policy` now holds those
+  copies to the server's. Raised and closed in the same PR, by the project owner's decision to approve a new
+  check for it: drift would not weaken the rule — the server still refuses — but a screen stating one number
+  while the server enforces another reads as a broken product rather than as a policy, and that is the worse
+  failure. The check asserts the occurrences agree and nothing more, with a `--self-test` that plants a
+  mismatch. It compares **six**, not the four this item first counted: the Arabic sentences in
+  `web/locales/ar.json` carry the number too, and a drift there is wrong to Arabic users alone.
 
 ## For the project owner — a decision after T8
 
@@ -592,23 +599,6 @@ Closed by the password-rule PR:
   all three mention this item by number, and all three come out together.
 - **Amendment 01 §5.1 names no status for this case**, so this is a gap in the document rather than a conflict
   with it; whether the amendment should name it is the project owner's call.
-
-### 65. The password rule's number is written in four places, and nothing checks they agree
-
-- **Origin:** the password-rule PR (OPEN_ITEMS 62), found while building it rather than afterwards.
-- **The finding:** the rule's minimum is `PasswordPolicy.MinimumLength` in `src/Core/Identity/PasswordPolicy.cs`
-  — the one that decides. Three more copies exist for the interface's sake: `MINIMUM_PASSWORD_LENGTH` in
-  `web/src/password/policy.ts` (what the screens compare against), and the number spelled out in the sentence of
-  `errors.password_too_short` and `common.password.rule`, in `web/src/i18n/apiErrors.ts`,
-  `web/src/components/messages.ts` and the Arabic of `web/locales/ar.json`. It is written into those sentences
-  rather than interpolated because `errorMessage()` is formatted with no values at every call site.
-- **What drift would cost:** not a hole. The server still refuses what the rule refuses; a screen with a smaller
-  number would send a password the server rejects, and the user would meet the server's message instead of the
-  screen's — a worse interface, not a weaker rule. A screen with a *larger* number would refuse a password the
-  server would have taken.
-- **The cheap version, if it is wanted:** a `check-password-policy` beside the other local checks, reading the
-  constant out of each file and comparing. It is a **new check**, so it is the project owner's decision, which
-  is why this PR did not build one.
 
 ## For the next version of the document — not for the code
 

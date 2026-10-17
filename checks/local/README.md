@@ -18,6 +18,7 @@ share.
 | `check-i18n-parity` | The keys of `web/locales/ar.json` are exactly those of a fresh extraction of `web/src/`; `web/locales/en.json` is that extraction; every plural in `ar.json` gives the six Arabic forms. | i18n task |
 | `check-api-error-codes` | `api-error-codes.json` is the current export of `src/Core/ApiErrorCodes.cs`; no code is a string literal elsewhere in `src/` (except `api-error-codes-literal-allowlist.txt`); every code has its entry `errors.<code>` in `web/src/i18n/apiErrors.ts`, and every entry but `errors.unknown` has its code. | i18n task |
 | `check-schema-dump` | `docs/schema.sql` equals a fresh `pg_dump --schema-only` of the migrated database (`scripts/dump-schema.sh`). | Developer documentation |
+| `check-password-policy` | The password rule's minimum is the same number in all six places that state it: `PasswordPolicy.MinimumLength`, `MINIMUM_PASSWORD_LENGTH`, and the number inside each of the four sentences that say the rule (English in `apiErrors.ts` and `components/messages.ts`, Arabic in `locales/ar.json`). | The password rule — OPEN_ITEMS 62, 65 |
 | `check-manifest-extraction` | `checks/core/manifest.json` is the extraction of PLATFORM_CORE v1.16 and its amendments (`checks/core/generate-manifest.py --check`), each document's Arabic and English stating the same policies. | Amendment 01 §4.1, OPEN_ITEMS 50 |
 
 ## check-schema-allowlist
@@ -186,3 +187,30 @@ unplanted copy passes. CI runs both modes (the `proof` job).
 
 **Fixing a failure:** run `checks/core/generate-manifest.py` and commit `manifest.json` with the change that caused
 it; for (b), make the English match the Arabic.
+
+## check-password-policy
+
+**Why it exists:** the rule's minimum (OPEN_ITEMS 62) is enforced in exactly one place, the server's
+`PasswordPolicy`. The interface repeats the number so the screens can state the rule before the round trip:
+once as a constant they compare against, and once inside each sentence that says it — and it is written into
+those sentences rather than interpolated, because `errorMessage()` is formatted with no values at every call
+site.
+
+Drift between them does not weaken the rule: the server still refuses what the rule refuses. It fails in a
+worse way. A screen that says one number while the server enforces another reads as a broken product rather
+than as a policy, and an Arabic-only drift reads that way to Arabic users alone — which is why the Arabic
+sentences are compared too, and why this check counts six occurrences where OPEN_ITEMS 65 counted four.
+
+**What it does and does not do:** it asserts those occurrences state the same number, and nothing more. It does
+not parse the rule, check the sentences' wording, or know what the number ought to be — the server's constant
+decides, and the check only reports that the rest agree with it.
+
+**Running it** (repository root; needs no database and no `node_modules`):
+
+```bash
+checks/local/check-password-policy.sh
+checks/local/check-password-policy.sh --self-test
+```
+
+The self-test plants the mismatch the check exists for: a copy of the six files in which the interface's
+constant says 8 while the server still says 12.

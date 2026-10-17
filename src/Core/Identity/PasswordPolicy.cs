@@ -18,10 +18,10 @@ namespace Core.Identity;
 /// would lock those accounts out and would tell an anonymous caller what the rule is.
 /// </para>
 /// <para>
-/// The interface keeps its own copy of the number — <c>MINIMUM_PASSWORD_LENGTH</c> in
-/// <c>web/src/password/policy.ts</c> — because the screens check before they send. Nothing enforces that the two
-/// agree (OPEN_ITEMS 65): if they drift, the server still refuses, and the user meets the server's message
-/// instead of the screen's.
+/// The interface keeps its own copies of the number — <c>MINIMUM_PASSWORD_LENGTH</c> in
+/// <c>web/src/password/policy.ts</c>, and the number inside each sentence that states the rule — because the
+/// screens check before they send. <c>checks/local/check-password-policy.sh</c> holds all of them to this
+/// constant (OPEN_ITEMS 65): this one decides, and the check only reports that the rest agree.
 /// </para>
 /// </summary>
 public static class PasswordPolicy

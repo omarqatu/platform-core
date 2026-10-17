@@ -1208,7 +1208,7 @@ essentials:
   attempt against the limiter (§5.2). It applies to **four** screens, invitation acceptance included — that is
   where accounts are actually created. Acceptance has no confirmation field on purpose: the risk one guards
   against is a mistyped first password with no way back, and `/app/password/forgot` is that way back now.
-  Nothing checks that the interface's number still matches the server's (OPEN_ITEMS 65).
+  `check-password-policy` holds the interface's copies of the number to the server's (OPEN_ITEMS 65).
 - **A 401 is an ended session, with two exceptions** (`api/client.ts`): the login path's, and
   `invalid_credentials` from `PUT /me/password`, which is a wrong *current* password and must not sign the user
   out of a working session. A stale security stamp on the same request is `session_expired` and still ends it.
