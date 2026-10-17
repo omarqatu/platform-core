@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 /** The reference's line icons (docs/ui/reference): decorative only, so always aria-hidden — the text names the control. */
-export type IconName = 'grid' | 'layers' | 'globe' | 'moon' | 'check' | 'warn' | 'palette' | 'logout' | 'swap';
+export type IconName = 'grid' | 'layers' | 'globe' | 'moon' | 'check' | 'warn' | 'palette' | 'logout' | 'swap' | 'lock';
 
 const PATHS: Record<IconName, ReactNode> = {
   grid: (
@@ -52,6 +52,12 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="m16 3 4 4-4 4M20 7H4" />
       <path d="m8 21-4-4 4-4M4 17h16" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="4" y="10" width="16" height="11" rx="2" />
+      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
     </>
   ),
 };

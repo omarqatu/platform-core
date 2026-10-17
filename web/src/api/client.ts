@@ -18,10 +18,22 @@ export const REQUESTED_WITH = { 'X-Requested-With': 'platform-web' } as const;
 /** The login path answers a refusal with 401 too; that 401 is a wrong credential, not an ended session. */
 const LOGIN_PATH = '/auth/login';
 
+/**
+ * The other 401 that is not an ended session: PUT /me/password answers 401 invalid_credentials when the *current*
+ * password is wrong (Amendment 01 §5.1). Reading every 401 as an ended session would sign the user out of a
+ * working session for a typo. The code is what tells them apart — a stale security stamp on the same request is
+ * 401 session_expired and still ends the session (§2.1). The status code itself is the backend's to correct, and
+ * this exception goes with it (OPEN_ITEMS 64).
+ */
+const WRONG_CREDENTIAL = 'invalid_credentials';
+
 let onUnauthorized: (() => void) | null = null;
 let generation = new AbortController();
 
-/** Registered by the session: called for every 401 (but login's), after the request has failed. */
+/**
+ * Registered by the session: called for every 401 that ends the session — every one but login's and a wrong
+ * current password's (WRONG_CREDENTIAL) — after the request has failed.
+ */
 export function setUnauthorizedHandler(handler: (() => void) | null) {
   onUnauthorized = handler;
 }
@@ -50,7 +62,7 @@ export async function request<T>(method: string, path: string, body?: unknown, s
     // The code is read whatever the status: a 500 can carry one the interface knows (membership_scope_missing).
     const error: unknown = await response.json().catch(() => null);
     const code = error && typeof error === 'object' && 'error' in error && typeof error.error === 'string' ? error.error : null;
-    if (response.status === 401 && path !== LOGIN_PATH) onUnauthorized?.();
+    if (response.status === 401 && path !== LOGIN_PATH && code !== WRONG_CREDENTIAL) onUnauthorized?.();
     throw new ApiError(response.status, code);
   }
   if (response.status === 204) return undefined as T;

@@ -166,6 +166,53 @@ describe('a 401 during the session', () => {
   });
 });
 
+describe('changing one\u2019s own password', () => {
+  it('is reachable with no organization chosen, from the shell', async () => {
+    fakeApi({ me: null });
+    renderApp('/organizations');
+    await screen.findByRole('heading', { name: 'Choose an organization' });
+
+    fireEvent.click(screen.getByRole('link', { name: 'Change password' }));
+
+    await screen.findByRole('heading', { name: 'Change your password' });
+    expect(probe.location).toBe('/app/password/change');
+  });
+
+  it('a reload after the password changed elsewhere still says why (the cold load reads the code)', async () => {
+    // The cookie is HTTP-only: on a cold load a stale session is indistinguishable from none, except by the
+    // code the API sends with the 401 (Amendment 01 §2.1).
+    const api = fakeApi();
+    api.overrides.set('GET /me', () => Response.json({ error: 'session_expired' }, { status: 401 }));
+    renderApp('/app/subscriptions');
+
+    await screen.findByText('Your session has ended. Sign in again.');
+    expect(probe.location).toBe('/login?next=%2Fapp%2Fsubscriptions');
+  });
+
+  it('a cold load with no session at all says nothing — it is not an ended session', async () => {
+    fakeApi({ signedIn: false });
+    renderApp('/app/subscriptions');
+
+    await screen.findByRole('heading', { name: 'Sign in' });
+    expect(screen.queryByText('Your session has ended. Sign in again.')).toBeNull();
+  });
+
+  it('a session_expired on it lands on the login screen, not on a blank page', async () => {
+    const api = fakeApi({ me: null });
+    api.overrides.set('PUT /me/password', () => Response.json({ error: 'session_expired' }, { status: 401 }));
+    renderApp('/app/password/change');
+    await screen.findByRole('heading', { name: 'Change your password' });
+
+    fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'the current one' } });
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'a new password' } });
+    fireEvent.change(screen.getByLabelText('Repeat the new password'), { target: { value: 'a new password' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Change the password' }));
+
+    await screen.findByText('Your session has ended. Sign in again.');
+    expect(probe.location).toBe('/login?next=%2Fapp%2Fpassword%2Fchange');
+  });
+});
+
 describe('a membership lost during the session', () => {
   it('when /me no longer names the organization, everything is dropped and the selection shows', async () => {
     const api = fakeApi();

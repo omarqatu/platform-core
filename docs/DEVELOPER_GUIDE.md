@@ -1165,8 +1165,28 @@ essentials:
   shown as entered in `<bdi dir="auto">`.
 - **Logical CSS only** (`margin-inline-start`, `text-align: start`) — `check-logical-css` and ESLint refuse physical
   sides.
-- Screens: login, organization selection, invitation acceptance (new account or signed in), status screens, the
-  subscriptions screen. Screenshots of every state, in both languages, are in `docs/screens/`.
+- Screens: login, organization selection, invitation acceptance (new account or signed in), the three screens of
+  password recovery and change, status screens, the subscriptions screen. Screenshots of every state, in both
+  languages, are in `docs/screens/` — made by hand, and not yet made for the password screens.
+- **The password screens** (Amendment 01 §5.1, OPEN_ITEMS 59): `/app/password/forgot` and `/app/password/reset` are
+  open; `/app/password/change` needs a session and no organization (`PUT /me/password` runs its own units of work
+  with `app.user_id` alone). The e-mail's link is `/app/password/reset#token=<token>` and its token is handled as
+  the invitation's is — `src/password/pendingResetToken.ts`, into memory before anything renders, out of the
+  address, `hashchange` watched — so it never reaches a server log or a referrer. Forgot shows **one panel in one
+  wording for every address**, with no redirect and nothing timed in the browser: the uniform 204 and its floor
+  (§7) are only uniform if the screen is. Reset keeps unknown, used and expired to the one `invalid_token`
+  message and ends on the sign-in screen, because that path issues no cookie. Change says in one line that this
+  session survives and every other one has ended — people expect to be signed out and worry when they are not.
+  The two password fields must match, and that is the only rule the interface checks: the platform has no
+  password policy (OPEN_ITEMS 62).
+- **A 401 is an ended session, with two exceptions** (`api/client.ts`): the login path's, and
+  `invalid_credentials` from `PUT /me/password`, which is a wrong *current* password and must not sign the user
+  out of a working session. A stale security stamp on the same request is `session_expired` and still ends it.
+  The status code is the backend's to correct (OPEN_ITEMS 64).
+  **On a cold load** the cookie is HTTP-only, so a session the stamp has ended looks exactly like no session —
+  except in the code: `GET /me` answers `401 session_expired` for the first and a bare 401 for the second, and
+  `SessionProvider` reads it, so a user who simply reloads after their password changed elsewhere is told why
+  instead of meeting a bare sign-in screen.
 
 ```bash
 cd web
@@ -1222,6 +1242,38 @@ Api__Origin=http://localhost:5173 dotnet test tests/Conformance -c Release --no-
 
 Conformance's job tests run the Worker from `src/Worker/bin/Release/net10.0/Worker.dll` — build in Release first.
 If a run leaves the database in a strange state, `scripts/dev-down.sh && scripts/dev-up.sh` gives you a clean one.
+
+### No .NET SDK on the machine? Docker has one — try it before reporting anything unprovable
+
+Three sessions in a row reported "no .NET SDK here" as a hard limit and ticked nothing they could not run. It was
+not a limit. **Nothing is reported as unprovable locally until Docker has actually been tried**, and the report
+says which was tried — pulling an image is not the same as having an SDK, and neither is having `docker` on the
+PATH while the daemon is down (`sudo dockerd &` starts it).
+
+The whole stack runs out of `mcr.microsoft.com/dotnet/sdk:10.0` with the repository mounted. This is what the
+password-screens PR used to reproduce a red CI e2e step and prove its fix:
+
+```bash
+sudo dockerd &                                   # if the daemon is not already up
+docker compose up -d --wait postgres             # PostgreSQL 18, as CI starts it
+
+# The SDK in a container. Behind an inspecting proxy, NuGet needs its CA, or restore fails with UntrustedRoot:
+#   -e HTTPS_PROXY="$HTTPS_PROXY" -v /path/to/ca-bundle.crt:/ca.crt:ro -e SSL_CERT_FILE=/ca.crt
+dock() { docker run --rm --network host -v "$PWD:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 "$@"; }
+dock dotnet run --project src/Migrations -c Release
+docker compose exec -T postgres psql -X -q -v ON_ERROR_STOP=1 -U migrator -d platform < tests/seed/seed-contract.sql
+
+# The Api, serving the interface built by node on the host (cd web && npm run build).
+# --no-launch-profile, or launchSettings.json overrides the port and the environment.
+docker run -d --name api --network host -v "$PWD:/src" -w /src   -e ASPNETCORE_URLS=http://127.0.0.1:5080 -e ASPNETCORE_ENVIRONMENT=CI -e Session__RequireHttps=false   -e Security__AllowedOrigins__0=http://127.0.0.1:5080 -e Web__Root=/src/web/dist   -e "ConnectionStrings__app_user=Host=localhost;Port=5432;Database=platform;Username=app_user;Password=app_user_dev"   -e "ConnectionStrings__authenticator=Host=localhost;Port=5432;Database=platform;Username=authenticator;Password=authenticator_dev"   -e "ConnectionStrings__provisioner=Host=localhost;Port=5432;Database=platform;Username=provisioner;Password=provisioner_dev"   mcr.microsoft.com/dotnet/sdk:10.0 dotnet run --project src/Api -c Release --no-launch-profile
+
+cd web && PW_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome \
+  ConnectionStrings__migrator='Host=127.0.0.1;Port=5432;Database=platform;Username=migrator;Password=migrator_dev' \
+  npx playwright test            # PW_CHROMIUM_PATH only where Chromium is already installed elsewhere
+```
+
+The same container runs `dotnet test` for Conformance and the white-box suite. The database it leaves behind holds
+the e2e fixtures' own organizations, exactly as a CI run would; throw it away with `docker compose down -v`.
 
 ### The rule about tests
 

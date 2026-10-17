@@ -1,11 +1,12 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useIntl, type MessageDescriptor } from 'react-intl';
-import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router';
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { ApiError } from '../../api/client';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Brand } from '../../components/Brand';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { apiErrors, errorMessage } from '../../i18n/apiErrors';
+import { FORGOT_PATH } from '../password/ForgotPasswordScreen';
 import { needsTenant, nextQuery, safeNext } from '../../session/next';
 import { useSession } from '../../session/SessionProvider';
 import { LoadingScreen } from '../status/StatusScreens';
@@ -25,6 +26,8 @@ export function LoginScreen() {
   const direct = next !== null && !needsTenant(next);
   // An account just created by accepting an invitation: to the selection, but nothing entered by itself.
   const accepted = (location.state as { accepted?: boolean } | null)?.accepted === true;
+  // A password just set from a recovery link: that path issues no cookie, so it ends here (Amendment 01 §5.1).
+  const passwordSet = (location.state as { passwordSet?: boolean } | null)?.passwordSet === true;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
@@ -64,6 +67,11 @@ export function LoginScreen() {
       {state.status === 'anonymous' && state.reason === 'expired' && !error && (
         <p role="status" className="notice">
           {intl.formatMessage(messages.sessionEnded)}
+        </p>
+      )}
+      {passwordSet && !error && (
+        <p role="status" className="notice">
+          {intl.formatMessage(messages.passwordSet)}
         </p>
       )}
       {accepted && !error && (
@@ -108,6 +116,9 @@ export function LoginScreen() {
           {intl.formatMessage(pending ? messages.submitting : messages.submit)}
         </button>
       </form>
+      <p className="recover">
+        <Link to={FORGOT_PATH}>{intl.formatMessage(messages.forgotPassword)}</Link>
+      </p>
     </main>
   );
 }

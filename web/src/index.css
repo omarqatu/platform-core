@@ -227,6 +227,12 @@ body:has(.login) {
   border-radius: var(--radius-sm);
 }
 
+/* "Forgot your password?", under the sign-in form. */
+.login .recover {
+  margin-block: var(--space-4) 0;
+  font-size: var(--type-label-size);
+}
+
 @media (max-width: 560px) {
   .login {
     margin-block: var(--space-4);

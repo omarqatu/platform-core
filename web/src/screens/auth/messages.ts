@@ -12,4 +12,7 @@ export const messages = defineMessages({
   },
   toAcceptInvitation: { id: 'auth.login.toAcceptInvitation', defaultMessage: 'Sign in to accept the invitation.' },
   sessionEnded: { id: 'auth.login.sessionEnded', defaultMessage: 'Your session has ended. Sign in again.' },
+  // After a password was set from a recovery link: that path issues no cookie (Amendment 01 §5.1).
+  passwordSet: { id: 'auth.login.passwordSet', defaultMessage: 'Your password is set. Sign in with it.' },
+  forgotPassword: { id: 'auth.login.forgotPassword', defaultMessage: 'Forgot your password?' },
 });

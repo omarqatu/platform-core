@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -101,6 +102,28 @@ export async function invitation(owner: { username: string; password: string; te
   } finally {
     await context.dispose();
   }
+}
+
+/**
+ * A live recovery token for a user, and the link that carries it — minted as migrator rather than through
+ * `POST /api/auth/password/forgot`, because that path answers 204 and puts the token in an e-mail: only its
+ * SHA-256 reaches the database (`PasswordPaths`, Amendment 01 §2.2), so no test can read back the real one. The
+ * row is the one `forgot` would have written, and the screen's half of the path — the fragment, the API call,
+ * the refusals — is exercised for real.
+ */
+export async function recoveryToken(username: string, options: { expired?: boolean; used?: boolean } = {}) {
+  const token = `e2e-token-${randomUUID()}`;
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + (options.expired ? -60_000 : 30 * 60_000));
+  await asMigrator(async (c) => {
+    const user = (await c.query('SELECT id FROM users WHERE username = $1', [username])).rows[0].id as string;
+    await c.query(
+      `INSERT INTO password_reset_tokens (id, user_id, token_hash, requested_at, expires_at, used_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [randomUUID(), user, createHash('sha256').update(token).digest('hex'), now, expiresAt, options.used ? now : null],
+    );
+  });
+  return { token, link: `/app/password/reset#token=${encodeURIComponent(token)}` };
 }
 
 /** Memberships of a user (by username) in a tenant, as migrator. */
