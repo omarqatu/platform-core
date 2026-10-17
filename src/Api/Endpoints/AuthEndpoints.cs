@@ -29,7 +29,9 @@ public sealed record MeTenant(Guid TenantId, string Name);
 public static class AuthEndpoints
 {
     private const int MaxUsername = 256;
-    private const int MaxPassword = 1024;
+    // The ceiling on a password-shaped field. It is the policy's maximum (OPEN_ITEMS 62): the two were the
+    // same number written twice, and login's ceiling and the rule's must not drift apart.
+    private const int MaxPassword = PasswordPolicy.MaximumLength;
     private const int MaxToken = 256;
     private const int MaxEmail = 320;   // the longest address RFC 5321 admits: 64 + '@' + 255.
 
@@ -156,6 +158,11 @@ public static class AuthEndpoints
             if (body is not { Token: { Length: > 0 and <= MaxToken } token,
                               NewPassword: { Length: > 0 and <= MaxPassword } newPassword })
                 return Results.Json(new { error = ApiErrorCodes.InvalidRequest }, statusCode: StatusCodes.Status400BadRequest);
+            // The rule before the token is read (OPEN_ITEMS 62). A refused password must not consume the token:
+            // the link has one use, and spending it on a password the server was never going to write would send
+            // the user back to forgot for a mistake the screen already explains.
+            if (PasswordPolicy.IsTooShort(newPassword))
+                return Results.Json(new { error = ApiErrorCodes.PasswordTooShort }, statusCode: StatusCodes.Status400BadRequest);
 
             var owner = await PasswordPaths.ConsumeResetTokenAsync(authenticator, token, ct);
             await PasswordPaths.ApplyNewPasswordAsync(db, owner, newPassword, ct);
@@ -172,6 +179,10 @@ public static class AuthEndpoints
             if (body is not { CurrentPassword: { Length: > 0 and <= MaxPassword } current,
                               NewPassword: { Length: > 0 and <= MaxPassword } newPassword })
                 return Results.Json(new { error = ApiErrorCodes.InvalidRequest }, statusCode: StatusCodes.Status400BadRequest);
+            // The rule before the current password is verified (OPEN_ITEMS 62), so a new password the server
+            // will not write costs no auth_attempts row and no step of the limiter's escalating delay (§5.2).
+            if (PasswordPolicy.IsTooShort(newPassword))
+                return Results.Json(new { error = ApiErrorCodes.PasswordTooShort }, statusCode: StatusCodes.Status400BadRequest);
 
             var user = session.Current.UserId!.Value;
             if (!await PasswordPaths.VerifyCurrentPasswordAsync(

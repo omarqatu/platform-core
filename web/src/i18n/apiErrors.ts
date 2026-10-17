@@ -61,6 +61,13 @@ export const apiErrors = defineMessages({
     id: 'errors.invalid_token',
     defaultMessage: 'This link is not valid or has expired. Ask for a new one.',
   },
+  // The password rule (OPEN_ITEMS 62). The number is written into the sentence rather than interpolated, because
+  // errorMessage() is formatted with no values at every call site. The screens show this same message when they
+  // catch the rule before sending, so the wording is one wording whoever caught it.
+  password_too_short: {
+    id: 'errors.password_too_short',
+    defaultMessage: 'The password must be at least 12 characters. Nothing else is required: no symbol, no digit, no capital letter.',
+  },
   unknown: { id: 'errors.unknown', defaultMessage: 'Something went wrong. Try again.' },
 });
 

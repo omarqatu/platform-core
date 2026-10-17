@@ -14,6 +14,7 @@ import {
   subscribePendingInvitation,
   type PendingInvitation,
 } from '../../invitations/pendingInvitation';
+import { isLongEnough } from '../../password/policy';
 import { nextQuery } from '../../session/next';
 import { useSession } from '../../session/SessionProvider';
 import { LoadingScreen } from '../status/StatusScreens';
@@ -47,7 +48,7 @@ function Acceptance({ invitation }: { invitation: PendingInvitation | null }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ fullName: '', email: '', username: '', password: '' });
-  const ids = { fullName: useId(), email: useId(), username: useId(), password: useId(), error: useId() };
+  const ids = { fullName: useId(), email: useId(), username: useId(), password: useId(), rule: useId(), error: useId() };
 
   if (state.status === 'loading') return <LoadingScreen />;
 
@@ -90,10 +91,21 @@ function Acceptance({ invitation }: { invitation: PendingInvitation | null }) {
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
+    // The password rule, before the round trip (OPEN_ITEMS 62). This screen is where accounts are actually
+    // created, so it is the first place most people ever meet the rule. There is no confirmation field, and
+    // that is deliberate rather than an oversight: the risk a confirmation guards against is setting a first
+    // password with a typo and having no way back, and `/app/password/forgot` is that way back now.
+    if (!isLongEnough(form.password)) {
+      setForm((f) => ({ ...f, password: '' }));
+      setError(intl.formatMessage(apiErrors.password_too_short));
+      return;
+    }
     void accept(form);
   };
 
-  const field = (name: keyof typeof form, type: string, autoComplete: string) => (
+  // `rule` puts the password rule under the field that must satisfy it, and names it in aria-describedby so a
+  // screen reader hears it with the field rather than only after a refusal.
+  const field = (name: keyof typeof form, type: string, autoComplete: string, rule = false) => (
     <p>
       <label htmlFor={ids[name]}>{intl.formatMessage(messages[name])}</label>
       <input
@@ -105,8 +117,13 @@ function Acceptance({ invitation }: { invitation: PendingInvitation | null }) {
         dir={type === 'password' ? undefined : 'auto'}
         value={form[name]}
         onChange={(e) => setForm((f) => ({ ...f, [name]: e.target.value }))}
-        aria-describedby={error ? ids.error : undefined}
+        aria-describedby={[rule ? ids.rule : null, error ? ids.error : null].filter(Boolean).join(' ') || undefined}
       />
+      {rule && (
+        <span id={ids.rule} className="field-hint">
+          {intl.formatMessage(common.passwordRule)}
+        </span>
+      )}
     </p>
   );
 
@@ -155,7 +172,7 @@ function Acceptance({ invitation }: { invitation: PendingInvitation | null }) {
           {field('fullName', 'text', 'name')}
           {field('email', 'email', 'email')}
           {field('username', 'text', 'username')}
-          {field('password', 'password', 'new-password')}
+          {field('password', 'password', 'new-password', true)}
           <button type="submit" disabled={pending}>
             {intl.formatMessage(pending ? messages.accepting : messages.createAndAccept)}
           </button>

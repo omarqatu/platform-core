@@ -65,6 +65,38 @@ test('1. a new account: the form, then sign in — the selection, nothing entere
   await expectSelectionWithNothingEntered(page, host.tenantId, host.name);
 });
 
+// The password rule (OPEN_ITEMS 62), where accounts are actually created. The screen says the rule with the
+// field and refuses eleven characters without a round trip; twelve is accepted and the account exists. The
+// screen has no confirmation field, and that is deliberate: the risk one guards against is setting a first
+// password with a typo and having no way back, and /app/password/forgot is that way back now.
+test('1b. the password rule: the rule is shown, eleven is refused, twelve creates the account', async ({ page }) => {
+  const host = await ownOrganization('acc-rule');
+  const username = `e2e-rule-${Date.now().toString(36)}`;
+  const email = `${username}@e2e.test`;
+  const { link } = await invitation(host, email);
+
+  await page.goto(link);
+  await expect(page.getByRole('heading', { name: 'Accept the invitation' })).toBeVisible();
+  await expect(page.getByText('At least 12 characters. No symbol, digit or capital letter is required.')).toBeVisible();
+  await page.getByLabel('Full name').fill('Invitee');
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Username').fill(username);
+  await page.getByLabel('Password').fill('eleven-char');
+  await page.getByRole('button', { name: 'Create account and accept' }).click();
+
+  await expect(page.getByRole('alert')).toHaveText(/at least 12 characters/i);
+  // Still on the screen, and nothing was created.
+  await expect(page.getByRole('heading', { name: 'Accept the invitation' })).toBeVisible();
+  expect(await membershipsOf(username, host.tenantId)).toBe(0);
+
+  // One character more, and the same invitation goes through.
+  await page.getByLabel('Password').fill('twelvecharsx');
+  await page.getByRole('button', { name: 'Create account and accept' }).click();
+
+  await expect(page).toHaveURL(/\/login$/);
+  expect(await membershipsOf(username, host.tenantId)).toBe(1);
+});
+
 test('2. an existing account, signed in: one button — a second organization, nothing entered', async ({ page }) => {
   const host = await ownOrganization('acc-second');
   const member = await ownOrganization('acc-second-home');

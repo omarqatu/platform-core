@@ -1013,7 +1013,28 @@ module's other permission codes.
 4. Return it as `Results.Json(new { error = ApiErrorCodes.RenewalLocked }, statusCode: …)` — or map an exception to it
    in `ErrorResponses`. Never write the code as a string literal elsewhere in `src/` (the check fails).
 
-`check-api-error-codes` fails until all of this is done.
+`check-api-error-codes` fails until all of this is done. It checks three things, and the third needs
+`web/node_modules` present: the committed JSON is the export of `ApiErrorCodes.cs`, no code appears as a literal
+anywhere else in `src/`, and the interface has exactly one message per code. Step 3 also means
+`npm run i18n:extract` (`locales/en.json` is generated), or `check-i18n-parity` fails next.
+
+**A worked example: the password rule** (OPEN_ITEMS 62, `password_too_short`). Three things it is worth copying:
+
+1. **Name the code for what is true**, not for the room you might want later. A code is a contract and is never
+   renamed, so `password_too_short` beats `weak_password` while length is the whole rule; a composition rule, if
+   one ever arrives, gets a second code rather than making one code mean two things.
+2. **Check at every entry point, not at the one you were thinking of.** That rule has four — the two obvious
+   recovery paths, invitation acceptance (the new-account branch, which is where accounts are actually created)
+   and `POST /provision/tenants`, which exists in `Development` and `CI` only and is therefore the one that gets
+   forgotten. The number itself lives in one place, `PasswordPolicy` in `src/Core/Identity`; the endpoints read it.
+3. **Check before the work the rule guards, not after.** The reset path checks before it consumes the recovery
+   token, so a refused password does not spend a one-use link; the change path checks before it verifies the
+   current password, so a refused password writes no `auth_attempts` row and earns no step of the limiter's
+   escalating delay. Where the check sits is part of the behaviour, not a detail of style.
+
+A rule like this also has an edge where it must **not** apply: `POST /auth/login` does not check it, because
+existing passwords are not forced to rotate and checking there would lock out every account that predates the
+rule. That half deserves a test of its own, or the next reader will "fix" it.
 
 ### Add text to the interface
 
@@ -1177,8 +1198,17 @@ essentials:
   (§7) are only uniform if the screen is. Reset keeps unknown, used and expired to the one `invalid_token`
   message and ends on the sign-in screen, because that path issues no cookie. Change says in one line that this
   session survives and every other one has ended — people expect to be signed out and worry when they are not.
-  The two password fields must match, and that is the only rule the interface checks: the platform has no
-  password policy (OPEN_ITEMS 62).
+  The two password fields must match, and the password is at least **12 characters** — the platform's one
+  password rule, below.
+- **The password rule** (OPEN_ITEMS 62): minimum length 12, no composition rules — no required symbol, digit or
+  case. The server is the enforcement: all four endpoints that write a password answer `400 password_too_short`.
+  The screens are the courtesy — `web/src/password/policy.ts` holds the interface's copy of the number,
+  `common.password.rule` is shown under the field it governs and named in its `aria-describedby`, and a password
+  short of it is refused before the request is sent, so a reset link keeps its one use and a change costs no
+  attempt against the limiter (§5.2). It applies to **four** screens, invitation acceptance included — that is
+  where accounts are actually created. Acceptance has no confirmation field on purpose: the risk one guards
+  against is a mistyped first password with no way back, and `/app/password/forgot` is that way back now.
+  Nothing checks that the interface's number still matches the server's (OPEN_ITEMS 65).
 - **A 401 is an ended session, with two exceptions** (`api/client.ts`): the login path's, and
   `invalid_credentials` from `PUT /me/password`, which is a wrong *current* password and must not sign the user
   out of a working session. A stale security stamp on the same request is `session_expired` and still ends it.

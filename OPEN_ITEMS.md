@@ -132,6 +132,19 @@ Closed by the password-screens PR:
   reading, that `session_expired` never reached the user on a cold load — the client read every boot 401 as "not
   signed in" — and fixed it; and it established that a container with no .NET SDK can still run the whole stack
   through Docker, which DEVELOPER_GUIDE §16 now says in the place the next session will look.
+Closed by the password-rule PR:
+- **62.** The password rule — **minimum length 12, no composition rules** — built as decided. One place holds the
+  number, `PasswordPolicy` in `src/Core/Identity`, and all four entry points that write a password check it and
+  answer `400 password_too_short`: `POST /auth/password/reset`, `PUT /me/password`, `POST /invitations/accept`
+  (the new-account branch) and `POST /provision/tenants`. Each is checked **before** the work it guards, which is
+  not cosmetic: a refused reset leaves the link's one use unspent, and a refused change costs no `auth_attempts`
+  row and no step of the limiter's escalating delay. `POST /auth/login` does **not** check it — existing
+  passwords are not forced to rotate, and that half is proven by a test of its own. The four screens say the
+  rule with the field and check it before sending; invitation acceptance, where accounts are actually created,
+  has the rule but deliberately no confirmation field, because the mistyped-first-password risk a confirmation
+  guards against is answered by `/app/password/forgot`, which now exists.
+  The item's three notes held: the seed contract never passes the API, the e2e fixtures were all over twelve
+  (checked, not assumed — one Conformance fixture was not, see the PR), and the error code took all four files.
 
 ## For the project owner — a decision after T8
 
@@ -541,44 +554,6 @@ Closed by the password-screens PR:
 - **For the project owner:** whether the test should assert over every entity type or only over every entity the
   application inserts is yours to settle; and A1's hole is not A3's to close inside A3.
 
-### 62. The password rule, decided: minimum length 12, no composition rules
-
-- **Origin:** the password screens (OPEN_ITEMS 59), which found that nothing anywhere checked a password beyond
-  its being present. **Decided by the project owner on 2026-10-17. This is a specification, not an open
-  question** — what is left is building it, in a PR of its own.
-- **What was found:** the API accepted **1 to 1024 bytes** on every password endpoint
-  (`{ Length: > 0 and <= MaxPassword }`), and no screen checked more than `required` — the invitation-acceptance
-  screen included, which is where accounts are actually created today. A one-character password was accepted,
-  and had been since acceptance shipped.
-- **The rule:**
-  - **Minimum length 12.** The maximum stays 1024 (`MaxPassword`).
-  - **No composition rules**: no required symbol, no required digit, no required case. Length beats complexity,
-    and composition rules push people into predictable shapes.
-  - **Server-side first**, as a rejection with **its own error code**; the screens check the same rule
-    afterwards, so the interface explains it before the round trip. The server is the enforcement; the screen is
-    the courtesy.
-  - **It covers the invitation-acceptance screen**, not only the recovery ones.
-  - **Existing passwords are not forced to rotate.** Whether they ever are is a separate question the project
-    owner has not answered.
-- **Four entry points, not three** — every one of them writes a password and every one needs the check:
-  1. `POST /api/auth/password/reset`
-  2. `PUT /api/me/password`
-  3. `POST /api/invitations/accept` (the new-account branch)
-  4. **`POST /api/provision/tenants`** — **name it loudly.** It is registered in `Development` and `CI` only
-     (T4.17), which is exactly why it gets forgotten — and it is what creates the accounts every test runs on.
-- **Three things the building PR should know, found while reading this path:**
-  - **The seed contract will not notice the rule, and that is correct.** `tests/seed/seed-contract.sql` writes
-    hashes directly as `migrator`; it never passes the API, so no endpoint check applies to it. Its passwords
-    (`Seed:PasswordFormat` = `{0}-seed-password`) are over 12 characters anyway.
-  - **The e2e fixtures look safe — check them before pushing.** `ownOrganization` builds
-    `e2e-<label>-<base36>-password`, and `web/e2e/password.spec.ts` only appends `-reset` / `-changed` to an
-    already-long password. All over 12 today. Verify rather than assume.
-  - **A new error code needs its full four-file recipe**, or `check-api-error-codes` fails:
-    `src/Core/ApiErrorCodes.cs`, `checks/local/export-api-error-codes.py`, `web/src/i18n/apiErrors.ts`, and the
-    Arabic in `web/locales/ar.json`.
-- **Scope:** its own small PR, before launch. Not folded into a PR that happens to open these files for another
-  reason: a specification does not ride along in someone else's change.
-
 ### 63. `POST /auth/password/reset` takes unlimited attempts against a token — accepted, by decision
 
 - **Origin:** the password screens (OPEN_ITEMS 59), found while establishing which error codes the reset screen
@@ -599,7 +574,9 @@ Closed by the password-screens PR:
 
 - **Origin:** the password screens (OPEN_ITEMS 59), found while building the change-password screen.
   **Decided by the project owner on 2026-10-17: 403 is the right code; fixed in the first backend PR that
-  touches this area, not in a PR of its own.**
+  touches this area and is not carrying a specification of its own, not in a PR of its own.** (The wording
+  first written here excepted nothing, and so read as if it claimed the password-rule PR — item 62 — whose
+  whole point was to stand alone. Corrected by that PR.)
 - **The finding:** 401 is the interface's signal that the session is over — `api/client.ts` sends 401s to the
   session, which drops the state, aborts everything in flight and shows "Your session has ended".
   `PUT /me/password` returns `401 invalid_credentials` when the *current* password is wrong, which says nothing
@@ -615,6 +592,23 @@ Closed by the password-screens PR:
   all three mention this item by number, and all three come out together.
 - **Amendment 01 §5.1 names no status for this case**, so this is a gap in the document rather than a conflict
   with it; whether the amendment should name it is the project owner's call.
+
+### 65. The password rule's number is written in four places, and nothing checks they agree
+
+- **Origin:** the password-rule PR (OPEN_ITEMS 62), found while building it rather than afterwards.
+- **The finding:** the rule's minimum is `PasswordPolicy.MinimumLength` in `src/Core/Identity/PasswordPolicy.cs`
+  — the one that decides. Three more copies exist for the interface's sake: `MINIMUM_PASSWORD_LENGTH` in
+  `web/src/password/policy.ts` (what the screens compare against), and the number spelled out in the sentence of
+  `errors.password_too_short` and `common.password.rule`, in `web/src/i18n/apiErrors.ts`,
+  `web/src/components/messages.ts` and the Arabic of `web/locales/ar.json`. It is written into those sentences
+  rather than interpolated because `errorMessage()` is formatted with no values at every call site.
+- **What drift would cost:** not a hole. The server still refuses what the rule refuses; a screen with a smaller
+  number would send a password the server rejects, and the user would meet the server's message instead of the
+  screen's — a worse interface, not a weaker rule. A screen with a *larger* number would refuse a password the
+  server would have taken.
+- **The cheap version, if it is wanted:** a `check-password-policy` beside the other local checks, reading the
+  constant out of each file and comparing. It is a **new check**, so it is the project owner's decision, which
+  is why this PR did not build one.
 
 ## For the next version of the document — not for the code
 

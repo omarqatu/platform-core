@@ -171,6 +171,48 @@ describe('reset — the token from the fragment, one message for a token that ca
     expect(screen.queryByLabelText(/^new password$/i)).toBeNull();
   });
 
+  // The password rule (OPEN_ITEMS 62). The server enforces it; the screen says it first, and a refused password
+  // must not spend the link's one use — so nothing is sent at all.
+  it('asks nothing of the API for a password shorter than the rule, and spends no link', () => {
+    const calls = api(noContent);
+    link('secret-token');
+    show(<ResetPasswordScreen />);
+    type(/^new password$/i, 'eleven-char');
+    type(/repeat the new password/i, 'eleven-char');
+    fireEvent.click(screen.getByRole('button', { name: /set the password/i }));
+
+    expect(screen.getByRole('alert').textContent).toMatch(/at least 12 characters/i);
+    expect(calls).toEqual([]);
+  });
+
+  it('sends a password of exactly twelve, with no symbol, digit or capital letter', async () => {
+    const calls = api(noContent);
+    link('secret-token');
+    show(<ResetPasswordScreen />);
+    type(/^new password$/i, 'twelvecharsx');
+    type(/repeat the new password/i, 'twelvecharsx');
+    fireEvent.click(screen.getByRole('button', { name: /set the password/i }));
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0].body).toEqual({ token: 'secret-token', new_password: 'twelvecharsx' });
+  });
+
+  // Said with the field, not only after a refusal — and named in aria-describedby, so a screen reader hears it
+  // when it reaches the field (jest-dom is not installed here, so the description is read from the DOM).
+  it('says the rule next to the field, before anything is typed', () => {
+    api(noContent);
+    link('secret-token');
+    show(<ResetPasswordScreen />);
+
+    const field = screen.getByLabelText(/^new password$/i);
+    const described = (field.getAttribute('aria-describedby') ?? '')
+      .split(' ')
+      .filter(Boolean)
+      .map((id) => document.getElementById(id)?.textContent ?? '')
+      .join(' ');
+    expect(described).toMatch(/at least 12 characters/i);
+  });
+
   it('asks nothing of the API when the two fields differ', () => {
     const calls = api(noContent);
     link('secret-token');
@@ -207,6 +249,20 @@ describe('change — this session survives, every other one ends', () => {
         body: { current_password: 'the current one', new_password: 'a new password' },
       },
     ]);
+  });
+
+  // The rule, caught before the round trip (OPEN_ITEMS 62): nothing is sent, so the refused password costs no
+  // attempt against the limiter of §5.2.
+  it('asks nothing of the API for a new password shorter than the rule', () => {
+    const calls = api(noContent);
+    show(<ChangePasswordScreen />);
+    type(/current password/i, 'the current one');
+    type(/^new password$/i, 'eleven-char');
+    type(/repeat the new password/i, 'eleven-char');
+    fireEvent.click(screen.getByRole('button', { name: /change the password/i }));
+
+    expect(screen.getByRole('alert').textContent).toMatch(/at least 12 characters/i);
+    expect(calls).toEqual([]);
   });
 
   it('a wrong current password is not an ended session: the screen says so and the session stands', async () => {

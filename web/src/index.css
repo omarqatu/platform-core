@@ -266,3 +266,11 @@ body:has(.login) {
   font-weight: 400;
   color: var(--text-secondary);
 }
+
+/* The rule a field expects, under the field, on every screen that sets a password (OPEN_ITEMS 62). */
+.field-hint {
+  display: block;   /* a <span>, because it lives inside the field's <p> */
+  margin-block: var(--space-2) 0;
+  font-size: var(--type-label-size);
+  color: var(--text-secondary);
+}
