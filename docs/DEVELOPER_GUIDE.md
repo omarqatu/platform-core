@@ -1183,6 +1183,10 @@ essentials:
   `invalid_credentials` from `PUT /me/password`, which is a wrong *current* password and must not sign the user
   out of a working session. A stale security stamp on the same request is `session_expired` and still ends it.
   The status code is the backend's to correct (OPEN_ITEMS 64).
+  **On a cold load** the cookie is HTTP-only, so a session the stamp has ended looks exactly like no session —
+  except in the code: `GET /me` answers `401 session_expired` for the first and a bare 401 for the second, and
+  `SessionProvider` reads it, so a user who simply reloads after their password changed elsewhere is told why
+  instead of meeting a bare sign-in screen.
 
 ```bash
 cd web

@@ -84,7 +84,9 @@ after Conformance, against the Api container. Locally: an Api with `Web__Root` p
   switch then calls `POST /tenants/deselect` (the cookie keeps the user alone) before the selection shows, so a reload
   never re-enters the previous organization.
 - **An ended session** (any 401 but login's and a wrong current password's on `PUT /me/password`, which is a
-  refused credential and not an ended session, OPEN_ITEMS 64 — expiry, or Api restarted, OPEN_ITEMS 18): the login screen with a
+  refused credential and not an ended session, OPEN_ITEMS 64 — expiry, or Api restarted, OPEN_ITEMS 18; on a
+  cold load, where an HTTP-only cookie makes a dead session look like none, the `session_expired` code on
+  `GET /me` is what tells them apart): the login screen with a
   message and the way back (`?next=`, internal paths only). **A lost organization** (`/me` names none — a membership
   disabled, an organization suspended): checked on each navigation, when the window comes back (focus, visible), and
   when a data request is refused with `not_a_member`, `no_active_tenant` or `tenant_not_active`; everything is dropped

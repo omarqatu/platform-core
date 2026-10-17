@@ -64,7 +64,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const me = await getJson<MeResponse>('/me');
       return { status: 'authenticated', username: me.username, activeTenant: me.active_tenant };
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) return { status: 'anonymous', reason: 'none' };
+      // On a cold load the interface cannot otherwise tell a session that ended from no session at all: the
+      // cookie is HTTP-only, so a stale one looks like none. The code does tell them apart —
+      // session_expired is the security stamp's refusal (Amendment 01 §2.1), and the reason the page the user
+      // reloaded is asking them to sign in again. Any other 401 is simply "not signed in".
+      if (error instanceof ApiError && error.status === 401)
+        return { status: 'anonymous', reason: error.code === 'session_expired' ? 'expired' : 'none' };
       throw error;
     }
   }, []);
@@ -72,9 +77,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // The session as the API sees it, once at start.
   useEffect(() => {
     let live = true;
+    // The 401 handler below sees this very request first and can only guess from a 'loading' state, so it
+    // settles on 'anonymous'/'none'; what load() returns is the better-informed answer for the same 401 and
+    // replaces it. An authenticated state is never clobbered: a sign-in that completed meanwhile stands.
     load().then(
-      (next) => live && setState((current) => (current.status === 'loading' ? next : current)),
-      () => live && setState((current) => (current.status === 'loading' ? { status: 'anonymous', reason: 'none' } : current)),
+      (next) => live && setState((current) => (current.status === 'authenticated' ? current : next)),
+      () =>
+        live &&
+        setState((current) => (current.status === 'authenticated' ? current : { status: 'anonymous', reason: 'none' })),
     );
     return () => {
       live = false;

@@ -178,6 +178,25 @@ describe('changing one\u2019s own password', () => {
     expect(probe.location).toBe('/app/password/change');
   });
 
+  it('a reload after the password changed elsewhere still says why (the cold load reads the code)', async () => {
+    // The cookie is HTTP-only: on a cold load a stale session is indistinguishable from none, except by the
+    // code the API sends with the 401 (Amendment 01 §2.1).
+    const api = fakeApi();
+    api.overrides.set('GET /me', () => Response.json({ error: 'session_expired' }, { status: 401 }));
+    renderApp('/app/subscriptions');
+
+    await screen.findByText('Your session has ended. Sign in again.');
+    expect(probe.location).toBe('/login?next=%2Fapp%2Fsubscriptions');
+  });
+
+  it('a cold load with no session at all says nothing — it is not an ended session', async () => {
+    fakeApi({ signedIn: false });
+    renderApp('/app/subscriptions');
+
+    await screen.findByRole('heading', { name: 'Sign in' });
+    expect(screen.queryByText('Your session has ended. Sign in again.')).toBeNull();
+  });
+
   it('a session_expired on it lands on the login screen, not on a blank page', async () => {
     const api = fakeApi({ me: null });
     api.overrides.set('PUT /me/password', () => Response.json({ error: 'session_expired' }, { status: 401 }));
