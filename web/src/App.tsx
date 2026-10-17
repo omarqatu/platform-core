@@ -7,6 +7,7 @@ import { ChangePasswordScreen, CHANGE_PATH } from './screens/password/ChangePass
 import { ForgotPasswordScreen, FORGOT_PATH } from './screens/password/ForgotPasswordScreen';
 import { ResetPasswordScreen } from './screens/password/ResetPasswordScreen';
 import { NotFoundScreen } from './screens/status/StatusScreens';
+import { EDIT_PATH, NEW_PATH, SubscriptionFormScreen } from './screens/subscriptions/SubscriptionFormScreen';
 import { SubscriptionsScreen } from './screens/subscriptions/SubscriptionsScreen';
 import { TenantSelectScreen } from './screens/tenants/TenantSelectScreen';
 import { RequireAuth, RequireTenant } from './session/guards';
@@ -37,6 +38,10 @@ export function App() {
           <Route index element={<Navigate to="/app/subscriptions" replace />} />
           <Route path="/app" element={<Navigate to="/app/subscriptions" replace />} />
           <Route path="/app/subscriptions" element={<SubscriptionsScreen />} />
+          {/* Creating and editing a subscription (Amendment 02 §3.2). Keyed by the mode: one never keeps the other's
+              fields. */}
+          <Route path={NEW_PATH} element={<SubscriptionFormScreen key="create" mode="create" />} />
+          <Route path={EDIT_PATH} element={<SubscriptionFormScreen key="edit" mode="edit" />} />
         </Route>
       </Route>
       <Route path="*" element={<NotFoundScreen />} />

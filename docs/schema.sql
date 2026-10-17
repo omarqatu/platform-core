@@ -113,6 +113,24 @@ ALTER TABLE ONLY public.auth_attempts FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.auth_attempts OWNER TO migrator;
 
 --
+-- Name: categories; Type: TABLE; Schema: public; Owner: migrator
+--
+
+CREATE TABLE public.categories (
+    id public.app_id NOT NULL,
+    code text NOT NULL,
+    name_ar text NOT NULL,
+    name_en text NOT NULL,
+    is_active boolean NOT NULL,
+    created_at public.app_ts NOT NULL
+);
+
+ALTER TABLE ONLY public.categories FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE public.categories OWNER TO migrator;
+
+--
 -- Name: clients; Type: TABLE; Schema: public; Owner: migrator
 --
 
@@ -401,6 +419,25 @@ ALTER TABLE ONLY public.scope_assignments FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.scope_assignments OWNER TO migrator;
 
 --
+-- Name: subcategories; Type: TABLE; Schema: public; Owner: migrator
+--
+
+CREATE TABLE public.subcategories (
+    id public.app_id NOT NULL,
+    category_id uuid NOT NULL,
+    code text NOT NULL,
+    name_ar text NOT NULL,
+    name_en text NOT NULL,
+    is_active boolean NOT NULL,
+    created_at public.app_ts NOT NULL
+);
+
+ALTER TABLE ONLY public.subcategories FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE public.subcategories OWNER TO migrator;
+
+--
 -- Name: subscriptions; Type: TABLE; Schema: public; Owner: migrator
 --
 
@@ -410,7 +447,20 @@ CREATE TABLE public.subscriptions (
     scope_ref_id uuid NOT NULL,
     service_name text NOT NULL,
     ends_on date NOT NULL,
-    created_at public.app_ts NOT NULL
+    created_at public.app_ts NOT NULL,
+    reminder_type text NOT NULL,
+    category_id uuid NOT NULL,
+    subcategory_id uuid,
+    provider text,
+    cost numeric(14,3),
+    currency text,
+    billing_cycle text NOT NULL,
+    auto_renew boolean NOT NULL,
+    login_url text,
+    CONSTRAINT subscriptions_billing_cycle_check CHECK ((billing_cycle = ANY (ARRAY['monthly'::text, 'yearly'::text]))),
+    CONSTRAINT subscriptions_cost_check CHECK ((cost >= (0)::numeric)),
+    CONSTRAINT subscriptions_currency_check CHECK ((currency ~ '^[A-Z]{3}$'::text)),
+    CONSTRAINT subscriptions_reminder_type_check CHECK ((reminder_type = 'subscription'::text))
 );
 
 ALTER TABLE ONLY public.subscriptions FORCE ROW LEVEL SECURITY;
@@ -503,6 +553,22 @@ ALTER TABLE ONLY public.audit_log
 
 ALTER TABLE ONLY public.auth_attempts
     ADD CONSTRAINT auth_attempts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: categories categories_code_key; Type: CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.categories
+    ADD CONSTRAINT categories_code_key UNIQUE (code);
+
+
+--
+-- Name: categories categories_pkey; Type: CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.categories
+    ADD CONSTRAINT categories_pkey PRIMARY KEY (id);
 
 
 --
@@ -695,6 +761,22 @@ ALTER TABLE ONLY public.scope_assignments
 
 ALTER TABLE ONLY public.scope_assignments
     ADD CONSTRAINT scope_assignments_tenant_id_membership_id_scope_ref_id_key UNIQUE (tenant_id, membership_id, scope_ref_id);
+
+
+--
+-- Name: subcategories subcategories_category_id_code_key; Type: CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.subcategories
+    ADD CONSTRAINT subcategories_category_id_code_key UNIQUE (category_id, code);
+
+
+--
+-- Name: subcategories subcategories_pkey; Type: CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.subcategories
+    ADD CONSTRAINT subcategories_pkey PRIMARY KEY (id);
 
 
 --
@@ -933,11 +1015,35 @@ ALTER TABLE ONLY public.scope_assignments
 
 
 --
+-- Name: subcategories subcategories_category_fkey; Type: FK CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.subcategories
+    ADD CONSTRAINT subcategories_category_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id);
+
+
+--
+-- Name: subscriptions subscriptions_category_fkey; Type: FK CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.subscriptions
+    ADD CONSTRAINT subscriptions_category_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id);
+
+
+--
 -- Name: subscriptions subscriptions_client_fkey; Type: FK CONSTRAINT; Schema: public; Owner: migrator
 --
 
 ALTER TABLE ONLY public.subscriptions
     ADD CONSTRAINT subscriptions_client_fkey FOREIGN KEY (tenant_id, scope_ref_id) REFERENCES public.clients(tenant_id, id);
+
+
+--
+-- Name: subscriptions subscriptions_subcategory_fkey; Type: FK CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.subscriptions
+    ADD CONSTRAINT subscriptions_subcategory_fkey FOREIGN KEY (subcategory_id) REFERENCES public.subcategories(id);
 
 
 --
@@ -1025,6 +1131,19 @@ CREATE POLICY auth_attempts_authenticator_insert ON public.auth_attempts FOR INS
 --
 
 CREATE POLICY auth_attempts_authenticator_read ON public.auth_attempts FOR SELECT TO authenticator USING (true);
+
+
+--
+-- Name: categories; Type: ROW SECURITY; Schema: public; Owner: migrator
+--
+
+ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: categories categories_read; Type: POLICY; Schema: public; Owner: migrator
+--
+
+CREATE POLICY categories_read ON public.categories FOR SELECT TO app_user, job_runner, provisioner USING (true);
 
 
 --
@@ -1512,6 +1631,19 @@ CREATE POLICY scope_assignments_provisioner_select ON public.scope_assignments F
 
 
 --
+-- Name: subcategories; Type: ROW SECURITY; Schema: public; Owner: migrator
+--
+
+ALTER TABLE public.subcategories ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: subcategories subcategories_read; Type: POLICY; Schema: public; Owner: migrator
+--
+
+CREATE POLICY subcategories_read ON public.subcategories FOR SELECT TO app_user, job_runner, provisioner USING (true);
+
+
+--
 -- Name: subscriptions; Type: ROW SECURITY; Schema: public; Owner: migrator
 --
 
@@ -1733,6 +1865,14 @@ GRANT SELECT,INSERT ON TABLE public.auth_attempts TO authenticator;
 
 
 --
+-- Name: TABLE categories; Type: ACL; Schema: public; Owner: migrator
+--
+
+GRANT SELECT ON TABLE public.categories TO app_user;
+GRANT SELECT ON TABLE public.categories TO provisioner;
+
+
+--
 -- Name: TABLE clients; Type: ACL; Schema: public; Owner: migrator
 --
 
@@ -1908,6 +2048,14 @@ GRANT SELECT ON TABLE public.scope_assignments TO provisioner;
 
 GRANT UPDATE(active) ON TABLE public.scope_assignments TO app_user;
 GRANT UPDATE(active) ON TABLE public.scope_assignments TO provisioner;
+
+
+--
+-- Name: TABLE subcategories; Type: ACL; Schema: public; Owner: migrator
+--
+
+GRANT SELECT ON TABLE public.subcategories TO app_user;
+GRANT SELECT ON TABLE public.subcategories TO provisioner;
 
 
 --

@@ -1,0 +1,29 @@
+ reminder_type | category | billing_cycle | auto_renew | no_sub | no_cost | count 
+---------------+----------+---------------+------------+--------+---------+-------
+ subscription  | other    | yearly        | f          | t      | t       |    26
+(1 row)
+
+  column_name   | is_nullable | column_default 
+----------------+-------------+----------------
+ id             | NO          | 
+ tenant_id      | NO          | 
+ scope_ref_id   | NO          | 
+ service_name   | NO          | 
+ ends_on        | NO          | 
+ created_at     | NO          | 
+ reminder_type  | NO          | 
+ category_id    | NO          | 
+ subcategory_id | YES         | 
+ provider       | YES         | 
+ cost           | YES         | 
+ currency       | YES         | 
+ billing_cycle  | NO          | 
+ auto_renew     | NO          | 
+ login_url      | YES         | 
+(15 rows)
+
+BEGIN
+UPDATE 1
+ERROR:  billing_cycle backfill: 25 of 26 rows
+CONTEXT:  PL/pgSQL function inline_code_block line 4 at RAISE
+ROLLBACK

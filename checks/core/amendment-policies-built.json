@@ -7,5 +7,9 @@
     "persons.persons_authenticator_read",
     "provider_accounts.provider_accounts_read",
     "provider_accounts.provider_accounts_authenticator_read"
+  ],
+  "02": [
+    "categories.categories_read",
+    "subcategories.subcategories_read"
   ]
 }

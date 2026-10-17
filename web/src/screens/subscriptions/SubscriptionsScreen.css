@@ -29,3 +29,12 @@
 .subscriptions .date {
   font-variant-numeric: tabular-nums;
 }
+
+/* The title and the way to a new subscription, on one line. */
+.subscriptions .heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}

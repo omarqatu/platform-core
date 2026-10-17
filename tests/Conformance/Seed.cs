@@ -30,6 +30,10 @@ public static class Seed
     public static Task<Guid> ClientAsync(string tenant, string name) =>
         ScalarAsync("SELECT c.id FROM clients c JOIN tenants t ON t.id = c.tenant_id WHERE t.name = @a AND c.name = @b", tenant, name);
 
+    /// <summary>(Amendment 02 §3.1) A category of the platform's catalog, by code — seeded by the migration, not the contract.</summary>
+    public static Task<Guid> CategoryAsync(string code) =>
+        ScalarAsync("SELECT id FROM categories WHERE code = @a", code);
+
     /// <summary>One text value as migrator (BYPASSRLS): the ground truth, outside every tenant context.</summary>
     public static async Task<string> ScalarStringAsMigratorAsync(string sql, params (string Name, object Value)[] parameters)
     {

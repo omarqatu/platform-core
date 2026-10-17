@@ -632,6 +632,9 @@ Closed by the password-rule PR:
   knows what is on the other side of it. The tolerance stays far below the 400 ms the test configures and far
   below the half-floor difference its next assertion already allows, so what item 51 is actually protected by
   does not change.
+- **Also seen (the stage (a) PR, 2026-10-17):** `App.test.tsx > changing one's own password > a reload after the
+  password changed elsewhere still says why` — under the full suite only, **1/20 on clean `main` and 1/20 on the
+  branch**, never in 25 isolated runs of the file on either. The same pattern; reported, not changed.
 - **Scope:** A3's tests and the web suite, not the PR that found them. The password-rule PR reported all three
   with their provenance and changed none of them, which is why this item exists.
 
@@ -745,6 +748,57 @@ Closed by the password-rule PR:
 - **Why it is an item and not only a line in the amendment:** whoever builds stage (d) needs to know a proof is
   owed **before** the code, not after. It is the one assumption of the three that a wrong guess hides for six
   months and then breaks twice a year.
+
+### 76. `job_runner` and the catalog: Amendment 02 §5 grants a read that is deferred, and the question it leaves for stage (d)
+
+- **Origin:** the stage (a) PR (the classification), 2026-10-17. **Decided by the project owner** in that PR,
+  against the PR's own recommendation.
+- **What happened:** Amendment 02 §5 grants `job_runner` `SELECT` on `categories` and `subcategories` (as
+  Amendment 01 §3 does on `plans`, not built yet). Built as written, it fails `T7_4_JobRunner_ReadsActiveTenantsOnly_
+  AndNoOtherTable` — PROOF_SPEC v1.3 T7.4, "`job_runner` reads from `tenants` only the active ones, and reads no other
+  table", which guards v1.16 §8. Neither amendment's §0 names T7.4 as amended.
+- **As decided:** `SELECT` for `app_user` and `provisioner` only; `job_runner` is dropped from `grants.json`, and
+  T7.4 is untouched. No background job reads the catalog in stage (a), (b) or (c), so the grant would widen a role's
+  surface and weaken its guard in exchange for nothing.
+- **Amendment 02 §5 is not wrong.** `grants.json` lags it by one role, on purpose, until something needs that role.
+  This is a deferral of a grant, not a correction of the amendment.
+- **The gap between the policy and the grant is deliberate — do not "fix" it.** `categories_read` and
+  `subcategories_read` keep naming `job_runner` (`FOR SELECT TO app_user, provisioner, job_runner`), verbatim from
+  §5.1, because the manifest is extracted from the amendment and Check 2 compares against it. The policy permits and
+  the grant withholds, and the grant is the real guard: without it the role is refused (`42501`) before any policy is
+  consulted. `T5_ClassificationTests.TheCatalog_IsNotReadByTheOtherRoles` asserts exactly that. A reader who sees
+  `job_runner` in the policy and not in `grants.json` is looking at this item, not at a transcription error.
+- **The question for stage (d), when the send job first needs the catalog** — two roads, and whoever takes it should
+  see both:
+  1. **Amend T7.4** (a PROOF_SPEC change, the project owner's) to allow the global catalogs, and add the grant.
+  2. **Read the catalog in the `app_user` context the job already runs in per tenant** (v1.16 §8: `job_runner`
+     lists the active tenants, then each tenant is processed by `app_user` in a system context). `app_user` already
+     holds the read. **The project owner leans to this one**, in which case T7.4 is never touched and the
+     `job_runner` grant may never be needed at all.
+- **The same question will meet `plans_read`** (Amendment 01 §3, §4.1) when `plans` is built: it names `job_runner`
+  too, and the same two roads apply.
+
+### 77. The subscription list offers "New" and "Edit" to members who may not write
+
+- **Origin:** the stage (a) PR, 2026-10-17.
+- **What is true:** the interface does not know the caller's permissions — no endpoint tells it, and the session
+  carries none by design (its cookie holds the user and the tenant only — DEVELOPER_GUIDE §7). So the list shows
+  "New subscription" and each row's "Edit" to every member who can list, a viewer included; the viewer's attempt
+  is refused by the server (`403 not_permitted`) and the form says so. Nothing is written, and the server is the
+  guard — this is a courtesy gap, not a security one.
+- **What would close it:** a read of the caller's own permissions in the active tenant (e.g. on `GET /me/scope`,
+  which already resolves `can_manage_scope`), so the screens can hide what the server would refuse. It is a contract
+  addition, so it is not made inside a stage (a) PR.
+
+### 78. The subscription form's end date is a text field, not a date picker
+
+- **Origin:** the stage (a) PR, 2026-10-17.
+- **Why text:** the interface shows Western digits in Arabic (`ar-u-nu-latn`, web/README). A native
+  `<input type="date">` draws its value in the browser's own locale, which the page does not control, so in an
+  Arabic browser it may show Arabic-Indic digits. The field is therefore `yyyy-MM-dd` text written left-to-right,
+  with its example under it, a check that the day exists, and Arabic-Indic digits converted as they are typed.
+- **What would close it:** a picker the interface draws itself, in `ar-u-nu-latn`, with Gregorian month names — a
+  component decision for the design system, not for this form alone.
 
 ## For the next version of the document — not for the code
 

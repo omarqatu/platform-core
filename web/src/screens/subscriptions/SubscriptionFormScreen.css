@@ -1,0 +1,91 @@
+/* Creating and editing a subscription, inside the shell. Logical properties only: the same rules lay the form out
+   right-to-left and left-to-right. */
+.subscription-form {
+  max-inline-size: 36rem;
+  margin-inline: auto;
+  padding: 1.5rem;
+}
+
+.subscription-form h1 {
+  margin-block: 0 var(--space-4);
+  font-size: var(--type-h1-size);
+  line-height: var(--type-h1-line-height);
+  font-weight: var(--type-h1-weight);
+}
+
+.subscription-form .field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block: 0 var(--space-4);
+}
+
+.subscription-form label {
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+}
+
+.subscription-form .optional {
+  color: var(--text-muted);
+  font-weight: normal;
+}
+
+.subscription-form input:not([type='checkbox']),
+.subscription-form select {
+  inline-size: 100%;
+}
+
+.subscription-form .readonly {
+  min-block-size: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.subscription-form .field-hint {
+  color: var(--text-secondary);
+  font-size: var(--type-label-size);
+}
+
+.subscription-form .field-error {
+  color: var(--danger);
+  font-size: var(--type-label-size);
+}
+
+.subscription-form [aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+/* The cost and its currency side by side; the currency is three letters. */
+.subscription-form .pair {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-3);
+}
+
+/* The checkbox before its label, its hint under both. */
+.subscription-form .field.check {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: var(--space-2);
+}
+
+.subscription-form .field.check input {
+  inline-size: 1.25rem;
+  min-block-size: 1.25rem;
+  margin: 0;
+}
+
+.subscription-form .field.check .field-hint {
+  grid-column: 2;
+}
+
+.subscription-form .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.subscription-form .alert {
+  border-radius: var(--radius-sm);
+}

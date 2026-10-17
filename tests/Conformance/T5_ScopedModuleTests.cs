@@ -33,7 +33,7 @@ public class T5_ScopedModuleTests
         Assert.All(Items(subscriptions), s => Assert.Contains(s.GetProperty("client_id").GetGuid(), new[] { a, b }));
         Assert.Equal(new[] { a, b }.Order(), Items(clients).Select(x => x.GetProperty("id").GetGuid()).Order());
 
-        var create = await khaled.Client.PostAsJsonAsync("/subscriptions", new { client_id = c, service_name = "leak", ends_on = "2027-06-01" });
+        var create = await khaled.Client.PostAsJsonAsync("/subscriptions", await BodyAsync(c, "leak"));
         Assert.Equal(HttpStatusCode.Forbidden, create.StatusCode);
 
         await using var session = await SessionAsync("khaled", Seed.AlAmin);
@@ -312,7 +312,7 @@ public class T5_ScopedModuleTests
         var q = await world.ClientAsync("Q");
         foreach (var client in new[] { p, q })
             Assert.Equal(HttpStatusCode.Created, (await world.Owner.Browser.Client.PostAsJsonAsync("/subscriptions",
-                new { client_id = client, service_name = "t5-20", ends_on = "2027-06-01" })).StatusCode);
+                await BodyAsync(client, "t5-20"))).StatusCode);
         using var assigned = await world.JoinAsync("t5-20-assigned", "operator", "assigned");
         using var all = await world.JoinAsync("t5-20-all", "viewer", "all");
         Assert.Equal(HttpStatusCode.NoContent, (await world.Owner.Browser.PutAsync(
@@ -341,7 +341,7 @@ public class T5_ScopedModuleTests
         var p = await world.ClientAsync("P");
 
         var response = await world.Owner.Browser.Client.PostAsJsonAsync("/subscriptions",
-            new { client_id = p, service_name = "created", ends_on = "2027-06-01" });
+            await BodyAsync(p, "created"));
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var id = (await world.Owner.Browser.JsonAsync(response)).GetProperty("id").GetGuid();
@@ -352,7 +352,7 @@ public class T5_ScopedModuleTests
 
         // Another tenant's client: the composite FK, not a leak of whether it exists.
         var x = await Seed.ClientAsync(Seed.Maan, "X");
-        var foreign = await world.Owner.Browser.Client.PostAsJsonAsync("/subscriptions", new { client_id = x, service_name = "x", ends_on = "2027-06-01" });
+        var foreign = await world.Owner.Browser.Client.PostAsJsonAsync("/subscriptions", await BodyAsync(x, "x"));
         Assert.Equal(HttpStatusCode.BadRequest, foreign.StatusCode);
         Assert.Equal("invalid_reference", (await world.Owner.Browser.JsonAsync(foreign)).GetProperty("error").GetString());
     }
@@ -373,8 +373,17 @@ public class T5_ScopedModuleTests
     // ---- helpers
 
     private const string InsertSubscription =
-        "INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at) " +
-        "VALUES (uuidv7(), current_setting('app.tenant_id')::uuid, @c, 'conformance', DATE '2027-06-01', now())";
+        "INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at, reminder_type, category_id, billing_cycle, auto_renew) " +
+        "VALUES (uuidv7(), current_setting('app.tenant_id')::uuid, @c, 'conformance', DATE '2027-06-01', now(), 'subscription', " +
+        "(SELECT id FROM categories WHERE code = 'other'), 'yearly', false)";
+
+    // A complete creation body: the fields Amendment 02 §3.2 made required (category, cycle, renewal) besides the
+    // three T5 wrote, so a refusal is the one the test is about and not invalid_value.
+    private static async Task<object> BodyAsync(Guid client, string service) => new
+    {
+        client_id = client, service_name = service, ends_on = "2027-06-01",
+        category_id = await Seed.CategoryAsync("other"), billing_cycle = "yearly", auto_renew = false,
+    };
 
     private const string InsertAssignment =
         "INSERT INTO scope_assignments (id, tenant_id, membership_id, scope_ref_id, assignment_role, active) " +
