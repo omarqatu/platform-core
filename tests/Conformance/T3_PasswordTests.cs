@@ -194,6 +194,91 @@ public class T3_PasswordTests
         Assert.Equal("42501", await authenticator.SqlStateOfAsync("DELETE FROM password_reset_tokens"));
     }
 
+    // ===== The WHERE-less password update (v1.16 §3.8, §1.11; the policy password_self_update).
+    // app_user may UPDATE password_hash and updated_at and holds no SELECT on the table, so PostgreSQL refuses
+    // any statement that reads user_id — a WHERE included. The write therefore carries no WHERE and the policy
+    // chooses the row. These two tests are the whole argument for that: the first proves the isolation is the
+    // policy's doing and not an accident of which rows exist, the second that an absent app.user_id writes
+    // nothing at all. Without them the claim rests on a comment.
+
+    /// <summary>
+    /// The statement the application sends, as app_user, with a context of this test's choosing. It commits
+    /// only when the number of rows matches what the test expects: a policy that admitted more than one row
+    /// would otherwise rewrite every password in the database on its way to failing the assertion.
+    /// </summary>
+    private static async Task<int> WhereLessUpdateAsAppUserAsync(Guid? userId, string hash, int commitWhen)
+    {
+        await using var connection = await Target.OpenAsync(Target.AppUser);
+        await using var transaction = await connection.BeginTransactionAsync();
+        if (userId is { } user)
+        {
+            await using var context = new NpgsqlCommand("SELECT set_config('app.user_id', @u, true)", connection, transaction);
+            context.Parameters.AddWithValue("u", user.ToString());
+            await context.ExecuteNonQueryAsync();
+        }
+        await using var update = new NpgsqlCommand(
+            "UPDATE user_password_credentials SET password_hash = @h, updated_at = now()", connection, transaction);
+        update.Parameters.AddWithValue("h", hash);
+        var affected = await update.ExecuteNonQueryAsync();
+        if (affected == commitWhen)
+            await transaction.CommitAsync();
+        else
+            await transaction.RollbackAsync();
+        return affected;
+    }
+
+    private static Task<string> HashAsMigratorAsync(Guid userId) =>
+        Seed.ScalarStringAsMigratorAsync(
+            "SELECT password_hash FROM user_password_credentials WHERE user_id = @u", ("u", userId));
+
+    // With one user's context: their row, and only theirs — while the table holds other users' rows.
+    [Fact]
+    public async Task TheWhereLessUpdate_WritesTheCallersRowAlone()
+    {
+        using var a = await World.BootstrapAsync("pw-isolation-a");
+        using var b = await World.BootstrapAsync("pw-isolation-b");
+        var others = await Seed.CountAsMigratorAsync("SELECT count(*) FROM user_password_credentials");
+        // "One row affected" only means something while the table holds more than one.
+        Assert.True(others > 1, $"the table holds {others} credential row(s): the test proves nothing");
+        var bBefore = await HashAsMigratorAsync(b.Owner.UserId);
+        var newHash = PasswordHashOf("where-less-update-" + World.Tag());
+
+        var affected = await WhereLessUpdateAsAppUserAsync(a.Owner.UserId, newHash, commitWhen: 1);
+
+        Assert.Equal(1, affected);
+        Assert.Equal(newHash, await HashAsMigratorAsync(a.Owner.UserId));
+        Assert.Equal(bBefore, await HashAsMigratorAsync(b.Owner.UserId));
+        // And from the outside: B's password still signs B in, A's old one no longer signs A in.
+        using var bBrowser = new Browser();
+        Assert.Equal(HttpStatusCode.NoContent, (await bBrowser.LoginAsync(b.Owner.Username, b.Owner.Password)).StatusCode);
+        using var aBrowser = new Browser();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await aBrowser.LoginAsync(a.Owner.Username, a.Owner.Password)).StatusCode);
+    }
+
+    // With no app.user_id at all: the policy matches nothing, so the statement writes nothing — it does not
+    // fall through to every row.
+    [Fact]
+    public async Task TheWhereLessUpdate_WithNoUserInTheContext_WritesNothing()
+    {
+        using var world = await World.BootstrapAsync("pw-no-context");
+        var before = await HashAsMigratorAsync(world.Owner.UserId);
+
+        var affected = await WhereLessUpdateAsAppUserAsync(null, PasswordHashOf("no-context"), commitWhen: 0);
+
+        Assert.Equal(0, affected);
+        Assert.Equal(before, await HashAsMigratorAsync(world.Owner.UserId));
+        using var browser = new Browser();
+        Assert.Equal(HttpStatusCode.NoContent, (await browser.LoginAsync(world.Owner.Username, world.Owner.Password)).StatusCode);
+    }
+
+    /// <summary>
+    /// A stored value in the documented format (PLATFORM_CORE 4.2) that no input matches: it is a digest of the
+    /// marker, not a derivation of any password. The tests above only need it to be distinguishable.
+    /// </summary>
+    private static string PasswordHashOf(string marker) =>
+        $"pbkdf2-sha512$210000${Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(marker))[..16])}"
+        + $"${Convert.ToBase64String(SHA512.HashData(Encoding.UTF8.GetBytes(marker)))}";
+
     private static async Task<Browser> SignedInAsync(string username, string password)
     {
         var browser = new Browser();

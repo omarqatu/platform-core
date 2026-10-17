@@ -407,6 +407,25 @@ Closed by the manifest PR:
   item 16, restating T3.5's timing arm (both arms repeating one username) is a PROOF_SPEC decision to take at the
   same time.
 
+### 55. A self-service identity write under a grant that withholds SELECT must carry no WHERE
+
+- **Origin:** A1 (the code PR for item 47), found by CI on 2026-10-17 and recorded by the project owner.
+- **The finding:** `app_user` holds `UPDATE (password_hash, updated_at)` on `user_password_credentials` and **no
+  `SELECT`** (v1.16 §3.8; §1.11 forbids even a column `SELECT` on it). PostgreSQL requires `SELECT` on every column
+  a statement *reads*, and a `WHERE user_id = …` reads one — so the obvious implementation is refused with `42501`,
+  and EF Core always writes that `WHERE` for a tracked update. **Neither v1.16 nor Amendment 01 says this anywhere.**
+- **The rule it implies** (now in `DEVELOPER_GUIDE` §6): such a write is raw SQL with **no `WHERE` at all**, and the
+  policy (`password_self_update`) chooses the row — the same rule as "never filter in code what RLS filters",
+  reaching the user axis. The count is then the guard: **exactly one row**, never "not zero", so that widening the
+  policy later cannot turn the statement into a silent mass update. Proven in `tests/Conformance/T3_PasswordTests`
+  (the caller's row alone while other rows exist; nothing at all with no `app.user_id`) and in `[W]`
+  (zero rows → `CriticalWriteException`).
+- **Where it bites next:** A3 (`forgot`, which writes nothing on this table but shares the role's shape) and
+  anything else that ever writes `user_password_credentials` — the import's "no password" row (§2.12) is created by
+  `migrator`, so it is not affected.
+- **For the project owner:** whether v1.16 §3.8 or an amendment should state the rule beside the grant itself,
+  rather than leaving it in the guide, is a documentation decision — the code and the tests do not wait on it.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12

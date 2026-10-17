@@ -83,6 +83,27 @@ public class T3_PasswordPathTests(WhiteBoxFixture fixture) : IAsyncLifetime
         await Assert.ThrowsAsync<PasswordResetRefusedException>(() => PasswordPaths.ConsumeResetTokenAsync(db, "not-a-token"));
     }
 
+    // The application half of the WHERE-less write's guard (the Conformance pair proves the SQL half): when the
+    // policy admits no row — here because the user has no credential row at all — the count is zero and that is
+    // an error, never a silent success. Nothing else of that user's is written either.
+    [Fact]
+    public async Task ApplyNewPassword_WhenThePolicyAdmitsNoRow_IsLoud_AndWritesNothing()
+    {
+        var stampBefore = await StampOfAsync(fixture.W2User);
+        await using var dataSource = fixture.CreateAppUserDataSource();
+        await using var db = WhiteBoxFixture.Context(dataSource);
+
+        // W2User has no user_password_credentials row: the statement matches nothing.
+        var error = await Assert.ThrowsAsync<CriticalWriteException>(
+            () => PasswordPaths.ApplyNewPasswordAsync(db, fixture.W2User, "no-row-for-this-user"));
+
+        Assert.Equal(1, error.Expected);
+        Assert.Equal(0, error.Affected);
+        Assert.Equal(stampBefore, await StampOfAsync(fixture.W2User));
+        Assert.Equal(0, await fixture.CountAsMigratorAsync(
+            "SELECT count(*) FROM user_password_credentials WHERE user_id = @u", ("u", fixture.W2User)));
+    }
+
     private static AuthenticatorDbContext AuthenticatorContext(NpgsqlDataSource source)
     {
         var options = new DbContextOptionsBuilder<AuthenticatorDbContext>();
@@ -102,12 +123,14 @@ public class T3_PasswordPathTests(WhiteBoxFixture fixture) : IAsyncLifetime
         return token;
     }
 
-    private async Task<Guid> StampAsync()
+    private Task<Guid> StampAsync() => StampOfAsync(fixture.W1User);
+
+    private async Task<Guid> StampOfAsync(Guid userId)
     {
         await using var connection = new NpgsqlConnection(fixture.MigratorConnectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("SELECT security_stamp FROM users WHERE id = @u", connection);
-        command.Parameters.AddWithValue("u", fixture.W1User);
+        command.Parameters.AddWithValue("u", userId);
         return (Guid)(await command.ExecuteScalarAsync())!;
     }
 

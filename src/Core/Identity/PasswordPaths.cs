@@ -108,7 +108,14 @@ public static class PasswordPaths
             // architecture applied to the user axis — the code never filters what RLS filters. Raw SQL is the
             // only way to send it, as checks/local/bulk-writes-allowlist.txt already records ("the password
             // command … is a raw SQL command, not an EF bulk command"); the table is never audited (7), so the
-            // automatic audit loses nothing by not seeing it. Exactly one row, or it is an error (3.5/5).
+            // automatic audit loses nothing by not seeing it.
+            //
+            // A statement with no WHERE writes every row the policy admits, so the count is the guard: EXACTLY
+            // one row, never merely "not zero" (3.5/5). Today password_self_update admits one; if it were ever
+            // widened, this throws on the second row and the transaction rolls back, so no widening of that
+            // policy can turn this into a silent mass password change. The two Conformance tests
+            // (T3_PasswordTests: the caller's row alone, and nothing at all with no app.user_id) prove the
+            // isolation is the policy's doing and not an accident of the data.
             await CriticalWrite.ExpectRowsAsync(
                 c.Database.ExecuteSqlInterpolatedAsync(
                     $"UPDATE user_password_credentials SET password_hash = {hash}, updated_at = {now}", ct),

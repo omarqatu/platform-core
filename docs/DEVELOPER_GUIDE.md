@@ -518,6 +518,44 @@ await CriticalWrite.SaveAsync(c, "things update", ct);
 `CriticalWriteException` maps to `403 not_permitted` — from the outside, "not visible to you" and "not allowed" look
 the same, on purpose.
 
+### A write under a grant that withholds `SELECT` — no `WHERE` (OPEN_ITEMS 55)
+
+PostgreSQL requires `SELECT` on every column a statement **reads**, including the ones in its `WHERE`. So where a
+role may write a table it cannot read — today exactly one case, `app_user` on `user_password_credentials`
+(`UPDATE (password_hash, updated_at)` and no `SELECT`: v1.16 §3.8, §1.11) — a normal EF update fails with `42501`,
+because EF always writes `WHERE <key> = …`:
+
+```csharp
+// 42501: the WHERE reads user_id, and this role may not read it.
+var row = new UserPasswordCredential { UserId = userId };
+db.Attach(row);
+row.PasswordHash = hash;
+await db.SaveChangesAsync(ct);
+```
+
+The write is raw SQL with **no `WHERE` at all**, and the policy picks the row — the same rule as everywhere else in
+this codebase, that the code never filters what RLS filters:
+
+```csharp
+await CriticalWrite.ExpectRowsAsync(
+    c.Database.ExecuteSqlInterpolatedAsync(
+        $"UPDATE user_password_credentials SET password_hash = {hash}, updated_at = {now}", ct),
+    1, "user_password_credentials password change");
+```
+
+Two things make that safe, and both are required:
+
+- **`ExpectRowsAsync(…, 1, …)` — exactly one row, never "not zero".** A statement with no `WHERE` writes every row
+  its policy admits; if `password_self_update` were ever widened, the count is what turns a silent mass update into
+  a thrown `CriticalWriteException` and a rolled-back transaction.
+- **A test that the isolation is the policy's.** `tests/Conformance/T3_PasswordTests` proves it from outside: with
+  one user's context the statement writes that user's row and leaves another's alone while both exist, and with no
+  `app.user_id` it writes nothing at all.
+
+This is not a licence for bulk writes: `ExecuteUpdate` / `ExecuteDelete` stay forbidden (they bypass the audit), and
+this one table is never audited anyway (§7). Before using the pattern anywhere else, check the grant really does
+withhold `SELECT` — if the role can read the table, write it through EF like everything else.
+
 ### `Permissions.RequireAsync` — the explicit permission
 
 ```csharp
@@ -571,7 +609,8 @@ and provisioner contexts). It refuses `No Reset On Close=true`: pooled connectio
 ### The rule
 
 > Use `UnitOfWork` (or `ProvisionerUnitOfWork`, or `SystemContext`) for every access. Set keys and timestamps
-> yourself. Save parents before children. Use `CriticalWrite` for writes that must happen, `Permissions.RequireAsync`
+> yourself. Save parents before children. Write a table the role cannot read with raw SQL and no `WHERE`, counting
+> exactly one row. Use `CriticalWrite` for writes that must happen, `Permissions.RequireAsync`
 > before work, `ScopedList` for lists. Never bulk-write.
 
 ---
