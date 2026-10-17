@@ -65,7 +65,15 @@ describe('validate', () => {
 });
 
 describe('the request body', () => {
-  it('trims, sends an empty optional field as null, and the cost as a number', () => {
+  it('never turns money into a binary floating-point number', () => {
+    // 0.1 + 0.2 is the classic; the largest numeric(14,3) value has more significant digits than a double keeps exactly
+    // in every arithmetic, so the text is carried as text.
+    const body = toBody({ ...complete, cost: '99999999999.999', currency: 'JOD' }, 'create');
+    expect(body.cost).toBe('99999999999.999');
+    expect(JSON.stringify(body)).toContain('"cost":"99999999999.999"');
+  });
+
+  it('trims, sends an empty optional field as null, and the cost as the decimal string typed', () => {
     expect(toBody({ ...complete, provider: '  ', cost: '12.5', currency: 'JOD', autoRenew: true }, 'create')).toEqual({
       client_id: 'c1',
       service_name: 'Hosting',
@@ -73,7 +81,7 @@ describe('the request body', () => {
       category_id: 'cat',
       subcategory_id: null,
       provider: null,
-      cost: 12.5,
+      cost: '12.5',
       currency: 'JOD',
       billing_cycle: 'yearly',
       auto_renew: true,
@@ -95,13 +103,13 @@ describe('the request body', () => {
       category_id: 'cat',
       subcategory_id: null,
       provider: 'Hetzner',
-      cost: 0,
+      cost: '0.000',
       currency: 'EUR',
       billing_cycle: 'monthly',
       auto_renew: true,
       login_url: null,
     });
-    expect(values.cost).toBe('0');
-    expect(toBody(values, 'edit')).toMatchObject({ cost: 0, currency: 'EUR', provider: 'Hetzner', login_url: null });
+    expect(values.cost).toBe('0.000');
+    expect(toBody(values, 'edit')).toMatchObject({ cost: '0.000', currency: 'EUR', provider: 'Hetzner', login_url: null });
   });
 });

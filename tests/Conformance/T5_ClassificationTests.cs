@@ -88,7 +88,7 @@ public class T5_ClassificationTests
         var created = await world.Owner.Browser.Client.PostAsJsonAsync("/subscriptions", new
         {
             client_id = p, service_name = "VPS", ends_on = "2027-03-31", category_id = hosting, provider = "Hetzner",
-            cost = 12.5m, currency = "JOD", billing_cycle = "monthly", auto_renew = true, login_url = "https://console.example.com/",
+            cost = "12.5", currency = "JOD", billing_cycle = "monthly", auto_renew = true, login_url = "https://console.example.com/",
         });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var id = (await world.Owner.Browser.JsonAsync(created)).GetProperty("id").GetGuid();
@@ -102,7 +102,8 @@ public class T5_ClassificationTests
         Assert.Equal(hosting, s.GetProperty("category_id").GetGuid());
         Assert.Equal(JsonValueKind.Null, s.GetProperty("subcategory_id").ValueKind);
         Assert.Equal("Hetzner", s.GetProperty("provider").GetString());
-        Assert.Equal(12.5m, s.GetProperty("cost").GetDecimal());
+        // Money is a decimal string on the wire, at the column's scale — never a JSON number (binary floating point).
+        Assert.Equal("12.500", s.GetProperty("cost").GetString());
         Assert.Equal("JOD", s.GetProperty("currency").GetString());
         Assert.Equal("monthly", s.GetProperty("billing_cycle").GetString());
         Assert.True(s.GetProperty("auto_renew").GetBoolean());
@@ -121,7 +122,7 @@ public class T5_ClassificationTests
         var p = await world.ClientAsync("P");
 
         var bare = await CreateAsync(world, Body(p, await Seed.CategoryAsync("domains")));
-        var free = await CreateAsync(world, Body(p, await Seed.CategoryAsync("security"), b => { b["cost"] = 0; b["currency"] = "USD"; }));
+        var free = await CreateAsync(world, Body(p, await Seed.CategoryAsync("security"), b => { b["cost"] = "0"; b["currency"] = "USD"; }));
 
         var (_, s) = await world.Owner.Browser.GetAsync($"/subscriptions/{bare}");
         foreach (var field in new[] { "subcategory_id", "provider", "cost", "currency", "login_url" })
@@ -146,9 +147,13 @@ public class T5_ClassificationTests
             b => b.Remove("auto_renew"),
             b => b["billing_cycle"] = "Monthly",      // the closed catalog, letter case included (§1)
             b => b["billing_cycle"] = "weekly",
-            b => { b["cost"] = -1; b["currency"] = "USD"; },
-            b => { b["cost"] = 1.2345m; b["currency"] = "USD"; },
-            b => b["cost"] = 10,                       // a cost with no currency: the reminder could not state it (E5)
+            b => { b["cost"] = "-1"; b["currency"] = "USD"; },
+            b => { b["cost"] = "1.2345"; b["currency"] = "USD"; },
+            b => { b["cost"] = "1e3"; b["currency"] = "USD"; },
+            b => { b["cost"] = "1,5"; b["currency"] = "USD"; },
+            b => { b["cost"] = "١٢"; b["currency"] = "USD"; },   // only ASCII digits reach the parser
+            b => { b["cost"] = "123456789012"; b["currency"] = "USD"; },   // twelve digits: past numeric(14,3)
+            b => b["cost"] = "10",                     // a cost with no currency: the reminder could not state it (E5)
             b => b["currency"] = "usd",
             b => b["currency"] = "DOLLAR",
             b => b["provider"] = "",
@@ -160,6 +165,19 @@ public class T5_ClassificationTests
 
         await RefusedAsync(world, Body(p, Guid.CreateVersion7()), "invalid_reference");
         await RefusedAsync(world, Body(p, other, b => b["subcategory_id"] = Guid.CreateVersion7()), "invalid_reference");
+        Assert.Equal(0, await Seed.CountAsMigratorAsync("SELECT count(*) FROM subscriptions WHERE tenant_id = @t", ("t", world.TenantId)));
+    }
+
+    // The cost as a JSON number is refused: the contract is a decimal string, so no client is led through binary
+    // floating point on the way to numeric(14,3).
+    [Fact]
+    public async Task ACostSentAsANumber_IsRefused()
+    {
+        using var world = await World.BootstrapAsync("a02-cost-number");
+        var p = await world.ClientAsync("P");
+        var response = await world.Owner.Browser.Client.PostAsJsonAsync("/subscriptions",
+            Body(p, await Seed.CategoryAsync("other"), b => { b["cost"] = 12.5m; b["currency"] = "USD"; }));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(0, await Seed.CountAsMigratorAsync("SELECT count(*) FROM subscriptions WHERE tenant_id = @t", ("t", world.TenantId)));
     }
 
@@ -233,7 +251,7 @@ public class T5_ClassificationTests
 
         var (status, _) = await world.Owner.Browser.PutAsync($"/subscriptions/{id}", new
         {
-            service_name = "renamed", ends_on = "2028-01-15", category_id = software, provider = "Vendor", cost = 99.999m,
+            service_name = "renamed", ends_on = "2028-01-15", category_id = software, provider = "Vendor", cost = "99999999999.999",
             currency = "EUR", billing_cycle = "monthly", auto_renew = true, login_url = "http://vendor.example/login",
         });
         Assert.Equal(HttpStatusCode.NoContent, status);
@@ -243,12 +261,19 @@ public class T5_ClassificationTests
         Assert.Equal("renamed", s.GetProperty("service_name").GetString());
         Assert.Equal("2028-01-15", s.GetProperty("ends_on").GetString());
         Assert.Equal(software, s.GetProperty("category_id").GetGuid());
-        Assert.Equal(99.999m, s.GetProperty("cost").GetDecimal());
+        Assert.Equal("99999999999.999", s.GetProperty("cost").GetString());   // the column's largest value, exact
         Assert.Equal("monthly", s.GetProperty("billing_cycle").GetString());
         Assert.True(s.GetProperty("auto_renew").GetBoolean());
         Assert.Equal(1, await Seed.CountAsMigratorAsync(
             "SELECT count(*) FROM audit_log WHERE tenant_id = @t AND entity_type = 'subscriptions' AND entity_id = @i AND action = 'update' AND actor_id = @u",
             ("t", world.TenantId), ("i", id), ("u", world.Owner.UserId)));
+
+        // Editing never moves a subscription to another client: the edit carries no client, and one sent anyway is
+        // not read — even toward a client the caller sees.
+        var q = await world.ClientAsync("Q");
+        var (moved, _) = await world.Owner.Browser.PutAsync($"/subscriptions/{id}", Edit(software, b => b["client_id"] = q));
+        Assert.Equal(HttpStatusCode.NoContent, moved);
+        Assert.Equal(1, await Seed.CountAsMigratorAsync("SELECT count(*) FROM subscriptions WHERE id = @i AND scope_ref_id = @p", ("i", id), ("p", p)));
 
         // The same rules as creating.
         var (refused, body) = await world.Owner.Browser.PutAsync($"/subscriptions/{id}", Edit(software, b => b["billing_cycle"] = "Yearly"));

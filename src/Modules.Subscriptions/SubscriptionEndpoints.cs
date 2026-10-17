@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Core;
 using Core.Data;
@@ -11,19 +12,23 @@ namespace Modules.Subscriptions;
 
 public sealed record ClientItem(Guid Id, string Name);
 public sealed record SubscriptionItem(Guid Id, Guid ClientId, string ServiceName, DateOnly EndsOn, Guid CategoryId);
+/// <summary>
+/// One subscription. <c>cost</c> is a decimal string ("12.500"), never a JSON number: a number is read by a browser
+/// as binary floating point, and money must not pass through one (numeric(14,3) end to end).
+/// </summary>
 public sealed record SubscriptionDetail(Guid Id, Guid ClientId, string ServiceName, DateOnly EndsOn, string ReminderType,
-    Guid CategoryId, Guid? SubcategoryId, string? Provider, decimal? Cost, string? Currency, string BillingCycle, bool AutoRenew,
+    Guid CategoryId, Guid? SubcategoryId, string? Provider, string? Cost, string? Currency, string BillingCycle, bool AutoRenew,
     string? LoginUrl);
 public sealed record SubcategoryItem(Guid Id, string Code, string NameAr, string NameEn);
 public sealed record CategoryItem(Guid Id, string Code, string NameAr, string NameEn, IReadOnlyList<SubcategoryItem> Subcategories);
 public sealed record CategoriesResponse(IReadOnlyList<CategoryItem> Categories);
 
 public sealed record CreateSubscriptionRequest(Guid? ClientId, string? ServiceName, DateOnly? EndsOn, Guid? CategoryId,
-    Guid? SubcategoryId, string? Provider, decimal? Cost, string? Currency, string? BillingCycle, bool? AutoRenew, string? LoginUrl);
+    Guid? SubcategoryId, string? Provider, string? Cost, string? Currency, string? BillingCycle, bool? AutoRenew, string? LoginUrl);
 
 /// <summary>Editing a subscription: every field but its client, which a subscription does not change.</summary>
 public sealed record UpdateSubscriptionRequest(string? ServiceName, DateOnly? EndsOn, Guid? CategoryId, Guid? SubcategoryId,
-    string? Provider, decimal? Cost, string? Currency, string? BillingCycle, bool? AutoRenew, string? LoginUrl);
+    string? Provider, string? Cost, string? Currency, string? BillingCycle, bool? AutoRenew, string? LoginUrl);
 
 /// <summary>
 /// The module's API (PROOF_SPEC T5; Amendment 02 §3): the client list, the subscription list, one subscription,
@@ -38,8 +43,6 @@ public static partial class SubscriptionEndpoints
     private const int MaxServiceName = 256;
     private const int MaxProvider = 256;
     private const int MaxLoginUrl = 2048;
-    /// <summary>numeric(14,3): eleven digits before the point, three after (0012_classification.sql).</summary>
-    private const decimal MaxCost = 99_999_999_999.999m;
     private static readonly string[] BillingCycles = ["monthly", "yearly"];
 
     public static void MapSubscriptionEndpoints(this IEndpointRouteBuilder app)
@@ -89,7 +92,7 @@ public static partial class SubscriptionEndpoints
                 return s is null
                     ? Results.Json(new { error = ApiErrorCodes.NotPermitted }, statusCode: StatusCodes.Status403Forbidden)
                     : Results.Ok(new SubscriptionDetail(s.Id, s.ScopeRefId, s.ServiceName, s.EndsOn, s.ReminderType, s.CategoryId,
-                        s.SubcategoryId, s.Provider, s.Cost, s.Currency, s.BillingCycle, s.AutoRenew, s.LoginUrl));
+                        s.SubcategoryId, s.Provider, s.Cost?.ToString("0.000", CultureInfo.InvariantCulture), s.Currency, s.BillingCycle, s.AutoRenew, s.LoginUrl));
             }, ct));
 
         // Creating a subscription: its client must be one the caller sees — client_scope's WITH CHECK refuses any
@@ -147,9 +150,10 @@ public static partial class SubscriptionEndpoints
     /// <summary>
     /// The request's own rules (§14: 400 invalid_value). The database holds the same closed catalogs and ranges in its
     /// CHECKs; these turn them into a refusal before any write. A cost needs its currency: the reminder states the
-    /// amount with its currency or not at all (Amendment 02 E5, §2).
+    /// amount with its currency or not at all (Amendment 02 E5, §2). The cost arrives as a decimal string, parsed straight
+    /// to decimal: numeric(14,3), up to eleven digits before the point and three after, no sign, no exponent.
     /// </summary>
-    private static Fields? Validate(string? serviceName, DateOnly? endsOn, Guid? categoryId, string? provider, decimal? cost,
+    private static Fields? Validate(string? serviceName, DateOnly? endsOn, Guid? categoryId, string? provider, string? costText,
         string? currency, string? billingCycle, bool? autoRenew, string? loginUrl)
     {
         if (serviceName is not { Length: > 0 and <= MaxServiceName } || endsOn is not { } ends || categoryId is not { } category
@@ -157,8 +161,13 @@ public static partial class SubscriptionEndpoints
             return null;
         if (provider is { Length: 0 or > MaxProvider })
             return null;
-        if (cost is { } amount && (amount < 0 || amount > MaxCost || decimal.Round(amount, 3) != amount))
-            return null;
+        decimal? cost = null;
+        if (costText is not null)
+        {
+            if (!CostText().IsMatch(costText))
+                return null;
+            cost = decimal.Parse(costText, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture);
+        }
         if ((currency is not null && !CurrencyCode().IsMatch(currency)) || (cost is not null && currency is null))
             return null;
         if (loginUrl is not null && (loginUrl.Length > MaxLoginUrl || !Uri.TryCreate(loginUrl, UriKind.Absolute, out var url)
@@ -174,6 +183,9 @@ public static partial class SubscriptionEndpoints
     private static async Task<bool> SubcategoryFitsAsync(SubscriptionsDbContext c, Guid categoryId, Guid? subcategoryId, CancellationToken ct) =>
         subcategoryId is not { } sub
         || await c.Subcategories.AnyAsync(x => x.Id == sub && x.CategoryId == categoryId && x.IsActive, ct);
+
+    [GeneratedRegex("^[0-9]{1,11}([.][0-9]{1,3})?$")]   // ASCII digits only: \d would match ٣ too
+    private static partial Regex CostText();
 
     [GeneratedRegex("^[A-Z]{3}$")]
     private static partial Regex CurrencyCode();

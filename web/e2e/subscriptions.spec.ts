@@ -94,7 +94,7 @@ test('1. a subscription is created with its category and its fields, then edited
   await expect(page.getByRole('heading', { name: 'Edit subscription' })).toBeVisible();
   await expect(page.getByLabel(/^Service/)).toHaveValue('VPS');
   await expect(page.getByLabel(/^Category/)).toHaveValue(/.+/);
-  await expect(page.getByLabel(/^Cost/)).toHaveValue('12.5');
+  await expect(page.getByLabel(/^Cost/)).toHaveValue('12.500'); // as stored: numeric(14,3), carried as text
   await page.getByLabel(/^Service/).fill('VPS — renamed');
   await page.getByLabel(/^Category/).selectOption({ label: 'Software' });
   await page.getByLabel(/^Cost/).fill('0');

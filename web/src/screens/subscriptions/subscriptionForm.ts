@@ -33,7 +33,8 @@ export interface SubscriptionDetail {
   category_id: string;
   subcategory_id: string | null;
   provider: string | null;
-  cost: number | null;
+  /** A decimal string ("12.500"), never a JS number: money does not pass through binary floating point. */
+  cost: string | null;
   currency: string | null;
   billing_cycle: BillingCycle;
   auto_renew: boolean;
@@ -132,7 +133,10 @@ export function validate(values: FormValues, mode: 'create' | 'edit'): FieldErro
   return errors;
 }
 
-/** The request body (POST includes the client; PUT does not). An empty optional field is null, never ''. */
+/**
+ * The request body (POST includes the client; PUT does not). An empty optional field is null, never ''. The cost is
+ * sent as the string typed, so no binary floating point stands between the field and numeric(14,3).
+ */
 export function toBody(values: FormValues, mode: 'create' | 'edit'): Record<string, unknown> {
   const optional = (text: string) => text.trim() || null;
   const cost = values.cost.trim();
@@ -143,7 +147,7 @@ export function toBody(values: FormValues, mode: 'create' | 'edit'): Record<stri
     category_id: values.categoryId,
     subcategory_id: values.subcategoryId || null,
     provider: optional(values.provider),
-    cost: cost ? Number(cost) : null,
+    cost: cost || null, // as typed, already held to numeric(14,3) by validate
     currency: optional(values.currency),
     billing_cycle: values.billingCycle,
     auto_renew: values.autoRenew,
@@ -160,7 +164,7 @@ export function fromDetail(detail: SubscriptionDetail): FormValues {
     categoryId: detail.category_id,
     subcategoryId: detail.subcategory_id ?? '',
     provider: detail.provider ?? '',
-    cost: detail.cost === null ? '' : String(detail.cost),
+    cost: detail.cost ?? '',
     currency: detail.currency ?? '',
     billingCycle: detail.billing_cycle,
     autoRenew: detail.auto_renew,

@@ -101,7 +101,7 @@ describe('creating a subscription', () => {
           category_id: 'k-hosting',
           subcategory_id: 'k-vps',
           provider: 'Hetzner',
-          cost: 12.5,
+          cost: '12.5',
           currency: 'JOD',
           billing_cycle: 'monthly',
           auto_renew: true,
