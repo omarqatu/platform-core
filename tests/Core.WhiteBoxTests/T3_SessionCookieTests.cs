@@ -12,9 +12,11 @@ using Npgsql;
 
 namespace Core.WhiteBoxTests;
 
-// PROOF_SPEC v1.2 T3.6 [W] — the session cookie carries user_id and the active tenant only: no scope, no
-// permission. Api hosted in-process (its real Program, its real pipeline) against the seed contract; the
-// cookie is decrypted with the Api's own ticket format and its content read claim by claim.
+// PROOF_SPEC v1.2 T3.6 [W] — the session cookie carries user_id, the active tenant and the security stamp only:
+// no scope, no permission. The stamp is the third claim since Amendment 01 §2.1 (CLAUDE.md: "the cookie holds
+// user_id and tenant_id only — plus the security stamp once Amendment 01 §2.1 is built"), and it is the user's
+// own row value, not a second axis. Api hosted in-process (its real Program, its real pipeline) against the seed
+// contract; the cookie is decrypted with the Api's own ticket format and its content read claim by claim.
 // And the tenant-selection path through Core's unit of work: app.user_id alone, no second-axis variable.
 [Collection(WhiteBoxCollection.Name)]
 public class T3_SessionCookieTests(WhiteBoxFixture fixture)
@@ -33,6 +35,7 @@ public class T3_SessionCookieTests(WhiteBoxFixture fixture)
         });
         var omar = await ScalarGuidAsync("SELECT id FROM users WHERE username = 'omar'");
         var alAmin = await ScalarGuidAsync("SELECT id FROM tenants WHERE name = 'Al-Amin'");
+        var stamp = await ScalarGuidAsync("SELECT security_stamp FROM users WHERE username = 'omar'");
 
         var login = await client.PostAsJsonAsync("/api/auth/login", new { username = "omar", password = "omar-seed-password" });
         Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
@@ -56,10 +59,12 @@ public class T3_SessionCookieTests(WhiteBoxFixture fixture)
         var loginTicket = format.Unprotect(afterLogin.Value)!;
         var selectTicket = format.Unprotect(afterSelect.Value)!;
 
-        // After login: the user alone. After selection: the user and the active tenant — nothing else.
-        Assert.Equal([(SessionCookie.UserId, omar.ToString("D"))],
+        // After login: the user and the stamp. After selection: the active tenant with them — nothing else.
+        Assert.Equal([(SessionCookie.UserId, omar.ToString("D")), (SessionCookie.SecurityStamp, stamp.ToString("D"))],
             loginTicket.Principal.Claims.Select(c => (c.Type, c.Value)).ToList());
-        Assert.Equal([(SessionCookie.TenantId, alAmin.ToString("D")), (SessionCookie.UserId, omar.ToString("D"))],
+        Assert.Equal(
+            [(SessionCookie.SecurityStamp, stamp.ToString("D")), (SessionCookie.TenantId, alAmin.ToString("D")),
+             (SessionCookie.UserId, omar.ToString("D"))],
             selectTicket.Principal.Claims.Select(c => (c.Type, c.Value)).OrderBy(c => c.Type).ToList());
 
         // The ticket's properties are the cookie handler's own bookkeeping (issue and expiry times).

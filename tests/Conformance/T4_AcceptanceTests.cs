@@ -216,7 +216,7 @@ public class T4_AcceptanceTests
         var secondName = World.Account("acc-race-second").Username;
         await World.ExecuteAsMigratorAsync(
             """
-            INSERT INTO users (id, person_id, user_type, username, status) SELECT @id, person_id, 'customer', @n, 'active' FROM users WHERE id = @u;
+            INSERT INTO users (id, person_id, user_type, username, status, security_stamp) SELECT @id, person_id, 'customer', @n, 'active', uuidv7() FROM users WHERE id = @u;
             INSERT INTO user_password_credentials (user_id, password_hash, updated_at) SELECT @id, password_hash, now() FROM user_password_credentials WHERE user_id = @u;
             """, ("id", second), ("n", secondName), ("u", home.Owner.UserId));
         using var other = new Browser();

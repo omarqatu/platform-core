@@ -55,6 +55,19 @@ $$;
 
 ALTER PROCEDURE public.prune_auth_attempts() OWNER TO migrator;
 
+--
+-- Name: prune_password_reset_tokens(); Type: PROCEDURE; Schema: public; Owner: migrator
+--
+
+CREATE PROCEDURE public.prune_password_reset_tokens()
+    LANGUAGE sql
+    AS $$
+  DELETE FROM password_reset_tokens WHERE requested_at < now() - interval '90 days';
+$$;
+
+
+ALTER PROCEDURE public.prune_password_reset_tokens() OWNER TO migrator;
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -227,6 +240,25 @@ ALTER TABLE ONLY public.modules FORCE ROW LEVEL SECURITY;
 
 
 ALTER TABLE public.modules OWNER TO migrator;
+
+--
+-- Name: password_reset_tokens; Type: TABLE; Schema: public; Owner: migrator
+--
+
+CREATE TABLE public.password_reset_tokens (
+    id public.app_id NOT NULL,
+    user_id uuid NOT NULL,
+    token_hash text NOT NULL,
+    requested_at public.app_ts NOT NULL,
+    expires_at public.app_ts NOT NULL,
+    used_at timestamp with time zone,
+    request_ip text
+);
+
+ALTER TABLE ONLY public.password_reset_tokens FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE public.password_reset_tokens OWNER TO migrator;
 
 --
 -- Name: permissions; Type: TABLE; Schema: public; Owner: migrator
@@ -427,6 +459,7 @@ CREATE TABLE public.users (
     language text,
     theme text,
     last_login_at timestamp with time zone,
+    security_stamp public.app_id NOT NULL,
     CONSTRAINT users_user_type_check CHECK ((user_type = ANY (ARRAY['employee'::text, 'customer'::text])))
 );
 
@@ -537,6 +570,14 @@ ALTER TABLE ONLY public.memberships
 
 ALTER TABLE ONLY public.modules
     ADD CONSTRAINT modules_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: password_reset_tokens password_reset_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.password_reset_tokens
+    ADD CONSTRAINT password_reset_tokens_pkey PRIMARY KEY (id);
 
 
 --
@@ -683,10 +724,24 @@ CREATE INDEX ix_clients_tenant_scope_ref_id ON public.clients USING btree (tenan
 
 
 --
+-- Name: ix_password_reset_tokens_user_id; Type: INDEX; Schema: public; Owner: migrator
+--
+
+CREATE INDEX ix_password_reset_tokens_user_id ON public.password_reset_tokens USING btree (user_id);
+
+
+--
 -- Name: ix_subscriptions_tenant_scope_ref_id; Type: INDEX; Schema: public; Owner: migrator
 --
 
 CREATE INDEX ix_subscriptions_tenant_scope_ref_id ON public.subscriptions USING btree (tenant_id, scope_ref_id);
+
+
+--
+-- Name: password_reset_tokens_token_hash_key; Type: INDEX; Schema: public; Owner: migrator
+--
+
+CREATE UNIQUE INDEX password_reset_tokens_token_hash_key ON public.password_reset_tokens USING btree (token_hash);
 
 
 --
@@ -766,6 +821,14 @@ ALTER TABLE ONLY public.memberships
 
 ALTER TABLE ONLY public.memberships
     ADD CONSTRAINT memberships_user_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: password_reset_tokens password_reset_tokens_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.password_reset_tokens
+    ADD CONSTRAINT password_reset_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
 
 
 --
@@ -1185,6 +1248,33 @@ CREATE POLICY modules_read ON public.modules FOR SELECT TO app_user, provisioner
 
 
 --
+-- Name: password_reset_tokens; Type: ROW SECURITY; Schema: public; Owner: migrator
+--
+
+ALTER TABLE public.password_reset_tokens ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: password_reset_tokens password_reset_tokens_authenticator_insert; Type: POLICY; Schema: public; Owner: migrator
+--
+
+CREATE POLICY password_reset_tokens_authenticator_insert ON public.password_reset_tokens FOR INSERT TO authenticator WITH CHECK (true);
+
+
+--
+-- Name: password_reset_tokens password_reset_tokens_authenticator_select; Type: POLICY; Schema: public; Owner: migrator
+--
+
+CREATE POLICY password_reset_tokens_authenticator_select ON public.password_reset_tokens FOR SELECT TO authenticator USING (true);
+
+
+--
+-- Name: password_reset_tokens password_reset_tokens_authenticator_use; Type: POLICY; Schema: public; Owner: migrator
+--
+
+CREATE POLICY password_reset_tokens_authenticator_use ON public.password_reset_tokens FOR UPDATE TO authenticator USING ((used_at IS NULL)) WITH CHECK ((used_at IS NOT NULL));
+
+
+--
 -- Name: user_password_credentials password_self_update; Type: POLICY; Schema: public; Owner: migrator
 --
 
@@ -1549,6 +1639,13 @@ REVOKE ALL ON PROCEDURE public.prune_auth_attempts() FROM PUBLIC;
 
 
 --
+-- Name: PROCEDURE prune_password_reset_tokens(); Type: ACL; Schema: public; Owner: migrator
+--
+
+REVOKE ALL ON PROCEDURE public.prune_password_reset_tokens() FROM PUBLIC;
+
+
+--
 -- Name: TABLE audit_log; Type: ACL; Schema: public; Owner: migrator
 --
 
@@ -1641,6 +1738,20 @@ GRANT UPDATE(status) ON TABLE public.memberships TO provisioner;
 
 GRANT SELECT ON TABLE public.modules TO app_user;
 GRANT SELECT ON TABLE public.modules TO provisioner;
+
+
+--
+-- Name: TABLE password_reset_tokens; Type: ACL; Schema: public; Owner: migrator
+--
+
+GRANT SELECT,INSERT ON TABLE public.password_reset_tokens TO authenticator;
+
+
+--
+-- Name: COLUMN password_reset_tokens.used_at; Type: ACL; Schema: public; Owner: migrator
+--
+
+GRANT UPDATE(used_at) ON TABLE public.password_reset_tokens TO authenticator;
 
 
 --
@@ -1786,6 +1897,13 @@ GRANT UPDATE(theme) ON TABLE public.users TO app_user;
 --
 
 GRANT UPDATE(last_login_at) ON TABLE public.users TO app_user;
+
+
+--
+-- Name: COLUMN users.security_stamp; Type: ACL; Schema: public; Owner: migrator
+--
+
+GRANT UPDATE(security_stamp) ON TABLE public.users TO app_user;
 
 
 --

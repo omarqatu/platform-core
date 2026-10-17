@@ -30,6 +30,17 @@ public static class Seed
     public static Task<Guid> ClientAsync(string tenant, string name) =>
         ScalarAsync("SELECT c.id FROM clients c JOIN tenants t ON t.id = c.tenant_id WHERE t.name = @a AND c.name = @b", tenant, name);
 
+    /// <summary>One text value as migrator (BYPASSRLS): the ground truth, outside every tenant context.</summary>
+    public static async Task<string> ScalarStringAsMigratorAsync(string sql, params (string Name, object Value)[] parameters)
+    {
+        await using var connection = await Target.OpenAsync(Target.Migrator);
+        await using var command = new NpgsqlCommand(sql, connection);
+        foreach (var (name, value) in parameters)
+            command.Parameters.AddWithValue(name, value);
+        return (string)(await command.ExecuteScalarAsync()
+            ?? throw new InvalidOperationException($"No row: {sql}"));
+    }
+
     public static async Task<long> CountAsMigratorAsync(string sql, params (string Name, object Value)[] parameters)
     {
         await using var connection = await Target.OpenAsync(Target.Migrator);

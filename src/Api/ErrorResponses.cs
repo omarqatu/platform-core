@@ -37,6 +37,13 @@ public sealed class ErrorResponses(RequestDelegate next, ILogger<ErrorResponses>
                     return (StatusCodes.Status500InternalServerError, ApiErrorCodes.MembershipScopeMissing);
                 case NoActiveMembershipException:
                     return (StatusCodes.Status403Forbidden, ApiErrorCodes.NotAMember);
+                // Amendment 01 §2.1: the cookie's stamp is not the user's current one. The cookie is not cleared
+                // here — the next sign-in replaces it.
+                case Core.Http.SessionExpiredException:
+                    return (StatusCodes.Status401Unauthorized, ApiErrorCodes.SessionExpired);
+                // Amendment 01 §5.1: the recovery token is unknown, used or expired — one code for all three.
+                case Core.Identity.PasswordResetRefusedException:
+                    return (StatusCodes.Status400BadRequest, ApiErrorCodes.InvalidToken);
                 // The provisioner paths (4.4): an acceptance refused before any write; bootstrap without templates (T4.9).
                 case Core.Provisioning.InvitationRefusedException refused:
                     return (refused.Code switch

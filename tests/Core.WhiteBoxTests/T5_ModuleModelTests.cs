@@ -28,7 +28,7 @@ public class T5_ModuleModelTests(WhiteBoxFixture fixture)
         await using var db = Context(dataSource);
 
         var entities = db.Model.GetEntityTypes().ToList();
-        Assert.Equal(21, entities.Count);
+        Assert.Equal(22, entities.Count);
         Assert.Contains(entities, e => e.GetTableName() == "clients");
         Assert.Contains(entities, e => e.GetTableName() == "subscriptions");
         Assert.Empty(entities.SelectMany(e => e.GetProperties()).Where(p => p.ValueGenerated != ValueGenerated.Never));

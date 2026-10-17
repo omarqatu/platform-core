@@ -139,7 +139,7 @@ public class T4_AutomaticAuditTests(WhiteBoxFixture fixture)
         await using var transaction = await db.Database.BeginTransactionAsync();
         db.Audit = new AuditContext(fixture.W1, null, "test", null);
         var person = new Person { Id = Guid.CreateVersion7(), FullName = "T4.15", Email = $"t4.15-{Guid.CreateVersion7():N}@test", CreatedAt = DateTime.UtcNow };
-        var user = new User { Id = Guid.CreateVersion7(), PersonId = person.Id, UserType = "employee", Username = $"t4.15-{Guid.CreateVersion7():N}", Status = "active" };
+        var user = new User { Id = Guid.CreateVersion7(), PersonId = person.Id, UserType = "employee", Username = $"t4.15-{Guid.CreateVersion7():N}", Status = "active", SecurityStamp = Guid.CreateVersion7() };
         db.AddRange(person, user);
         await db.SaveChangesAsync();
         // The model maps no relationships, so EF orders no inserts: the credential goes in a save of its own.

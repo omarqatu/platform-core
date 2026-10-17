@@ -58,7 +58,12 @@ builder.Services.AddDbContext<AuthenticatorDbContext>(options => options.UseCore
 var provisionerDataSource = CoreDataAccess.CreateDataSource(builder.Configuration.GetConnectionString("provisioner")!);
 builder.Services.AddDbContext<ProvisionerDbContext>(options => options.UseCoreDataAccess(provisionerDataSource));
 
-// The session: an HTTP-only cookie carrying user_id and the active tenant only (PROOF_SPEC T3).
+// The attempt limiter (Amendment 01 §5.2, OPEN_ITEMS 16): every number is configuration, and every one is a
+// marked assumption until the project owner settles it at launch.
+builder.Services.Configure<LoginLimits>(builder.Configuration.GetSection("Identity:LoginLimits"));
+
+// The session: an HTTP-only cookie carrying user_id, the active tenant and the security stamp (PROOF_SPEC T3,
+// Amendment 01 §2.1).
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<ISessionContextAccessor, CookieSessionAccessor>();
 builder.Services.AddAuthentication(SessionCookie.Scheme)

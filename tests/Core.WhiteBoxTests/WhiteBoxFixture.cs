@@ -31,6 +31,10 @@ public sealed class WhiteBoxFixture : IAsyncLifetime
     public Guid W1SystemRole { get; } = Guid.CreateVersion7();
     public Guid W1User { get; } = Guid.CreateVersion7();
     public Guid W2User { get; } = Guid.CreateVersion7();
+    // The session stamps of those two users (Amendment 01 §2.1): written with the rows, so a test that drives
+    // the middleware can present the stamp its cookie would carry.
+    public Guid W1UserStamp { get; } = Guid.CreateVersion7();
+    public Guid W2UserStamp { get; } = Guid.CreateVersion7();
     public Guid W1Membership { get; } = Guid.CreateVersion7();
     public Guid W2Membership { get; } = Guid.CreateVersion7();
     public IReadOnlyList<Guid> W2RoleIds { get; private set; } = [];
@@ -77,9 +81,9 @@ public sealed class WhiteBoxFixture : IAsyncLifetime
             INSERT INTO persons (id, full_name, email, phone_e164, created_at) VALUES
               (@p1, 'White-box W1 member', @u1::text || '@white-box.test', NULL, now()),
               (@p2, 'White-box W2 member', @u2::text || '@white-box.test', NULL, now());
-            INSERT INTO users (id, person_id, user_type, username, status, language, theme, last_login_at) VALUES
-              (@u1, @p1, 'employee', 'wb-' || @u1::text, 'active', NULL, NULL, NULL),
-              (@u2, @p2, 'employee', 'wb-' || @u2::text, 'active', NULL, NULL, NULL);
+            INSERT INTO users (id, person_id, user_type, username, status, language, theme, last_login_at, security_stamp) VALUES
+              (@u1, @p1, 'employee', 'wb-' || @u1::text, 'active', NULL, NULL, NULL, @s1),
+              (@u2, @p2, 'employee', 'wb-' || @u2::text, 'active', NULL, NULL, NULL, @s2);
             INSERT INTO memberships (id, tenant_id, user_id, status, created_at) VALUES
               (@m1, @w1, @u1, 'active', now()), (@m2, @w2, @u2, 'active', now());
             INSERT INTO membership_scope (id, tenant_id, membership_id, scope_mode) VALUES
@@ -87,7 +91,7 @@ public sealed class WhiteBoxFixture : IAsyncLifetime
             """,
             ("w1", W1), ("w2", W2), ("w1sys", W1SystemRole), ("w1n", W1CustomRoles), ("w2n", W2CustomRoles),
             ("p1", Guid.CreateVersion7()), ("p2", Guid.CreateVersion7()), ("u1", W1User), ("u2", W2User),
-            ("m1", W1Membership), ("m2", W2Membership));
+            ("m1", W1Membership), ("m2", W2Membership), ("s1", W1UserStamp), ("s2", W2UserStamp));
         W2RoleIds = await QueryGuidsAsync("SELECT id FROM roles WHERE tenant_id = @w2 ORDER BY code", ("w2", W2));
     }
 
@@ -98,6 +102,11 @@ public sealed class WhiteBoxFixture : IAsyncLifetime
             DELETE FROM audit_log WHERE tenant_id IN (@w1, @w2);
             DELETE FROM membership_scope WHERE tenant_id IN (@w1, @w2);
             DELETE FROM memberships WHERE tenant_id IN (@w1, @w2);
+            -- The identity rows a password test gives these users (Amendment 01 §2.2): before the users, which
+            -- they reference. A test cleans up after itself; this is the net that keeps one failure from
+            -- wedging the fixture's teardown.
+            DELETE FROM password_reset_tokens WHERE user_id IN (@u1, @u2);
+            DELETE FROM user_password_credentials WHERE user_id IN (@u1, @u2);
             DELETE FROM users WHERE id IN (@u1, @u2);
             DELETE FROM persons WHERE email IN (@u1::text || '@white-box.test', @u2::text || '@white-box.test');
             DELETE FROM roles WHERE tenant_id IN (@w1, @w2);

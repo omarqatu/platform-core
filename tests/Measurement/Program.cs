@@ -43,7 +43,7 @@ await Migrator($"""
         SELECT uuidv7(), t, r.id, rtp.permission_id FROM roles r
         JOIN role_templates rt ON rt.code = r.code JOIN role_template_permissions rtp ON rtp.template_id = rt.id WHERE r.tenant_id = t;
       INSERT INTO persons (id, full_name, email, created_at) VALUES (p, 'T8 member', 't8-' || u || '@measure.test', now());
-      INSERT INTO users (id, person_id, user_type, username, status) VALUES (u, p, 'employee', 't8-' || u, 'active');
+      INSERT INTO users (id, person_id, user_type, username, status, security_stamp) VALUES (u, p, 'employee', 't8-' || u, 'active', uuidv7());
       INSERT INTO memberships (id, tenant_id, user_id, status, created_at) VALUES (m, t, u, 'active', now());
       INSERT INTO membership_roles (id, tenant_id, membership_id, role_id)
         SELECT uuidv7(), t, m, r.id FROM roles r WHERE r.tenant_id = t AND r.code = 'operator';

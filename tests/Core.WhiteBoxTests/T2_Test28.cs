@@ -71,7 +71,7 @@ public class T2_Test28(WhiteBoxFixture fixture)
             .Select(p => $"{p.Table}.{p.Column} = {p.ValueGenerated}")
             .ToList();
 
-        Assert.Equal(19, entities.Count);
+        Assert.Equal(20, entities.Count);
         Assert.Empty(generated);
     }
 
@@ -128,7 +128,7 @@ public class T2_Test28(WhiteBoxFixture fixture)
         db.AddRange(tenant, person, module, template);
         await db.SaveChangesAsync();
 
-        var user = new User { Id = Id(), PersonId = person.Id, UserType = "employee", Username = $"t28-{Guid.CreateVersion7():N}", Status = "active" };
+        var user = new User { Id = Id(), PersonId = person.Id, UserType = "employee", Username = $"t28-{Guid.CreateVersion7():N}", Status = "active", SecurityStamp = Id() };
         var role = new Role { Id = Id(), TenantId = tenant.Id, Code = "t28", NameAr = "x", NameEn = "x", IsActive = true };
         var permission = new Permission { Id = Id(), ModuleId = module.Id, Code = "t28.permission", NameAr = "x", NameEn = "x" };
         db.AddRange(user, role, permission);

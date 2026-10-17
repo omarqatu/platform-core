@@ -25,9 +25,11 @@ public sealed class AuditContextMissingException(string entityType)
 /// are captured at SavingChanges; the audit entries are written by a second save from SavedChanges — in the same
 /// transaction, rolled back with it — under a flag that keeps this interceptor from auditing the audit save.
 /// <list type="bullet">
-/// <item>The exemption list: self-service identity writes — users (last_login_at, language, theme) on the actor's
-/// own row, via user_self_update — because audit_log is a tenant log and these are not tenant data;
-/// user_password_credentials is never audited; auth_attempts is its own log.</item>
+/// <item>The exemption list: self-service identity writes — users (last_login_at, language, theme, and
+/// security_stamp since Amendment 01 §2.1) on the actor's own row, via user_self_update — because audit_log is a
+/// tenant log and these are not tenant data; user_password_credentials is never audited; auth_attempts is its own
+/// log, and password_reset_tokens with it (Amendment 01 §2.2). So a password change leaves no audit trace until
+/// the identity audit log exists (OPEN_ITEMS 52).</item>
 /// <item>The masking list: password_hash and token_hash stay in old_value/new_value with the value "[masked]" —
 /// the entry shows the column was written without revealing it.</item>
 /// </list>
@@ -41,7 +43,7 @@ public sealed class AutomaticAuditInterceptor : SaveChangesInterceptor
     public const string Masked = "[masked]";
     internal static readonly HashSet<string> MaskedColumns = ["password_hash", "token_hash"];
     private static readonly HashSet<string> SelfServiceUserProperties =
-        [nameof(User.LastLoginAt), nameof(User.Language), nameof(User.Theme)];
+        [nameof(User.LastLoginAt), nameof(User.Language), nameof(User.Theme), nameof(User.SecurityStamp)];
 
     private AutomaticAuditInterceptor()
     {
@@ -135,7 +137,7 @@ public sealed class AutomaticAuditInterceptor : SaveChangesInterceptor
 
     private static bool Exempt(EntityEntry entry, AuditContext? audit) => entry.Entity switch
     {
-        AuditEntry or UserPasswordCredential or AuthAttempt => true,
+        AuditEntry or UserPasswordCredential or AuthAttempt or PasswordResetToken => true,
         User user => entry.State == EntityState.Modified
                      && audit?.ActorId == user.Id
                      && entry.Properties.Where(p => p.IsModified).All(p => SelfServiceUserProperties.Contains(p.Metadata.Name)),

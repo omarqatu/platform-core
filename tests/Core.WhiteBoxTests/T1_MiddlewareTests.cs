@@ -20,9 +20,13 @@ public class T1_MiddlewareTests(WhiteBoxFixture fixture)
 {
     public sealed record Observed(string? UserId, string? TenantId, long FirstTxid, long SecondTxid, int VisibleRows);
 
-    private sealed class FixedSession(SessionContext session) : ISessionContextAccessor
+    // The session as the cookie would present it: the context, and the security stamp the middleware compares
+    // with the user's row (Amendment 01 §2.1). A session with no user carries no stamp.
+    private sealed class FixedSession(SessionContext session, Guid? stamp = null) : ISessionContextAccessor
     {
         public SessionContext Current => session;
+
+        public Guid? SecurityStamp => stamp;
     }
 
     [Fact]
@@ -40,7 +44,8 @@ public class T1_MiddlewareTests(WhiteBoxFixture fixture)
                     await ScalarAsync<long>(db, "SELECT txid_current() AS \"Value\""),
                     await db.Roles.CountAsync());
                 await http.Response.WriteAsJsonAsync(observed);
-            });
+            },
+            stamp: fixture.W1UserStamp);
 
         var observed = await host.GetTestClient().GetFromJsonAsync<Observed>("/");
 
@@ -95,7 +100,8 @@ public class T1_MiddlewareTests(WhiteBoxFixture fixture)
     };
 
     private static async Task<IHost> StartHostAsync(
-        NpgsqlDataSource dataSource, SessionContext session, Func<HttpContext, Core.CoreDbContext, Task> endpoint)
+        NpgsqlDataSource dataSource, SessionContext session, Func<HttpContext, Core.CoreDbContext, Task> endpoint,
+        Guid? stamp = null)
     {
         var host = new HostBuilder()
             .ConfigureWebHost(web => web
@@ -104,7 +110,7 @@ public class T1_MiddlewareTests(WhiteBoxFixture fixture)
                 {
                     // The middleware and the endpoint share one context, hence one transaction.
                     services.AddDbContext<Core.CoreDbContext>(options => options.UseCoreDataAccess(dataSource));
-                    services.AddSingleton<ISessionContextAccessor>(new FixedSession(session));
+                    services.AddSingleton<ISessionContextAccessor>(new FixedSession(session, stamp));
                 })
                 .Configure(app =>
                 {

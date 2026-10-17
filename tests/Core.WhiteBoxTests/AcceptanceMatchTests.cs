@@ -95,7 +95,7 @@ public class AcceptanceMatchTests(WhiteBoxFixture fixture)
         var first = await ExistingAccountAsync(provisionerSource, email);
         var second = Guid.CreateVersion7();
         await ExecuteAsMigratorAsync(
-            "INSERT INTO users (id, person_id, user_type, username, status) SELECT @id, person_id, 'customer', @n, 'active' FROM users WHERE id = @u",
+            "INSERT INTO users (id, person_id, user_type, username, status, security_stamp) SELECT @id, person_id, 'customer', @n, 'active', uuidv7() FROM users WHERE id = @u",
             ("id", second), ("n", "wb-match-race-2-" + Tag()), ("u", first));
 
         var competitor = new CompetingAcceptance(async () =>

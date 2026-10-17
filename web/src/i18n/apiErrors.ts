@@ -19,6 +19,14 @@ export const apiErrors = defineMessages({
     defaultMessage: 'This organization requires a stronger sign-in method, which is not available yet.',
   },
   not_a_member: { id: 'errors.not_a_member', defaultMessage: 'You are not an active member of this organization.' },
+  session_expired: {
+    id: 'errors.session_expired',
+    defaultMessage: 'Your session has ended because the password was changed. Sign in again.',
+  },
+  too_many_attempts: {
+    id: 'errors.too_many_attempts',
+    defaultMessage: 'Too many attempts from this device. Wait a few minutes and try again.',
+  },
   not_permitted: { id: 'errors.not_permitted', defaultMessage: 'You do not have permission to do this.' },
   membership_scope_missing: {
     id: 'errors.membership_scope_missing',
@@ -48,6 +56,10 @@ export const apiErrors = defineMessages({
   role_templates_unavailable: {
     id: 'errors.role_templates_unavailable',
     defaultMessage: 'The organization could not be set up. Contact support.',
+  },
+  invalid_token: {
+    id: 'errors.invalid_token',
+    defaultMessage: 'This link is not valid or has expired. Ask for a new one.',
   },
   unknown: { id: 'errors.unknown', defaultMessage: 'Something went wrong. Try again.' },
 });
