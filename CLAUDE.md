@@ -9,9 +9,13 @@ layer, §18 rules). For anything touching the schema, `docs/DATABASE.md`. The wh
 
 ## Authority
 
-1. `docs/PLATFORM_CORE_v1_16_FROZEN.md` (Arabic, authoritative; `_EN.md` is a translation) — the architecture.
+1. `docs/PLATFORM_CORE_v1_16_FROZEN.md` (Arabic, authoritative; `_EN.md` is a translation) — the architecture,
+   **plus its amendments in order**: `docs/PLATFORM_CORE_AMENDMENT_01.md` (Arabic, authoritative; `_EN.md`). An
+   amendment adds to 1.16 and never edits it; a conflict between the two is an error in the amendment.
 2. `docs/PROOF_SPEC_v1_3.md` (Arabic, authoritative; `_EN.md`) — tasks and acceptance criteria.
 3. The code. 4. The guides.
+
+The current stage and its order of work: `docs/ROADMAP_SUBSCRIPTIONS.md`.
 
 A conflict between them → **stop and report it** in the PR description. The project owner decides; you don't.
 Anything in neither document → **ask before building it**. No business logic beyond what the task needs.
