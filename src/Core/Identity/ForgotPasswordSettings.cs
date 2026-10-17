@@ -24,7 +24,8 @@ public sealed class ForgotPasswordSettings
     /// <summary>
     /// The link the e-mail carries, with <c>{token}</c> where the token goes. The token stays in the fragment,
     /// so it never reaches a server log or a Referer header (the invitation link's rule, DEVELOPER_GUIDE §9).
-    /// <b>The screen it points at is not built yet</b> — this PR is the API and the sender (OPEN_ITEMS 59).
+    /// The screen it points at is <c>web/src/screens/password/ResetPasswordScreen.tsx</c>, which reads the token
+    /// out of the fragment before anything renders (OPEN_ITEMS 59, closed).
     /// </summary>
     public string ResetLinkTemplate { get; set; } = "/app/password/reset#token={token}";
 
