@@ -100,18 +100,27 @@ public static class PasswordPaths
             var now = DateTime.UtcNow;
             var stamp = Guid.CreateVersion7();
 
-            // app_user has UPDATE on user_password_credentials and no SELECT (§3.8): the row is written through
-            // the change tracker without being read, as a stub attached with its key.
-            var credential = new UserPasswordCredential { UserId = userId };
-            c.Attach(credential);
-            credential.PasswordHash = hash;
-            credential.UpdatedAt = now;
+            // app_user may UPDATE password_hash and updated_at on user_password_credentials and holds no SELECT
+            // on that table at all (§3.8; 1.11 forbids even a column SELECT on it). PostgreSQL requires SELECT
+            // on every column a statement *reads*, so an UPDATE carrying `WHERE user_id = …` is refused with
+            // 42501 — and EF always writes that WHERE. The statement therefore carries no WHERE at all:
+            // password_self_update (user_id = app.user_id) picks the one row, which is the rule of this
+            // architecture applied to the user axis — the code never filters what RLS filters. Raw SQL is the
+            // only way to send it, as checks/local/bulk-writes-allowlist.txt already records ("the password
+            // command … is a raw SQL command, not an EF bulk command"); the table is never audited (7), so the
+            // automatic audit loses nothing by not seeing it. Exactly one row, or it is an error (3.5/5).
+            await CriticalWrite.ExpectRowsAsync(
+                c.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE user_password_credentials SET password_hash = {hash}, updated_at = {now}", ct),
+                1, "user_password_credentials password change");
 
+            // The stamp is a tracked write on the user's own row (user_self_update), exempt from auditing by
+            // Amendment 01 §2.1 — app_user does hold SELECT on users, so EF's WHERE on the key is readable here.
             var user = CriticalWrite.Require(
                 await c.Users.SingleOrDefaultAsync(u => u.Id == userId, ct), "users.security_stamp");
             user.SecurityStamp = stamp;
 
-            await CriticalWrite.SaveAsync(c, "password change", ct);
+            await CriticalWrite.SaveAsync(c, "users.security_stamp", ct);
             return stamp;
         }, cancellationToken);
     }

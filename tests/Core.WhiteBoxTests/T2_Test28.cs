@@ -71,7 +71,7 @@ public class T2_Test28(WhiteBoxFixture fixture)
             .Select(p => $"{p.Table}.{p.Column} = {p.ValueGenerated}")
             .ToList();
 
-        Assert.Equal(19, entities.Count);
+        Assert.Equal(20, entities.Count);
         Assert.Empty(generated);
     }
 
