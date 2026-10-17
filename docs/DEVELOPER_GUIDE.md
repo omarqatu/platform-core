@@ -207,7 +207,8 @@ platform-core/
 ├── checks/
 │   ├── core/                      PLATFORM_CORE's ten CI checks (numbered 1–10) + their inputs
 │   │   ├── check-01.sql … check-10.sql, check-09.sh, run-checks.sh, selftest/
-│   │   └── manifest.json, grants.json, policy-chains.json, rls-exemptions.json, scope-variable-writers.json
+│   │   ├── manifest.json, grants.json, policy-chains.json, rls-exemptions.json, scope-variable-writers.json
+│   │   └── generate-manifest.py, amendment-policies-built.json   the manifest's extraction (Amendment 01 §4.1)
 │   └── local/                     repository checks (named, never numbered)
 │
 ├── ci/                            the T0.3 scan: the Api image must not contain migrator's password
@@ -812,7 +813,8 @@ module.MapPost("", (CreateSubscriptionRequest body, SubscriptionsDbContext db, I
    `docs/DATABASE.md` §10.
 4. **Check inputs:** add its grants to `checks/core/grants.json`. If its tables only use the two templates, the
    manifest needs no change (Check 2 accepts exactly the templates outside the manifest). Any other policy needs the
-   document to say so first.
+   document to say so first; then list it in `checks/core/amendment-policies-built.json` and run
+   `checks/core/generate-manifest.py` (`docs/DATABASE.md` §10).
 5. **Context:** `<Name>DbContext : CoreDbContext`, map tables, call `base.OnModelCreating` last.
 6. **Endpoints:** a route group under the module's path, `RequireAuthorization()`, `OwnUnitsOfWorkAttribute`, each
    handler in `UnitOfWork.RunAsync` on the module context; `Permissions.RequireAsync` first; `ScopedList` for lists;

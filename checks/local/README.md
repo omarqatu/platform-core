@@ -18,6 +18,7 @@ share.
 | `check-i18n-parity` | The keys of `web/locales/ar.json` are exactly those of a fresh extraction of `web/src/`; `web/locales/en.json` is that extraction; every plural in `ar.json` gives the six Arabic forms. | i18n task |
 | `check-api-error-codes` | `api-error-codes.json` is the current export of `src/Core/ApiErrorCodes.cs`; no code is a string literal elsewhere in `src/` (except `api-error-codes-literal-allowlist.txt`); every code has its entry `errors.<code>` in `web/src/i18n/apiErrors.ts`, and every entry but `errors.unknown` has its code. | i18n task |
 | `check-schema-dump` | `docs/schema.sql` equals a fresh `pg_dump --schema-only` of the migrated database (`scripts/dump-schema.sh`). | Developer documentation |
+| `check-manifest-extraction` | `checks/core/manifest.json` is the extraction of PLATFORM_CORE v1.16 and its amendments (`checks/core/generate-manifest.py --check`), each document's Arabic and English stating the same policies. | Amendment 01 §4.1, OPEN_ITEMS 50 |
 
 ## check-schema-allowlist
 
@@ -150,3 +151,38 @@ line is renamed (must fail and show that line). No file is written outside a tem
 
 **Fixing a failure:** run `scripts/dump-schema.sh` (with the same `PG_DUMP`) on a database migrated from clean, and
 commit `docs/schema.sql` with the migration that changed it.
+
+## check-manifest-extraction
+
+**Why it exists:** Check 2 holds the database to `checks/core/manifest.json`, and the manifest is only as good as its
+link to the governing text. It is extracted, never written by hand; this check fails while the committed manifest is
+not the extraction, so a hand edit, a forgotten regeneration, or a translation that drifted from the Arabic cannot
+pass CI.
+
+**What it compares:** `checks/core/generate-manifest.py --check` regenerates the manifest in memory from
+`docs/PLATFORM_CORE_v1_16_FROZEN.md` and `docs/PLATFORM_CORE_AMENDMENT_NN.md` (by number), each with its `_EN.md`,
+and from `checks/core/amendment-policies-built.json`, and reports every table whose policies differ (added, removed,
+replaced). It refuses, before comparing: an English document whose `CREATE POLICY` statements differ from the
+Arabic's (comments aside — the Arabic governs); an amendment that redefines a template or restates a policy an
+earlier document states; a built name the amendment does not state. Order carries no meaning for Check 2 and is not
+compared.
+
+**What it does not protect — read this before relying on it:** a *pending* amendment policy (stated, not yet listed
+as built) is not in the manifest, so editing it changes nothing this check compares. It is guarded only by the Arabic
+and English matching and by parsing as `CREATE POLICY … ON …`; it enters the manifest with whatever text it has when
+it is adopted. Review a policy's text in the PR that adopts it.
+
+**Running it** (repository root; python3; no database):
+
+```bash
+checks/local/check-manifest-extraction.sh
+checks/local/check-manifest-extraction.sh --self-test
+```
+
+`--self-test` works on copies of the documents and the inputs, and fails unless each plant is reported: (a) a policy
+added to the manifest by hand; (b) the English amendment changed alone; (c) a built name the amendment does not
+state; (d) a built policy edited in both languages with the manifest not regenerated. It first checks that the
+unplanted copy passes. CI runs both modes (the `proof` job).
+
+**Fixing a failure:** run `checks/core/generate-manifest.py` and commit `manifest.json` with the change that caused
+it; for (b), make the English match the Arabic.

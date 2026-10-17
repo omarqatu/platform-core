@@ -51,7 +51,8 @@ New file `src/Migrations/Sql/00NN_<what>.sql` + class `src/Migrations/Migrations
 (`SqlFileMigration`). Forward-only. A new table gets all three layers in the same file (table + constraints,
 `ENABLE`+`FORCE` RLS + policies, grants); data migrations end with a row-count `DO $$ … RAISE EXCEPTION`.
 Update `checks/core/grants.json` / `policy-chains.json` with it — changing them is a project-owner decision, say so in
-the PR. The manifest is extracted from PLATFORM_CORE (`checks/core/generate-manifest.py`), never hand-edited.
+the PR. The manifest is extracted from PLATFORM_CORE and its amendments (`checks/core/generate-manifest.py`), never
+hand-edited; a new amendment policy enters it when its PR lists it in `checks/core/amendment-policies-built.json`.
 Then regenerate `docs/schema.sql` (`scripts/dump-schema.sh`, see `docs/DATABASE.md` §10) and update `docs/DATABASE.md`.
 
 ## Running and checking

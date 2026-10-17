@@ -29,7 +29,7 @@
 - التطبيق يولّد كل مفتاح وطابع زمني؛ لا `DEFAULT`/identity/generated (§3.5).
 - مبدأ الموافقة: لا عضوية بلا قبول (§0). **الترحيل (§6) لا يخالفه:** المستخدمون المرحَّلون قبلوا عضويتهم في النظام الحي، والترحيل نقل لا استقطاب — فتُنشأ عضوياتهم `active` مباشرةً، بلا دعوة.
 - `job_runner` بدوره في 1.16 (§3.4، §8): قراءة الجهات النشطة لبدء الـ fan-out، ولا كتابة.
-- الفحوصات العشرة ومدخلاتها؛ ما يضيفه الملحق من منح يدخل `grants.json` في PR الكود. سياسات §4.1 لا تصل الـ manifest اليوم (§4.1، OPEN_ITEMS 50).
+- الفحوصات العشرة ومدخلاتها؛ ما يضيفه الملحق من منح يدخل `grants.json` في PR الكود. سياسات §4.1 تدخل الـ manifest حين تُبنى (§4.1).
 
 **نطاق الملحق:** ما يلزم لمرحلة «استقبال نظام الاشتراكات» حسب خارطة الطريق المعتمدة — لا أكثر. محرك الفوترة، البوابات، التسجيل الذاتي العام، العلامات/الشركاء، §9، SSO، بوابة العميل: خارجه (§7).
 
@@ -78,7 +78,7 @@ password_reset_tokens(id, user_id → users, token_hash, requested_at, expires_a
 ```sql
 platform_subscriptions(id, tenant_id, plan_code → plans(code), status, period_start, paid_until date, grace_days, created_at, updated_at,
   UNIQUE (tenant_id))                       -- صف واحد لكل جهة في هذه المرحلة
--- paid_until تاريخ (date) بتوقيت UTC؛ suspend-unpaid يقارن بـ current_date بتوقيت UTC (§5.4). موعد بلا منطقة زمنية خلل ينتظر جهة في بلد آخر.
+-- paid_until تاريخ (date) بتوقيت UTC؛ suspend-unpaid يقارن بـ (now() AT TIME ZONE 'UTC')::date (§5.4) — لا بـ current_date، الذي يتبع TimeZone الجلسة. موعد بلا منطقة زمنية خلل ينتظر جهة في بلد آخر.
 -- status ∈ {active, suspended} — المهلة يحملها grace_days، فلا حالة وسيطة. القالب القياسي.
 -- يُنشأ في bootstrap (provisioner) بخطة trial وpaid_until = [اليوم + 30] — افتراض.
 -- تتغير paid_until/status بالإجراء التشغيلي (provisioner) وحده: mark-paid وsuspend-unpaid (§5.4).
@@ -99,7 +99,7 @@ provider_accounts(id, tenant_id NULL, channel, provider_code, sender_id, credent
 -- في هذه المرحلة تُزرع صفوف المنصة فقط (migrator). صفوف الجهات: باب محجوز، لا مسار يكتبها.
 ```
 
-لماذا: `app_user` يقرأ هذا الجدول في كل معاملة إرسال؛ لو حمل مفاتيح المزوّدين لكان كل عضو جهة على بعد ثغرة واحدة من مفاتيح المنصة. المرجع إلى الإعدادات يُبقي السرّ حيث تعيش سلاسل الاتصال. **`NULLS NOT DISTINCT`:** بدونه لا يمنع `UNIQUE` صفّين للمنصة لنفس القناة، لأن `NULL` لا يساوي `NULL`. **سياسة القراءة** تحتاج صياغة خارج القالب: `tenant_id = app.tenant_id OR tenant_id IS NULL` — سياسة مُسمّاة يجب أن تدخل الـ manifest (Check 2)، ولا تصله اليوم (§4.1، OPEN_ITEMS 50).
+لماذا: `app_user` يقرأ هذا الجدول في كل معاملة إرسال؛ لو حمل مفاتيح المزوّدين لكان كل عضو جهة على بعد ثغرة واحدة من مفاتيح المنصة. المرجع إلى الإعدادات يُبقي السرّ حيث تعيش سلاسل الاتصال. **`NULLS NOT DISTINCT`:** بدونه لا يمنع `UNIQUE` صفّين للمنصة لنفس القناة، لأن `NULL` لا يساوي `NULL`. **سياسة القراءة** تحتاج صياغة خارج القالب: `tenant_id = app.tenant_id OR tenant_id IS NULL` — سياسة مُسمّاة تدخل الـ manifest (Check 2) حين تُبنى (§4.1).
 
 ### 2.7 `notification_log` — لكل جهة ومُنطَّق (إلى الوحدة، بجوار `subscriptions`)
 
@@ -181,26 +181,110 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 
 ## §4 السياسات الجديدة والصلاحيات الجديدة
 
-### 4.1 سياسات خارج القالبين (يجب أن تدخل الـ manifest لـ Check 2، ولا تصله اليوم — OPEN_ITEMS 50)
+### 4.1 سياسات خارج القالبين (تدخل الـ manifest لـ Check 2 حين تُبنى)
 
-كل سياسة بـ `FOR` و`TO` صريحين و`NULLIF` على `current_setting`. الأسماء مبدئية.
+كل سياسة بـ `FOR` و`TO` صريحين و`NULLIF` على `current_setting`، والنصّ أدناه هو النصّ الذي يُستخرج إلى الـ manifest حرفياً. الجدولان اللذان يدخلان الـ manifest بسياسة خارج القالبين (`tenant_notification_settings`، `notification_log`) يكتبان قالبيهما صراحةً، لأن مجموعة سياسات جدول الـ manifest تُفحص كاملة.
 
-| السياسة | الجدول | FOR / TO | الشرط |
-| --- | --- | --- | --- |
-| `password_reset_tokens_authenticator_select` | password_reset_tokens | SELECT / authenticator | `true` — الدور يرى الرموز كلها؛ المطابقة بالـ hash في الاستعلام |
-| `password_reset_tokens_authenticator_insert` | password_reset_tokens | INSERT / authenticator | `true` |
-| `password_reset_tokens_authenticator_use` | password_reset_tokens | UPDATE / authenticator | `used_at IS NULL` → WITH CHECK `used_at IS NOT NULL` — الكتابة الوحيدة هي الاستهلاك |
-| `plans_read` | plans | SELECT / app_user, provisioner, job_runner | `true` (كتالوج) |
-| `platform_subscriptions_read` | platform_subscriptions | SELECT / app_user | القالب القياسي (`tenant_id = NULLIF(app.tenant_id)`) |
-| `platform_subscriptions_provisioner_*` | platform_subscriptions | INSERT, SELECT, UPDATE / provisioner | `tenant_id = NULLIF(app.tenant_id)` كما في bootstrap |
-| `tenants_provisioner_select` | tenants | SELECT / provisioner | `id = NULLIF(app.tenant_id)` |
-| `tenants_provisioner_update` | tenants | UPDATE / provisioner | `id = NULLIF(app.tenant_id)` → WITH CHECK `id = NULLIF(app.tenant_id)` |
-| `invitations_provisioner_insert` | invitations | INSERT / provisioner | `tenant_id = NULLIF(app.tenant_id)` و`status = 'pending'` و`invited_by IS NULL` — لا يزوّر مسار `provisioner` داعياً |
-| `provider_accounts_read` | provider_accounts | SELECT / app_user | `tenant_id IS NULL OR tenant_id = NULLIF(app.tenant_id)` |
-| `tenant_notification_settings_*` | tenant_notification_settings | القالب القياسي / app_user + INSERT / provisioner | — |
-| `notification_log_*` | notification_log | SELECT, INSERT, UPDATE / app_user — وللـ UPDATE سياسة `AS RESTRICTIVE FOR UPDATE`: `status = 'pending'` → WITH CHECK `status IN ('sent','failed')` | القالبان (`tenant_isolation` + `client_scope`) |
+```sql
+-- ===== authenticator — رموز الاستعادة (§2.2) =====
+CREATE POLICY password_reset_tokens_authenticator_select ON password_reset_tokens
+  FOR SELECT TO authenticator
+  USING (true);   -- الدور يرى الرموز كلها؛ المطابقة بالـ hash في الاستعلام
 
-**الإنفاذ — غير آلي حتى الآن:** `checks/core/generate-manifest.py` يستخرج الـ manifest من نصّ 1.16 وحده، ومن `CREATE POLICY` داخل كتل sql فقط؛ والسياسات أعلاه مكتوبة جدولاً في ملحق. فهي **لا تصل الـ manifest ولا يفرض Check 2 نصّها** حتى يُعدَّل المولّد ليقرأ الملحقات وتُكتب هذه السياسات `CREATE POLICY` في كتل sql (OPEN_ITEMS 50 — تغيير مدخلات الفحص قرار صاحب المشروع). وحتى ذلك الحين: جدول عليه سياسات خارج القالبين وغائب عن الـ manifest يُفشل Check 2 (خارج الـ manifest «القالبان وحدهما»)، فتعديل المولّد شرط لأول PR كود يضيف هذه السياسات.
+CREATE POLICY password_reset_tokens_authenticator_insert ON password_reset_tokens
+  FOR INSERT TO authenticator
+  WITH CHECK (true);
+
+CREATE POLICY password_reset_tokens_authenticator_use ON password_reset_tokens
+  FOR UPDATE TO authenticator
+  USING (used_at IS NULL)
+  WITH CHECK (used_at IS NOT NULL);   -- الكتابة الوحيدة هي الاستهلاك
+
+-- ===== الكتالوج (§2.3) =====
+CREATE POLICY plans_read ON plans
+  FOR SELECT TO app_user, provisioner, job_runner
+  USING (true);
+
+-- ===== platform_subscriptions (§2.4) =====
+CREATE POLICY platform_subscriptions_read ON platform_subscriptions
+  FOR SELECT TO app_user
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));   -- شرط القالب، FOR SELECT وحده: لـ app_user منح SELECT فقط
+
+CREATE POLICY platform_subscriptions_provisioner_insert ON platform_subscriptions
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY platform_subscriptions_provisioner_select ON platform_subscriptions
+  FOR SELECT TO provisioner
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY platform_subscriptions_provisioner_update ON platform_subscriptions
+  FOR UPDATE TO provisioner
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+-- ===== provisioner — الإجراء التشغيلي (§5.4) =====
+CREATE POLICY tenants_provisioner_select ON tenants
+  FOR SELECT TO provisioner
+  USING (id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY tenants_provisioner_update ON tenants
+  FOR UPDATE TO provisioner
+  USING (id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
+  WITH CHECK (id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY invitations_provisioner_insert ON invitations
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+              AND status = 'pending'
+              AND invited_by IS NULL);   -- دعوة bootstrap: لا يزوّر مسار provisioner داعياً (§2.11)
+
+-- ===== الإرسال (§2.5–§2.7) =====
+CREATE POLICY provider_accounts_read ON provider_accounts
+  FOR SELECT TO app_user
+  USING (tenant_id IS NULL
+         OR tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));   -- صفّ المنصة أو صفّ الجهة الحالية (§2.6)
+
+CREATE POLICY tenant_isolation ON tenant_notification_settings
+  FOR ALL TO app_user
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY tenant_notification_settings_provisioner_insert ON tenant_notification_settings
+  FOR INSERT TO provisioner
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY tenant_isolation ON notification_log
+  FOR ALL TO app_user
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY client_scope ON notification_log
+  AS RESTRICTIVE FOR ALL TO app_user
+  USING (
+    COALESCE((SELECT NULLIF(current_setting('app.scope_all', true), '')::boolean), false)
+    OR EXISTS (
+      SELECT 1 FROM scope_assignments sa
+      WHERE sa.tenant_id     = notification_log.tenant_id
+        AND sa.scope_ref_id  = notification_log.scope_ref_id
+        AND sa.membership_id = (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+        AND sa.active))
+  WITH CHECK (
+    COALESCE((SELECT NULLIF(current_setting('app.scope_all', true), '')::boolean), false)
+    OR EXISTS (
+      SELECT 1 FROM scope_assignments sa
+      WHERE sa.tenant_id     = notification_log.tenant_id
+        AND sa.scope_ref_id  = notification_log.scope_ref_id
+        AND sa.membership_id = (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+        AND sa.active));
+
+CREATE POLICY notification_log_status_forward ON notification_log
+  AS RESTRICTIVE FOR UPDATE TO app_user
+  USING (status = 'pending')
+  WITH CHECK (status IN ('sent', 'failed'));   -- الحالة تتقدم فقط: pending → sent|failed
+```
+
+**الإنفاذ:** `checks/core/generate-manifest.py` يقرأ 1.16 ثم ملحقاتها بترتيب أرقامها، ويشترط أن يتطابق نصّ كل `CREATE POLICY` في العربي والترجمة (بلا التعليقات)؛ والنصّ الإنجليزي هو ما يدخل الـ manifest. **سياسة من هذا القسم تدخل الـ manifest حين تُبنى:** PR الكود الذي يُنشئها يضيف اسمها (`table.policy`) إلى `checks/core/amendment-policies-built.json` ويعيد توليد الـ manifest في الـ PR نفسه؛ وما لم يُبنَ بعد يُذكر «pending» ولا يُطلب من Check 2 ولا Check 3. واسم يدخل ذلك الملف لا يخرج منه إلا بقرار صريح من صاحب المشروع يُسجَّل في الـ PR. والفحص المحلي `check-manifest-extraction` يرفض manifest لا يطابق الاستخراج.
 
 ### 4.2 صلاحيات جديدة (إلى §5)
 
@@ -255,7 +339,7 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 
 - `create-tenant --name --owner-email [--plan trial]`: bootstrap من القوالب + `platform_subscriptions` + `tenant_notification_settings` الافتراضية + دعوة `owner` بالبريد (`invited_by IS NULL` — دعوة bootstrap بلا داعٍ بشري، §2.11). المالك يقبل بنفسه؛ والجهة بلا مالك نشط حتى القبول (§0، §3.10 البند أ).
 - `mark-paid --tenant --until [--plan]`: يحدّث `paid_until` و`platform_subscriptions.status` إلى `active`، و`tenants.status` إلى `active`. الطريقة الوحيدة لإرجاع جهة موقوفة.
-- `suspend-unpaid`: يُجدوَل من خارج المنصة. يسرد الجهات النشطة بدور `job_runner` عبر `tenants_for_jobs` (قراءة فقط — دوره في 1.16)، ثم لكل جهة معاملة `provisioner` مستقلة: `paid_until + grace_days < current_date` بتوقيت UTC (§2.4) → `platform_subscriptions.status = suspended` و`tenants.status = suspended`، كتابتان حرجتان (`CriticalWrite`) تحت سياسات §4.1. فشل جهة لا يوقف البقية.
+- `suspend-unpaid`: يُجدوَل من خارج المنصة. يسرد الجهات النشطة بدور `job_runner` عبر `tenants_for_jobs` (قراءة فقط — دوره في 1.16)، ثم لكل جهة معاملة `provisioner` مستقلة: `paid_until + grace_days < (now() AT TIME ZONE 'UTC')::date` (§2.4) → `platform_subscriptions.status = suspended` و`tenants.status = suspended`، كتابتان حرجتان (`CriticalWrite`) تحت سياسات §4.1. فشل جهة لا يوقف البقية.
 - `announce-migration`: يُشغَّل مرة واحدة **بعد التبديل (M3)**، لا قبله ولا أثناء الاستيراد. يرسل لكل مستخدم مُرحَّل (`users.legacy_id IS NOT NULL`) بريد إعلان عادياً يحمل رابطاً إلى صفحة «نسيت كلمة السر» (§6/7). قراءة فقط — `persons` و`users` بمنح `provisioner` القائمة — ولا كتابة؛ والمُرسِل وإعداداته (`credential_ref`) في `src/Ops` لا في `src/Ops.Import`.
 - `src/Ops` يرفض التشغيل إن وجد سلسلة `migrator` في بيئته (نفس حارس Api). أمر الاستيراد في مشروع منفصل، `src/Ops.Import`، يحمل `migrator` وحده (§6).
 

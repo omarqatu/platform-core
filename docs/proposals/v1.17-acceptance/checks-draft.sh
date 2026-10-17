@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# ARCHIVED: bound to the single-document generate-manifest.py it was run with; the current generator reads the repository's documents and ignores the path below.
 # The ten checks (PLATFORM_CORE §3.6) on a database with the draft applied, two ways:
 #   1. the repository's checks as they are (the v1.16 manifest, chains and grants): which checks the draft breaks;
 #   2. the same checks with their inputs regenerated for the draft: the manifest by checks/core/generate-manifest.py

@@ -68,6 +68,20 @@ Closed by the API-path PR:
   (`Api:BasePath`, `Api:RootPaths`); the WhiteBox tests call `/api/...`. Conformance `ApiPathTests`, WhiteBox
   `ApiRoutesTests`.
 
+Closed by the manifest PR:
+- **50.** The manifest reads the amendments (approved by the project owner as a change to check inputs, this change
+  alone). `checks/core/generate-manifest.py` reads v1.16, then its amendments by number, each in Arabic and English:
+  the two must state the same `CREATE POLICY` statements (comments aside), and the English text lands in the
+  manifest. Amendment 01 §4.1 is now `CREATE POLICY` in an sql block in place of its table. An amendment policy
+  enters the manifest only once it is built — listed in `checks/core/amendment-policies-built.json` by the code PR
+  that creates it (empty today, so the manifest's policies are unchanged); a name never leaves that file except by
+  the project owner's decision. The local check `check-manifest-extraction` (CI, with a self-test of four plants)
+  fails while the manifest is not the extraction. The 17 policies were run on PostgreSQL 18.6, both ways, against
+  stand-in tables. **The record:** the amendment's own line — "تعديل المولّد شرط لأول PR كود" — was incomplete. The
+  manifest was all-or-nothing (Checks 2 and 3 require every manifest table and policy to exist), while the amendment
+  is built across several PRs; changing the generator was not enough without a way to adopt its policies one PR at a
+  time.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -349,17 +363,6 @@ Closed by the API-path PR:
 - **Origin:** Amendment 01, D9.
 - **For the document:** merge the amendments into a v2.0 when they accumulate or the second module starts. Until then
   the authority is v1.16 plus its amendments in order (`CLAUDE.md`).
-
-### 50. The manifest does not read amendments — §4.1's policies are not machine-enforced
-
-- **Origin:** Amendment 01, §4.1 (decision 5 of the project owner, 2026-10-17).
-- **The gap:** `checks/core/generate-manifest.py` extracts the manifest from one document — v1.16 (its `_EN.md`) — and
-  only from `CREATE POLICY` statements inside sql blocks (item 19). Amendment 01 states its policies as a table, so
-  none reaches `manifest.json`, and Check 2 does not compare their text.
-- **Consequence:** a table carrying policies outside the templates and absent from the manifest fails Check 2
-  ("outside the manifest, the templates alone"), so this item blocks the first code PR that adds those policies.
-- **To build (a change to check inputs — the project owner's decision):** the generator reads v1.16 and its
-  amendments in order, and the amendment states each §4.1 policy as a `CREATE POLICY` inside an sql block.
 
 ## For the next version of the document — not for the code
 
