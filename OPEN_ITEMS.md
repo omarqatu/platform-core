@@ -600,6 +600,31 @@ Closed by the password-rule PR:
 - **Amendment 01 §5.1 names no status for this case**, so this is a gap in the document rather than a conflict
   with it; whether the amendment should name it is the project owner's call.
 
+### 66. `T3_ForgotPasswordTests.TheAnswerTakesTheSameTime_…` is flaky by microseconds — loosen the test, never the code
+
+- **Origin:** the password-rule PR (OPEN_ITEMS 62), which it failed and then passed on the same commit.
+  **Decided by the project owner on 2026-10-17**, as a specification decision rather than tidying. It belongs
+  to A3, not to the PR that found it.
+- **Read item 51 first.** That is not a courtesy reference: the floor this test measures
+  (`Identity:ForgotPassword:MinimumResponseTime`) is what stops the response time from saying whether an
+  address has an account, and **this test is the only evidence the floor works**. Anyone changing the test is
+  changing the evidence for item 51, and should know that before touching it.
+- **The finding:** the test asserts each answer took **at least** the floor exactly. In CI it failed once with
+  `an address without one answered in 00:00:00.3999202, below the floor 00:00:00.4000000` — **79.8
+  microseconds** short — and passed on a re-run of the very same commit. `UniformTiming.HoldAsync` computes
+  `remaining = floor - elapsed + extra` and awaits `Task.Delay(remaining)`; `Task.Delay` is backed by a timer
+  whose due time is rounded and can return a fraction of a millisecond early relative to `Stopwatch`, and the
+  work before the handler's `Stopwatch.GetTimestamp()` does not always cover the difference. An exact
+  comparison against an inexact sleep has a microsecond-wide failure window on every run.
+- **The decision, and the trade it makes:** add **a millisecond or two of tolerance in the test**, and
+  **never in production code** — the floor itself does not move, and `UniformTiming` is not touched. This
+  costs a little precision in the evidence. It buys a signal people still trust: leaving the test flaky
+  produces noise, and noise teaches people to ignore red, which is the worse outcome. The tolerance stays far
+  below the 400 ms the test configures and far below the half-floor difference the next assertion already
+  allows, so what item 51 is actually protected by is unchanged.
+- **Scope:** A3's test, its own small PR. Not folded into a PR that happens to be red because of it — the
+  password-rule PR reported it and changed nothing, which is why this item exists.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12
