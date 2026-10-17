@@ -9,7 +9,7 @@
 
 **In force:** from the date this file is merged. The corresponding items in `OPEN_ITEMS.md`: 65–73.
 
-**What it attaches to:** PLATFORM_CORE v1.16 + Amendment 01. It adds to them, and amends only the paragraphs listed below. The chain of authority becomes: 1.16 + Amendment 01 + Amendment 02 → PROOF_SPEC v1.3 → the code → the guides.
+**What it attaches to:** PLATFORM_CORE v1.16 + Amendment 01. It adds to them, and amends only the paragraphs named below. The chain of authority becomes: 1.16 + Amendment 01 + Amendment 02 → PROOF_SPEC v1.3 → the code → the guides.
 
 **What it withdraws from Amendment 01 — the project owner's decision of 2026-10-17:**
 
@@ -39,7 +39,7 @@ Its source is the actual working file (the sheets `clients`, `settings_client`, 
 | The other users' roles | There are no other users |
 | The channels and their providers | **Email** (Gmail) and **WhatsApp** (GreenAPI). Telegram exists to alert **the administrator** (`telegram_admin_chat_id`), not the clients |
 | The reminder schedule | 1, 7, 14, 30, 60 days before expiry (`reminder_intervals`), and after expiry a repeat every 24 hours for up to 30 days (`expired_repeat_hours`, `max_expired_days`) |
-| `paid_until` for the tenant | A year from the cutover — the tenant is the project owner himself, plan `trial`, and the field carries no value that settles until the billing settles |
+| `paid_until` for the tenant | A year from the cutover — the tenant is the project owner himself, plan `trial`, and the field holds a value until the billing settles |
 | The window for seeding `notification_log` | **Moot** — there is no import (§0). And `dedup_window_days = 45` in the live system is recorded here as a reference, not as a setting to be migrated |
 
 ### The project owner's recorded decisions (2026-10-17)
@@ -83,7 +83,7 @@ Its source is the actual working file (the sheets `clients`, `settings_client`, 
 
 **Where what this amendment adds lives:** everything in it lives in `Modules.Subscriptions`, and nothing is moved to `Core`. The rule the project follows — no horizontal is built until two paid verticals ask for it — applies here: we have one vertical, so moving anything into the core today is guesswork, while extracting it later from a module that works is work of known bounds. Excepted is what is already in `Core` by an earlier decision: `INotificationSender` and `provider_accounts` (Amendment 01 §5.5, §2.6). **The candidates for extraction when a second vertical exists:** the classification, the client settings, the send window and its time zone, and the home of `clients` (§9, open since 1.16). This is to be read as a deferred decision and not an oversight, and its answer comes from the second vertical and not from our guess today.
 
-**E5's effect on the message:** the reminder's text states the amount and the currency when the cost exists and is greater than zero, and drops them with no trace when it does not. This is a condition on the data, not on the template — and the templates are settled with the message texts in the delivery PR.
+**E5's effect on the message:** the reminder's text states the amount and the currency when the cost exists and is greater than zero, and drops them with no trace when it does not. This is a condition on the **template**, not on the data: the cost is optional in the data, and the template is what drops the amount when there is none — and the templates are settled with the message texts in the delivery PR.
 
 ## §3 The new tables and columns
 
@@ -100,8 +100,7 @@ subcategories(id, category_id → categories(id), code, name_ar, name_en, is_act
 -- (Amendment 01 §2.3, 1.16 §5). Seeded by migrator, read by everyone.
 -- The platform's seeded categories (decision of 2026-10-17): domains, hosting, security, software, backup, ai, other.
 -- hosting covers servers and shared hosting together; and other prevents inventing a category for every odd case, and without it the report dies.
--- And the subcategory: a category needs one when it describes a detail (VPS, Dedicated…), so it is optional.
--- The subcategory is optional: a domain needs no detail, and servers do.
+-- The subcategory is optional: a domain needs no detail, and servers do (VPS, Dedicated…).
 ```
 
 **Why not `tenant_id NULL` — a correction to the first draft:** the first draft defined both tables with a `tenant_id NULL` column, in the `provider_accounts` pattern (Amendment 01 §2.6), so the platform's categories would sit in the `NULL` rows and a tenant would add its own beside them. That falls foul of the rule of 1.16 §3.3: `subscriptions` carries `tenant_id`, so if `categories` carried it too the FK between them would be between two `tenant_id` tables, and **Check 7 is structural** — it does not look at whether the column is nullable — so it demands a composite key; and a composite key from a row with a non-null `tenant_id` toward a row with `tenant_id IS NULL` never matches under MATCH SIMPLE, so the platform's seven categories become unreferenceable from any subscription. And an exception to §3.3 for the sake of a classification table costs far more than it is worth. The answer is the same global-catalog pattern `plans` follows: **no `tenant_id` at all**, so Check 7 does not apply in the first place.
@@ -168,15 +167,15 @@ And this does not break de-duplication: the key `UNIQUE (tenant_id, subscription
 
 An external review on 2026-10-17 pointed out that running every hour moves the burden onto the constraints rather than the code. The five items below are **not extra quality**: each one prevents the service stopping, the number being blocked, or a reminder being lost, so they enter with the delivery in stage (d) and are not deferred.
 
-**(1) An administrator alert on failure — it completes `notification_log` and adds nothing to it.** An outbox with a `failed` state was built, and nothing reads it: a log with no reader is half a mechanism. And the live system is like it: the last `whatsapp failed` row in its log sat `failed` and nobody knew. **The minimum form:** every run ends with a tally (`X sent, Y failed`), and when `Y > 0` the administrator is alerted on their channel (`telegram_admin_chat_id` exists in the live system) — Telegram or email. No dashboard and no escalation.
+**(1) An administrator alert on failure — it completes `notification_log` and adds nothing to it.** An outbox with a `failed` state was built, and nothing reads it: a log with no reader is half a mechanism. And the live system bears witness to it: the last `whatsapp` row in its log sat at `failed` and nobody knew. **The minimum form:** every run ends with a tally (`X sent, Y failed`), and when `Y > 0` the administrator is alerted on their channel (`telegram_admin_chat_id` exists in the live system) — Telegram or email. No dashboard and no escalation.
 
 **The three marked assumptions in this section have their own items** — the spacing (71), the retry ceiling (72), and the daylight-saving proof (73): **stage (d) is not built before they are settled.**
 
 **(2) Spacing between messages to the same recipient.** On 2026-09-15 the live system sent 14 messages in one minute to the same number. That is behaviour a number gets blocked for — a **stoppage** of the service, not an annoyance. On unofficial WhatsApp (GreenAPI) especially. **The minimum:** a gap of [2 s — an assumption] between two consecutive sends to the same recipient on the same channel. And this is not the grouping (§6): the grouping improves the experience, and the spacing prevents the block.
 
-**(3) One run at a time.** The `UNIQUE` does not protect against this: a run that overruns meets the next hour's run, and the `pending` row is picked up twice. **The minimum:** an advisory lock at the database level (`pg_try_advisory_lock`); a run that finds the lock taken withdraws and records it. It prevents a duplicate row, not a parallel run, and the `pending` row stays and is retried in the next run (Amendment 01 §5.5).
+**(3) One run at a time.** The `UNIQUE` does not protect against this: a run that overruns meets the next hour's run, and the `pending` row is picked up twice and sent twice — the constraint prevents a duplicate row, not a duplicate send (Amendment 01 §5.5). **The minimum:** an advisory lock at the database level (`pg_try_advisory_lock`); a run that finds the lock taken withdraws and records it.
 
-**(4) A ceiling on retries.** A `pending` row is retried in every run — and that becomes 24 attempts a day **with no ceiling** for the same message when a provider is down, which is exactly what a number gets blocked for in (2). **The minimum:** an `attempt_count` column on `notification_log`, an escalating gap between attempts, and a ceiling of [5 — an assumption] after which the status becomes `failed` for good and the alert in (1) fires.
+**(4) A ceiling on retries.** A `pending` row stays and is retried in the next run (Amendment 01 §5.5), and in every run after it — and that becomes 24 attempts a day **with no ceiling** for the same message when a provider is down, which is exactly what a number gets blocked for in (2). **The minimum:** an `attempt_count` column on `notification_log`, an escalating gap between attempts, and a ceiling of [5 — an assumption] after which the status becomes `failed` for good and the alert in (1) fires.
 
 **(5) Daylight saving, before the build.** On the night the clocks change an hour repeats or is removed, so a client's window is seen twice or not at all — a duplicated or a missed reminder, twice a year in the zones that transition. **A factual note:** `Asia/Amman` is **not** one of them — Jordan has been fixed at UTC+3 since 2022, with no transitions. But the zone is a per-client setting, and not every client will be in Jordan. **What is proven on PostgreSQL 18 before this is adopted:** computing `reminder_day` in the zone of a client that does transition (`Europe/Berlin`, say) across both transitions, and the behaviour of `send_from`/`send_to` in the repeated hour and the removed one. The proof is written against a zone where it matters, not against one where it does not.
 
@@ -250,7 +249,7 @@ CREATE POLICY client_scope ON client_notification_settings
 | --- | --- | --- | --- |
 | `subscriptions.clients.settings` | subscriptions | Editing a client's notification settings | owner, admin, operator |
 
-`subscriptions.read` covers reading: reading the categories and the client's settings needs no new permission. And entry is under the existing `subscriptions.write`. The recipe: the guide's §11, in one migration.
+Reading the categories and the client's settings needs no new permission: the existing `subscriptions.read` covers it. And entry is under the existing `subscriptions.write`. The recipe: the guide's §11, in one migration.
 
 **A note on `operator`:** they edit the settings of their assigned clients alone — that is enforced by `client_scope` (§5.1), not by the rule and not by the code.
 
@@ -264,7 +263,7 @@ Three items were discussed and their idea adopted, and they are not built in thi
 | --- | --- | --- |
 | **Appointments** (a clinic, maintenance) as a second reminder kind | No real request. `reminder_type` exists with one value, so adding the kind does not reshape the tables (§2) | The first client from outside the technical sector who asks for it |
 | **Groups** — one reminder for subscriptions that expire together | Their operational danger (the number being blocked) is addressed by the spacing in §4.3 (2), and what remains is an improvement to the experience. And grouping changes the de-duplication key and the template together | After one reminder works in production |
-| **The expense report** — what the subscriptions cost monthly, and their spread across providers | The columns are built now (§3.2), and the report is a screen and an aggregation. And it is **the strongest thing the product has**, so it is not built on data that has not been entered yet | After the manual entry and a first month of use |
+| **The expense report** — what the subscriptions cost monthly, and their spread across providers | The columns are built now (§3.2), and the report is a screen and an aggregation. And it is **the strongest thing that sets the product apart**, so it is not built on data that has not been entered yet | After the manual entry and a first month of use |
 | **A tenant adding its own categories** (the second part of E3) | Its shape is unknown: a separate table, most likely, and not a `tenant_id` on a global catalog (§3.1) | The first tenant that asks for a category outside the seven |
 
 **And what stays outside Amendments 01 and 02 together** (as Amendment 01 §7 states): the billing engine and its gateways, public self-registration, SSO, the customer portal, brands and partners, and §9, the home of the scoped entity.
