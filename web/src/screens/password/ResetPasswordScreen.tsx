@@ -4,13 +4,15 @@ import { Link, useNavigate } from 'react-router';
 import { ApiError, isAbort, request } from '../../api/client';
 import { Brand } from '../../components/Brand';
 import { ErrorAlert } from '../../components/ErrorAlert';
+import { messages as common } from '../../components/messages';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { errorMessage } from '../../i18n/apiErrors';
+import { apiErrors, errorMessage } from '../../i18n/apiErrors';
 import {
   clearPendingResetToken,
   pendingResetToken,
   subscribePendingResetToken,
 } from '../../password/pendingResetToken';
+import { isLongEnough } from '../../password/policy';
 import { FORGOT_PATH } from './ForgotPasswordScreen';
 import { messages } from './messages';
 
@@ -42,11 +44,17 @@ function Reset({ token }: { token: string | null }) {
   const [form, setForm] = useState({ newPassword: '', confirmPassword: '' });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const ids = { newPassword: useId(), confirmPassword: useId(), error: useId() };
+  const ids = { newPassword: useId(), confirmPassword: useId(), rule: useId(), error: useId() };
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!token) return;
+    // The rule, before the round trip (OPEN_ITEMS 62). The server checks it too and decides; this only spares
+    // the user a journey, and spends none of the link's single use.
+    if (!isLongEnough(form.newPassword)) {
+      setError(intl.formatMessage(apiErrors.password_too_short));
+      return;
+    }
     if (form.newPassword !== form.confirmPassword) {
       setForm((f) => ({ ...f, confirmPassword: '' }));
       setError(intl.formatMessage(messages.mismatch));
@@ -73,7 +81,9 @@ function Reset({ token }: { token: string | null }) {
     }
   };
 
-  const field = (name: keyof typeof form, label: MessageDescriptor) => (
+  // `rule` puts the password rule under the field that must satisfy it, and names it in aria-describedby so a
+  // screen reader hears it with the field rather than only after a refusal.
+  const field = (name: keyof typeof form, label: MessageDescriptor, rule = false) => (
     <p>
       <label htmlFor={ids[name]}>{intl.formatMessage(label)}</label>
       <input
@@ -84,8 +94,13 @@ function Reset({ token }: { token: string | null }) {
         required
         value={form[name]}
         onChange={(e) => setForm((f) => ({ ...f, [name]: e.target.value }))}
-        aria-describedby={error ? ids.error : undefined}
+        aria-describedby={[rule ? ids.rule : null, error ? ids.error : null].filter(Boolean).join(' ') || undefined}
       />
+      {rule && (
+        <span id={ids.rule} className="field-hint">
+          {intl.formatMessage(common.passwordRule)}
+        </span>
+      )}
     </p>
   );
 
@@ -108,7 +123,7 @@ function Reset({ token }: { token: string | null }) {
           <p>{intl.formatMessage(messages.resetIntro)}</p>
           <ErrorAlert message={error} id={ids.error} />
           <form onSubmit={onSubmit}>
-            {field('newPassword', messages.newPassword)}
+            {field('newPassword', messages.newPassword, true)}
             {field('confirmPassword', messages.confirmPassword)}
             <button type="submit" disabled={pending}>
               {intl.formatMessage(pending ? messages.resetSubmitting : messages.resetSubmit)}

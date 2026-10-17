@@ -7,7 +7,7 @@
 
 ## §0 Status and authority
 
-**In force:** from the date this file is merged. The corresponding items in `OPEN_ITEMS.md`: 65–73.
+**In force:** from the date this file is merged. The corresponding items in `OPEN_ITEMS.md`: 67–75.
 
 **What it attaches to:** PLATFORM_CORE v1.16 + Amendment 01. It adds to them, and amends only the paragraphs named below. The chain of authority becomes: 1.16 + Amendment 01 + Amendment 02 → PROOF_SPEC v1.3 → the code → the guides.
 
@@ -27,7 +27,7 @@
 
 **A substantive correction to the data model (§1):** Amendment 01 §6/3 wrote "each live account = a tenant". That is wrong: the three accounts in the live system are **clients**, not tenants. The truth: **one tenant** (Al-Amin for Technologies), **four clients** inside it, and one `owner` (the project owner) as **one member**.
 
-**Two structural corrections to the text of this amendment, by the project owner's decision of 2026-10-17 after a first review:** its first draft defined `categories`/`subcategories` with a `tenant_id NULL` column, and defined `client_notification_settings` with a `client_id` column. The first breaks the rule of 1.16 §3.3 (Check 7 is structural: any FK whose two ends carry `tenant_id` must be composite — and a composite FK toward a `tenant_id IS NULL` row never matches, so the platform's categories become unusable). The second declares `client_scope` on a table that does not carry the column the template reads, so the policy is never created and Check 8 never sees it. What is approved here is the corrected text (§3.1, §3.3), and items 65 and 66 in `OPEN_ITEMS.md`.
+**Two structural corrections to the text of this amendment, by the project owner's decision of 2026-10-17 after a first review:** its first draft defined `categories`/`subcategories` with a `tenant_id NULL` column, and defined `client_notification_settings` with a `client_id` column. The first breaks the rule of 1.16 §3.3 (Check 7 is structural: any FK whose two ends carry `tenant_id` must be composite — and a composite FK toward a `tenant_id IS NULL` row never matches, so the platform's categories become unusable). The second declares `client_scope` on a table that does not carry the column the template reads, so the policy is never created and Check 8 never sees it. What is approved here is the corrected text (§3.1, §3.3), and items 67 and 68 in `OPEN_ITEMS.md`.
 
 ## §1 The inventory — what was extracted from the live system
 
@@ -48,7 +48,7 @@ Its source is the actual working file (the sheets `clients`, `settings_client`, 
 | --- | --- |
 | E1 | **Per-client settings** — `settings_client` in the live system is an existing feature, and it is not lost in the move (§3.3) |
 | E2 | **The send window and the time zone are to be designed** — they exist in no document until now (§4) |
-| E3 | **Classification is two independent columns:** a category and a subcategory, a closed catalog the platform manages (§3.1). **A tenant adding its own categories is deferred** — see §3.1 and item 67 |
+| E3 | **Classification is two independent columns:** a category and a subcategory, a closed catalog the platform manages (§3.1). **A tenant adding its own categories is deferred** — see §3.1 and item 69 |
 | E4 | **The subscription's financial and operational fields are to be built:** the provider, the cost, the currency, the billing cycle, auto-renewal, the login link (§3.2) |
 | E5 | **The notice states the expense when there is one** — a reminder with no amount is not a reminder, and the cost is **optional**: in the live system the `cloudflare` subscription (management) costs zero and still needs a reminder |
 | E6 | **The engine is general: a reminder by date**, and the subscription is one kind of it (§2). Appointments (a clinic, maintenance) wait for a real request, and the door is open with no retrofit |
@@ -105,7 +105,7 @@ subcategories(id, category_id → categories(id), code, name_ar, name_en, is_act
 
 **Why not `tenant_id NULL` — a correction to the first draft:** the first draft defined both tables with a `tenant_id NULL` column, in the `provider_accounts` pattern (Amendment 01 §2.6), so the platform's categories would sit in the `NULL` rows and a tenant would add its own beside them. That falls foul of the rule of 1.16 §3.3: `subscriptions` carries `tenant_id`, so if `categories` carried it too the FK between them would be between two `tenant_id` tables, and **Check 7 is structural** — it does not look at whether the column is nullable — so it demands a composite key; and a composite key from a row with a non-null `tenant_id` toward a row with `tenant_id IS NULL` never matches under MATCH SIMPLE, so the platform's seven categories become unreferenceable from any subscription. And an exception to §3.3 for the sake of a classification table costs far more than it is worth. The answer is the same global-catalog pattern `plans` follows: **no `tenant_id` at all**, so Check 7 does not apply in the first place.
 
-**And its consequence: E3 is built in part, and its second part is deferred explicitly.** E3 reads "a closed catalog the platform manages **with the tenant able to add its own categories**". What is built here is the first part alone. **A tenant adding its own categories is deferred** until we know its shape — a separate table for the tenant's categories, most likely, and not a `tenant_id` column on this one. The seven categories serve the first vertical, and the shape of what a tenant adds is decided by the first real request. **This is to be read as a deferral and not an oversight** (item 67), and it is not built today on a guess at its shape.
+**And its consequence: E3 is built in part, and its second part is deferred explicitly.** E3 reads "a closed catalog the platform manages **with the tenant able to add its own categories**". What is built here is the first part alone. **A tenant adding its own categories is deferred** until we know its shape — a separate table for the tenant's categories, most likely, and not a `tenant_id` column on this one. The seven categories serve the first vertical, and the shape of what a tenant adds is decided by the first real request. **This is to be read as a deferral and not an oversight** (item 69), and it is not built today on a guess at its shape.
 
 ### 3.2 Columns on `subscriptions` (E4, E5, E6)
 
@@ -137,7 +137,7 @@ client_notification_settings(id, tenant_id, scope_ref_id NOT NULL, channel, is_e
 -- do_not_disturb NOT NULL: no sending to this client at all (C004 in the live system).
 ```
 
-**Why `scope_ref_id` and not `client_id` — a correction to the first draft:** the first draft named the column `client_id` and wrote in its comment "`client_scope` (scope_ref_id = client_id)". The `client_scope` template in 1.16 §4.8 reads `<t>.scope_ref_id` literally, so the policy declared in §5.1 refers to a column that does not exist and is never created; and **Check 8 does not catch it**, because it demands the template on the tables that **carry** the column, and this one does not — so it passes silently. The practical result: an `operator` in `assigned` mode reads and edits the settings of any client in the tenant. The precedent in the schema is clear: `subscriptions_client_fkey FOREIGN KEY (tenant_id, scope_ref_id) REFERENCES clients(tenant_id, id)`, which is what the text above follows. The Check 8 gap itself is a separate item (item 66).
+**Why `scope_ref_id` and not `client_id` — a correction to the first draft:** the first draft named the column `client_id` and wrote in its comment "`client_scope` (scope_ref_id = client_id)". The `client_scope` template in 1.16 §4.8 reads `<t>.scope_ref_id` literally, so the policy declared in §5.1 refers to a column that does not exist and is never created; and **Check 8 does not catch it**, because it demands the template on the tables that **carry** the column, and this one does not — so it passes silently. The practical result: an `operator` in `assigned` mode reads and edits the settings of any client in the tenant. The precedent in the schema is clear: `subscriptions_client_fkey FOREIGN KEY (tenant_id, scope_ref_id) REFERENCES clients(tenant_id, id)`, which is what the text above follows. The Check 8 gap itself is a separate item (item 68).
 
 **Resolution at send time:** the client's setting first, then the tenant's (`tenant_notification_settings`), then the seeded default in `provider_accounts`. Three layers, in the same pattern as Amendment 01 §2.6.
 
@@ -253,7 +253,7 @@ Reading the categories and the client's settings needs no new permission: the ex
 
 **A note on `operator`:** they edit the settings of their assigned clients alone — that is enforced by `client_scope` (§5.1), not by the rule and not by the code.
 
-**And a permission dropped from the first draft:** it carried `subscriptions.categories.manage` (adding and editing a tenant's categories). It fell with the deferral of the second part of E3 (§3.1): no application role writes a global catalog, so the permission governs nothing. It returns with the separate table if that is built (item 67).
+**And a permission dropped from the first draft:** it carried `subscriptions.categories.manage` (adding and editing a tenant's categories). It fell with the deferral of the second part of E3 (§3.1): no application role writes a global catalog, so the permission governs nothing. It returns with the separate table if that is built (item 69).
 
 ## §6 What is deferred explicitly
 

@@ -2,7 +2,9 @@ import { useId, useState, type FormEvent } from 'react';
 import { useIntl, type MessageDescriptor } from 'react-intl';
 import { ApiError, isAbort, request } from '../../api/client';
 import { ErrorAlert } from '../../components/ErrorAlert';
-import { errorMessage } from '../../i18n/apiErrors';
+import { messages as common } from '../../components/messages';
+import { apiErrors, errorMessage } from '../../i18n/apiErrors';
+import { isLongEnough } from '../../password/policy';
 import { messages } from './messages';
 import './PasswordScreens.css';
 
@@ -28,10 +30,16 @@ export function ChangePasswordScreen() {
   const [pending, setPending] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const ids = { currentPassword: useId(), newPassword: useId(), confirmPassword: useId(), error: useId() };
+  const ids = { currentPassword: useId(), newPassword: useId(), confirmPassword: useId(), rule: useId(), error: useId() };
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    // The rule, before the round trip (OPEN_ITEMS 62). The server checks it too and decides; catching it here
+    // also means a password it would refuse costs no attempt against the limiter of §5.2.
+    if (!isLongEnough(form.newPassword)) {
+      setError(intl.formatMessage(apiErrors.password_too_short));
+      return;
+    }
     if (form.newPassword !== form.confirmPassword) {
       setForm((f) => ({ ...f, confirmPassword: '' }));
       setError(intl.formatMessage(messages.mismatch));
@@ -58,7 +66,9 @@ export function ChangePasswordScreen() {
     }
   };
 
-  const field = (name: keyof typeof form, label: MessageDescriptor, autoComplete: string) => (
+  // `rule` puts the password rule under the field that must satisfy it, and names it in aria-describedby so a
+  // screen reader hears it with the field rather than only after a refusal.
+  const field = (name: keyof typeof form, label: MessageDescriptor, autoComplete: string, rule = false) => (
     <p>
       <label htmlFor={ids[name]}>{intl.formatMessage(label)}</label>
       <input
@@ -69,8 +79,13 @@ export function ChangePasswordScreen() {
         required
         value={form[name]}
         onChange={(e) => setForm((f) => ({ ...f, [name]: e.target.value }))}
-        aria-describedby={error ? ids.error : undefined}
+        aria-describedby={[rule ? ids.rule : null, error ? ids.error : null].filter(Boolean).join(' ') || undefined}
       />
+      {rule && (
+        <span id={ids.rule} className="field-hint">
+          {intl.formatMessage(common.passwordRule)}
+        </span>
+      )}
     </p>
   );
 
@@ -86,7 +101,7 @@ export function ChangePasswordScreen() {
           <ErrorAlert message={error} id={ids.error} />
           <form onSubmit={onSubmit}>
             {field('currentPassword', messages.currentPassword, 'current-password')}
-            {field('newPassword', messages.newPassword, 'new-password')}
+            {field('newPassword', messages.newPassword, 'new-password', true)}
             {field('confirmPassword', messages.confirmPassword, 'new-password')}
             <button type="submit" className="btn" disabled={pending}>
               {intl.formatMessage(pending ? messages.changeSubmitting : messages.changeSubmit)}
