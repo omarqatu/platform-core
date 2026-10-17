@@ -46,7 +46,7 @@
 | D4 | **تدقيق الصفوف المرحَّلة — محسوم 2026-10-17:** **لا قيد `audit_log` للاستيراد**؛ `migrator` لا يصير كاتباً رابعاً (1.16 §7). السجل تقرير أعداد الصفوف الذي يكتبه الأمر خارج قاعدة البيانات، و`legacy_id` للتتبع (§6) | — (§7 كما هو) | 46 |
 | D5 | **OPEN_ITEMS 27 يُؤجَّل:** إعادة القياس بعد 10 جهات حقيقية؛ العتبة والبديلان ثابتان | — | 27 |
 | D6 | **استعادة كلمة السر وتغييرها** بثلاثة مسارات ووحدتَي عمل (authenticator ثم app_user)، مع `security_stamp` يُنهي كل الجلسات عند تغيير كلمة السر. **يغلق OPEN_ITEMS 36 جزئياً:** نسخة من الكوكي تبقى صالحة بعد الخروج | §2.1، §2.2، §3، §5 — **يعدّل §4.3-أ/2، §4.3-أ/4، §4.3-ب** (§0) | 47 (إحالة إلى 36 و16) |
-| D7 | **سجل اشتراك المنصة (الطبقة 1):** خطط بلا أسعار، اشتراك لكل جهة بـ `paid_until`، إيقاف بأمر تشغيلي مجدول، قراءة للمالك. المحرك والبوابات مؤجلان؛ يُبنيان فوق هذا لا بدله | §2.3، §2.4، §3، §4، §5 | 48 |
+| D7 | **سجل اشتراك المنصة (الطبقة 1):** خطط بلا أسعار، اشتراك لكل جهة بـ `paid_until`، إيقاف بأمر تشغيلي مجدول، قراءة للمالك والـ admin (`core.billing.read`، §4.2). المحرك والبوابات مؤجلان؛ يُبنيان فوق هذا لا بدله | §2.3، §2.4، §3، §4، §5 | 48 |
 | D8 | **OPEN_ITEMS 25 مؤجّل** حتى الوحدة الثانية | — | 25 |
 | D9 | **الملحق مستقل** عن 1.16؛ الدمج في 2.0 حين تتراكم الملحقات أو تبدأ الوحدة الثانية | سلسلة السلطة (§0) | 49 |
 
@@ -76,8 +76,9 @@ password_reset_tokens(id, user_id → users, token_hash, requested_at, expires_a
 ### 2.4 `platform_subscriptions` — لكل جهة (إلى §4.1)
 
 ```sql
-platform_subscriptions(id, tenant_id, plan_code → plans(code), status, period_start, paid_until, grace_days, created_at, updated_at,
+platform_subscriptions(id, tenant_id, plan_code → plans(code), status, period_start, paid_until date, grace_days, created_at, updated_at,
   UNIQUE (tenant_id))                       -- صف واحد لكل جهة في هذه المرحلة
+-- paid_until تاريخ (date) بتوقيت UTC؛ suspend-unpaid يقارن بـ current_date بتوقيت UTC (§5.4). موعد بلا منطقة زمنية خلل ينتظر جهة في بلد آخر.
 -- status ∈ {active, suspended} — المهلة يحملها grace_days، فلا حالة وسيطة. القالب القياسي.
 -- يُنشأ في bootstrap (provisioner) بخطة trial وpaid_until = [اليوم + 30] — افتراض.
 -- تتغير paid_until/status بالإجراء التشغيلي (provisioner) وحده: mark-paid وsuspend-unpaid (§5.4).
@@ -98,7 +99,7 @@ provider_accounts(id, tenant_id NULL, channel, provider_code, sender_id, credent
 -- في هذه المرحلة تُزرع صفوف المنصة فقط (migrator). صفوف الجهات: باب محجوز، لا مسار يكتبها.
 ```
 
-لماذا: `app_user` يقرأ هذا الجدول في كل معاملة إرسال؛ لو حمل مفاتيح المزوّدين لكان كل عضو جهة على بعد ثغرة واحدة من مفاتيح المنصة. المرجع إلى الإعدادات يُبقي السرّ حيث تعيش سلاسل الاتصال. **`NULLS NOT DISTINCT`:** بدونه لا يمنع `UNIQUE` صفّين للمنصة لنفس القناة، لأن `NULL` لا يساوي `NULL`. **سياسة القراءة** تحتاج صياغة خارج القالب: `tenant_id = app.tenant_id OR tenant_id IS NULL` — سياسة مُسمّاة تدخل الـ manifest (Check 2).
+لماذا: `app_user` يقرأ هذا الجدول في كل معاملة إرسال؛ لو حمل مفاتيح المزوّدين لكان كل عضو جهة على بعد ثغرة واحدة من مفاتيح المنصة. المرجع إلى الإعدادات يُبقي السرّ حيث تعيش سلاسل الاتصال. **`NULLS NOT DISTINCT`:** بدونه لا يمنع `UNIQUE` صفّين للمنصة لنفس القناة، لأن `NULL` لا يساوي `NULL`. **سياسة القراءة** تحتاج صياغة خارج القالب: `tenant_id = app.tenant_id OR tenant_id IS NULL` — سياسة مُسمّاة يجب أن تدخل الـ manifest (Check 2)، ولا تصله اليوم (§4.1، OPEN_ITEMS 50).
 
 ### 2.7 `notification_log` — لكل جهة ومُنطَّق (إلى الوحدة، بجوار `subscriptions`)
 
@@ -180,7 +181,7 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 
 ## §4 السياسات الجديدة والصلاحيات الجديدة
 
-### 4.1 سياسات خارج القالبين (تدخل الـ manifest لـ Check 2)
+### 4.1 سياسات خارج القالبين (يجب أن تدخل الـ manifest لـ Check 2، ولا تصله اليوم — OPEN_ITEMS 50)
 
 كل سياسة بـ `FOR` و`TO` صريحين و`NULLIF` على `current_setting`. الأسماء مبدئية.
 
@@ -250,11 +251,11 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 
 ### 5.4 الإجراء التشغيلي (D2)
 
-`src/Ops` — مشروع يحمل سلسلتَي `provisioner` و`job_runner` وحدهما، بلا مسار HTTP. **هو المسار الثالث لـ `provisioner` (يعدّل §4.4/3 و§4.4/5 — §0):** جهة واحدة لكل معاملة بـ `app.tenant_id` مضبوطاً عليها، وكل أمر يكتب `audit_log` في نفس معاملته كأي عملية `provisioner` (§4.4/4). أوامره:
+`src/Ops` — مشروع يحمل سلسلتَي `provisioner` و`job_runner` وحدهما، بلا مسار HTTP. **هو المسار الثالث لـ `provisioner` (يعدّل §4.4/3 و§4.4/5 — §0):** جهة واحدة لكل معاملة بـ `app.tenant_id` مضبوطاً عليها، وكل أمر فيه كتابة يسجّل قيد `audit_log` في نفس معاملته كأي عملية `provisioner` (§4.4/4)؛ وما لا يكتب لا يسجّل. أوامره:
 
 - `create-tenant --name --owner-email [--plan trial]`: bootstrap من القوالب + `platform_subscriptions` + `tenant_notification_settings` الافتراضية + دعوة `owner` بالبريد (`invited_by IS NULL` — دعوة bootstrap بلا داعٍ بشري، §2.11). المالك يقبل بنفسه؛ والجهة بلا مالك نشط حتى القبول (§0، §3.10 البند أ).
 - `mark-paid --tenant --until [--plan]`: يحدّث `paid_until` و`platform_subscriptions.status` إلى `active`، و`tenants.status` إلى `active`. الطريقة الوحيدة لإرجاع جهة موقوفة.
-- `suspend-unpaid`: يُجدوَل من خارج المنصة. يسرد الجهات النشطة بدور `job_runner` عبر `tenants_for_jobs` (قراءة فقط — دوره في 1.16)، ثم لكل جهة معاملة `provisioner` مستقلة: `paid_until + grace_days < today` → `platform_subscriptions.status = suspended` و`tenants.status = suspended`، كتابتان حرجتان (`CriticalWrite`) تحت سياسات §4.1. فشل جهة لا يوقف البقية.
+- `suspend-unpaid`: يُجدوَل من خارج المنصة. يسرد الجهات النشطة بدور `job_runner` عبر `tenants_for_jobs` (قراءة فقط — دوره في 1.16)، ثم لكل جهة معاملة `provisioner` مستقلة: `paid_until + grace_days < current_date` بتوقيت UTC (§2.4) → `platform_subscriptions.status = suspended` و`tenants.status = suspended`، كتابتان حرجتان (`CriticalWrite`) تحت سياسات §4.1. فشل جهة لا يوقف البقية.
 - `announce-migration`: يُشغَّل مرة واحدة **بعد التبديل (M3)**، لا قبله ولا أثناء الاستيراد. يرسل لكل مستخدم مُرحَّل (`users.legacy_id IS NOT NULL`) بريد إعلان عادياً يحمل رابطاً إلى صفحة «نسيت كلمة السر» (§6/7). قراءة فقط — `persons` و`users` بمنح `provisioner` القائمة — ولا كتابة؛ والمُرسِل وإعداداته (`credential_ref`) في `src/Ops` لا في `src/Ops.Import`.
 - `src/Ops` يرفض التشغيل إن وجد سلسلة `migrator` في بيئته (نفس حارس Api). أمر الاستيراد في مشروع منفصل، `src/Ops.Import`، يحمل `migrator` وحده (§6).
 
@@ -278,7 +279,7 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 
 1. **بيانات لا كود** (D1). المدخل تصدير CSV/JSON من النظام الحي يُعطى للأمر من خارج المستودع؛ لا بيانات إنتاج في المستودع. الأمر يُشغَّل على الإنتاج مرة واحدة، بعد التجربة الجافة (8).
 2. **كل مفتاح وطابع من التطبيق:** يُكتبان صراحةً في كل صف؛ لا `DEFAULT` ولا `RETURNING`؛ `legacy_id` يُحفظ للمطابقة.
-3. **خريطة ثابتة:** حساب حي → `tenants` + `platform_subscriptions`(active، `paid_until` = [—]) + `tenant_notification_settings`؛ مستخدم حي → `persons` + `users` (`security_stamp` جديد) + `user_password_credentials` (في حالة «بلا كلمة سر» — §2.12 — فتبقى `password_self_update` صالحة ولا يحتاج `provisioner` منحاً جديداً) + `memberships`(**active مباشرةً، بلا دعوة** — §0، مبدأ الموافقة) + `membership_roles`(owner للأول، [—] للبقية) + `membership_scope`(`all` ما لم يُحدد غيره — غياب الصف خطأ صاخب في 1.16)؛ عميل حي → `clients`؛ اشتراك حي → `subscriptions`(active).
+3. **خريطة ثابتة:** حساب حي → `tenants` + `platform_subscriptions`(active، `paid_until` = [—]) + `tenant_notification_settings`؛ مستخدم حي → `persons` + `users` (`security_stamp` جديد) + `user_password_credentials` (في حالة «بلا كلمة سر» — §2.12 — فتبقى `password_self_update` صالحة ولا يحتاج `provisioner` منحاً جديداً) + `memberships`(**active مباشرةً، بلا دعوة** — §0، مبدأ الموافقة) + `membership_roles`(المالك يُسمّى صراحةً في ملف التصدير، لا يُستنتج من الترتيب: [—]؛ وأدوار البقية [—]) + `membership_scope`(`all` ما لم يُحدد غيره — غياب الصف خطأ صاخب في 1.16)؛ عميل حي → `clients`؛ اشتراك حي → `subscriptions`(active).
 4. **ينتهي بفحوص عدد الصفوف** لكل جدول مقابل التصدير، وبفحص: لكل `subscriptions` صف `clients` بنفس `tenant_id` (الـ FK المركّب يضمنه، والفحص يسمّيه).
 5. **التدقيق** حسب D4: **لا قيد `audit_log` للاستيراد** — `migrator` ليس كاتب تدقيق (1.16 §7). السجل تقرير أعداد الصفوف الذي يكتبه الأمر خارج قاعدة البيانات (البند 4)، و`legacy_id` للتتبع.
 6. **لا إرسال أثناء الترحيل:** `notification_log` يُزرع بصفوف `sent` لما أرسله النظام القديم خلال آخر [30] يوماً — وإلا أرسلت المنصة تذكيراً ثانياً أول ليلة. هذا الصف هو الحامي الوحيد من التكرار.
@@ -307,7 +308,7 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 2. **أعمار وحدود** (كلها افتراضات موسومة): رمز الاستعادة 30 د؛ حدّ الدخول 10 محاولات/15 د؛ مهلة المزوّد 5 ث؛ `grace_days` الافتراضي [7]؛ `trial` [30] يوماً.
 3. **القوالب**: `core.billing.read` للـ admin أيضاً أم للـ owner وحده؟
 4. **`subscriptions.clients.write` للـ operator**: يُنشئ عملاء أم يكتب اشتراكات فقط؟
-5. **الإرسال داخل المعاملة** (§5.5): مقبول أن يطول COMMIT بمقدار مهلة المزوّد؟ البديل (outbox + مهمة إرسال) أصحّ هندسياً وأثقل بناءً — أقترحه للملحق 02 إن ظهرت مشكلة.
+5. **الإرسال داخل المعاملة** (§5.5): مقبول أن يطول COMMIT بمقدار مهلة المزوّد؟ البديل (outbox + مهمة إرسال) أصحّ هندسياً وأثقل بناءً — اقتُرح للملحق 02 إن ظهرت مشكلة.
 6. **`provider_accounts` للمنصة**: يزرعه migrator (ثابت في الترحيل) أم الإجراء التشغيلي؟
 
 **الإجابات المعتمدة:**
@@ -321,5 +322,5 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 
 ### ما يلي اعتماد الملحق
 
-- PR وثائق: `docs/PLATFORM_CORE_AMENDMENT_01.md` + `_EN.md`، سطر السلطة في `CLAUDE.md`، بنود `OPEN_ITEMS.md` بأرقامك.
+- PR وثائق: `docs/PLATFORM_CORE_AMENDMENT_01.md` + `_EN.md`، سطر السلطة في `CLAUDE.md`، بنود `OPEN_ITEMS.md` بأرقامها في §1.
 - ثم PRs الكود بترتيب الخارطة، كلٌّ على فرعه، وكل ترحيل يعيد توليد `docs/schema.sql` ويحدّث `DATABASE.md`.
