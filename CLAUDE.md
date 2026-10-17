@@ -11,7 +11,8 @@ layer, §18 rules). For anything touching the schema, `docs/DATABASE.md`. The wh
 
 1. `docs/PLATFORM_CORE_v1_16_FROZEN.md` (Arabic, authoritative; `_EN.md` is a translation) — the architecture,
    **plus its amendments in order**: `docs/PLATFORM_CORE_AMENDMENT_01.md` (Arabic, authoritative; `_EN.md`). An
-   amendment adds to 1.16 and never edits it; a conflict between the two is an error in the amendment.
+   amendment adds to 1.16 and edits only the paragraphs its §0 names as amended; any other conflict between the two
+   is an error in the amendment.
 2. `docs/PROOF_SPEC_v1_3.md` (Arabic, authoritative; `_EN.md`) — tasks and acceptance criteria.
 3. The code. 4. The guides.
 
@@ -29,7 +30,7 @@ Anything in neither document → **ask before building it**. No business logic b
 - **Never read scope or permissions from a request, header, query, token or cookie.** The second-axis variables
   (`app.membership_id`, `app.scope_all`, `app.can_manage_scope`, `app.can_manage_members`) are set only in
   `src/Core/Data/ScopeResolver.cs` and `src/Core/Data/SystemContext.cs` (Check 9). The cookie holds `user_id` and
-  `tenant_id` only.
+  `tenant_id` only — plus the security stamp once Amendment 01 §2.1 is built.
 - **No `BYPASSRLS` except `migrator`. No `SECURITY DEFINER` anywhere.**
 - **Every policy has explicit `FOR` and `TO`;** a narrowing condition is `AS RESTRICTIVE`; every `current_setting`
   read is `(SELECT NULLIF(current_setting('app.x', true), '')::type)`.
