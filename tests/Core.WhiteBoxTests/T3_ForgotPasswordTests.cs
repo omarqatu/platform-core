@@ -45,7 +45,11 @@ public class T3_ForgotPasswordTests(WhiteBoxFixture fixture)
 
     private const string Floor = "00:00:00.4000000";
 
-    private async Task<long> UnusedTokensAsync(string email)
+    private Task<long> UnusedTokensAsync(string email) => TokensAsync(email, "AND t.used_at IS NULL");
+
+    private Task<long> AllTokensAsync(string email) => TokensAsync(email, "");
+
+    private async Task<long> TokensAsync(string email, string liveOnly)
     {
         await using var connection = new NpgsqlConnection(fixture.MigratorConnectionString);
         await connection.OpenAsync();
@@ -54,8 +58,8 @@ public class T3_ForgotPasswordTests(WhiteBoxFixture fixture)
             SELECT count(*) FROM password_reset_tokens t
               JOIN users u ON u.id = t.user_id
               JOIN persons p ON p.id = u.person_id
-             WHERE lower(btrim(p.email)) = @e AND t.used_at IS NULL
-            """, connection);
+             WHERE lower(btrim(p.email)) = @e
+            """ + liveOnly, connection);
         command.Parameters.AddWithValue("e", email);
         return (long)(await command.ExecuteScalarAsync())!;
     }
@@ -91,8 +95,7 @@ public class T3_ForgotPasswordTests(WhiteBoxFixture fixture)
             await using var host = api;
             using var client = api.CreateClient();
 
-            var before = await UnusedTokensAsync(Known);
-            var unknownBefore = await UnusedTokensAsync(Unknown);
+            var before = await AllTokensAsync(Known);
 
             var known = await client.PostAsJsonAsync(Forgot, new { email = Known });
             var unknown = await client.PostAsJsonAsync(Forgot, new { email = Unknown });
@@ -104,9 +107,13 @@ public class T3_ForgotPasswordTests(WhiteBoxFixture fixture)
             // No session is issued, and nothing is set on the browser (§5.1).
             Assert.False(known.Headers.Contains("Set-Cookie"));
 
-            // The known address gained exactly one live token; the unknown one gained nothing at all.
-            Assert.Equal(before + 1, await UnusedTokensAsync(Known));
-            Assert.Equal(unknownBefore, await UnusedTokensAsync(Unknown));
+            // The known address gained a token, and exactly one of its tokens is live: a request supersedes
+            // whatever was outstanding, so live tokens never accumulate however many requests came before —
+            // which is why the count of live ones is asserted absolutely and the total relatively.
+            Assert.Equal(before + 1, await AllTokensAsync(Known));
+            Assert.Equal(1, await UnusedTokensAsync(Known));
+            // The unknown address got nothing at all: not a live token, not a consumed one, no row.
+            Assert.Equal(0, await AllTokensAsync(Unknown));
 
             // One message, to that address, on the email channel — and the second request produced none.
             await Eventually(() => sender.Sent, m => m.Count >= 1);
