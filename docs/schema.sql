@@ -295,6 +295,27 @@ ALTER TABLE ONLY public.persons FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.persons OWNER TO migrator;
 
 --
+-- Name: provider_accounts; Type: TABLE; Schema: public; Owner: migrator
+--
+
+CREATE TABLE public.provider_accounts (
+    id public.app_id NOT NULL,
+    tenant_id uuid,
+    channel text NOT NULL,
+    provider_code text NOT NULL,
+    sender_id text NOT NULL,
+    credential_ref text NOT NULL,
+    is_active boolean NOT NULL,
+    created_at public.app_ts NOT NULL,
+    CONSTRAINT provider_accounts_channel_check CHECK ((channel = ANY (ARRAY['email'::text, 'whatsapp'::text, 'sms'::text, 'telegram'::text])))
+);
+
+ALTER TABLE ONLY public.provider_accounts FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE public.provider_accounts OWNER TO migrator;
+
+--
 -- Name: role_permissions; Type: TABLE; Schema: public; Owner: migrator
 --
 
@@ -605,6 +626,22 @@ ALTER TABLE ONLY public.persons
 
 
 --
+-- Name: provider_accounts provider_accounts_pkey; Type: CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.provider_accounts
+    ADD CONSTRAINT provider_accounts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: provider_accounts provider_accounts_tenant_channel_key; Type: CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.provider_accounts
+    ADD CONSTRAINT provider_accounts_tenant_channel_key UNIQUE NULLS NOT DISTINCT (tenant_id, channel);
+
+
+--
 -- Name: role_permissions role_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: migrator
 --
 
@@ -837,6 +874,14 @@ ALTER TABLE ONLY public.password_reset_tokens
 
 ALTER TABLE ONLY public.permissions
     ADD CONSTRAINT permissions_module_fkey FOREIGN KEY (module_id) REFERENCES public.modules(id);
+
+
+--
+-- Name: provider_accounts provider_accounts_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.provider_accounts
+    ADD CONSTRAINT provider_accounts_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
 
 
 --
@@ -1320,6 +1365,13 @@ CREATE POLICY person_visible_via_membership ON public.persons FOR SELECT TO app_
 ALTER TABLE public.persons ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: persons persons_authenticator_read; Type: POLICY; Schema: public; Owner: migrator
+--
+
+CREATE POLICY persons_authenticator_read ON public.persons FOR SELECT TO authenticator USING (true);
+
+
+--
 -- Name: persons persons_provisioner_insert; Type: POLICY; Schema: public; Owner: migrator
 --
 
@@ -1331,6 +1383,26 @@ CREATE POLICY persons_provisioner_insert ON public.persons FOR INSERT TO provisi
 --
 
 CREATE POLICY persons_provisioner_select ON public.persons FOR SELECT TO provisioner USING (true);
+
+
+--
+-- Name: provider_accounts; Type: ROW SECURITY; Schema: public; Owner: migrator
+--
+
+ALTER TABLE public.provider_accounts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: provider_accounts provider_accounts_authenticator_read; Type: POLICY; Schema: public; Owner: migrator
+--
+
+CREATE POLICY provider_accounts_authenticator_read ON public.provider_accounts FOR SELECT TO authenticator USING ((tenant_id IS NULL));
+
+
+--
+-- Name: provider_accounts provider_accounts_read; Type: POLICY; Schema: public; Owner: migrator
+--
+
+CREATE POLICY provider_accounts_read ON public.provider_accounts FOR SELECT TO app_user USING (((tenant_id IS NULL) OR (tenant_id = ( SELECT (NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid AS "nullif"))));
 
 
 --
@@ -1768,6 +1840,28 @@ GRANT SELECT ON TABLE public.permissions TO provisioner;
 
 GRANT SELECT ON TABLE public.persons TO app_user;
 GRANT SELECT,INSERT ON TABLE public.persons TO provisioner;
+
+
+--
+-- Name: COLUMN persons.id; Type: ACL; Schema: public; Owner: migrator
+--
+
+GRANT SELECT(id) ON TABLE public.persons TO authenticator;
+
+
+--
+-- Name: COLUMN persons.email; Type: ACL; Schema: public; Owner: migrator
+--
+
+GRANT SELECT(email) ON TABLE public.persons TO authenticator;
+
+
+--
+-- Name: TABLE provider_accounts; Type: ACL; Schema: public; Owner: migrator
+--
+
+GRANT SELECT ON TABLE public.provider_accounts TO app_user;
+GRANT SELECT ON TABLE public.provider_accounts TO authenticator;
 
 
 --
