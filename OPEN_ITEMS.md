@@ -600,30 +600,34 @@ Closed by the password-rule PR:
 - **Amendment 01 §5.1 names no status for this case**, so this is a gap in the document rather than a conflict
   with it; whether the amendment should name it is the project owner's call.
 
-### 66. `T3_ForgotPasswordTests.TheAnswerTakesTheSameTime_…` is flaky by microseconds — loosen the test, never the code
+### 66. Three tests assert on timing, or on a render that is normally complete — the fix is always in the test
 
-- **Origin:** the password-rule PR (OPEN_ITEMS 62), which it failed and then passed on the same commit.
-  **Decided by the project owner on 2026-10-17**, as a specification decision rather than tidying. It belongs
-  to A3, not to the PR that found it.
-- **Read item 51 first.** That is not a courtesy reference: the floor this test measures
-  (`Identity:ForgotPassword:MinimumResponseTime`) is what stops the response time from saying whether an
-  address has an account, and **this test is the only evidence the floor works**. Anyone changing the test is
-  changing the evidence for item 51, and should know that before touching it.
-- **The finding:** the test asserts each answer took **at least** the floor exactly. In CI it failed once with
-  `an address without one answered in 00:00:00.3999202, below the floor 00:00:00.4000000` — **79.8
-  microseconds** short — and passed on a re-run of the very same commit. `UniformTiming.HoldAsync` computes
-  `remaining = floor - elapsed + extra` and awaits `Task.Delay(remaining)`; `Task.Delay` is backed by a timer
-  whose due time is rounded and can return a fraction of a millisecond early relative to `Stopwatch`, and the
-  work before the handler's `Stopwatch.GetTimestamp()` does not always cover the difference. An exact
-  comparison against an inexact sleep has a microsecond-wide failure window on every run.
-- **The decision, and the trade it makes:** add **a millisecond or two of tolerance in the test**, and
-  **never in production code** — the floor itself does not move, and `UniformTiming` is not touched. This
-  costs a little precision in the evidence. It buys a signal people still trust: leaving the test flaky
-  produces noise, and noise teaches people to ignore red, which is the worse outcome. The tolerance stays far
-  below the 400 ms the test configures and far below the half-floor difference the next assertion already
-  allows, so what item 51 is actually protected by is unchanged.
-- **Scope:** A3's test, its own small PR. Not folded into a PR that happens to be red because of it — the
-  password-rule PR reported it and changed nothing, which is why this item exists.
+- **Origin:** the password-rule PR (OPEN_ITEMS 62), which went red three times without causing any of them.
+  **Decided by the project owner on 2026-10-17**, as a specification decision rather than tidying.
+- **It is one pattern, not three coincidences,** which is why it is one item. Each of these asserts against a
+  deadline, or against a render the system is only *usually* finished with by the time the assertion runs. A
+  separate item per flake would read as a maintenance list; named once, with the rule, it gets read and fixed
+  once.
+- **The rule: the fix is always in the test, never in production code.** A millisecond or two of tolerance
+  where the assertion is a deadline; a `waitFor` around the assertion where it is a render. No floor moves, no
+  timing code changes, nothing in `src/` is touched. Leaving them flaky is the worse option: noise teaches
+  people to ignore red, and a red signal nobody trusts is worth less than a slightly less precise one.
+
+| Test | What it asserts, and why it races | Seen as |
+|---|---|---|
+| `T3_ForgotPasswordTests.TheAnswerTakesTheSameTime_…` [W] | each answer took **at least** the floor, exactly. `UniformTiming.HoldAsync` awaits `Task.Delay(remaining)`; `Task.Delay` sits on a timer whose due time is rounded and can return a fraction of a millisecond early relative to `Stopwatch`, and the work before the handler's `Stopwatch.GetTimestamp()` does not always cover it. An exact comparison against an inexact sleep. | `answered in 00:00:00.3999202, below the floor 00:00:00.4000000` — **79.8 µs** — then passed on a re-run of the **same commit** |
+| `T3_LoginLimiterTests.TheDelayEscalates…` [W] | the first failure waited **under** 500 ms, on a path that derives a password hash (210,000 PBKDF2 iterations). A fixed threshold against work whose cost depends on the machine. | `the first failure waited 585 ms`, reproduced identically on clean `main` (`629 ms`) |
+| `App.test.tsx > a 401 during the session` (and its siblings asserting `probe.location`) | awaits `findByText(…)`, then reads `probe.location` **synchronously**. The probe is written by a render-time effect, so the message appearing and the redirect being observed are two different commits; between them the assertion reads the old path. | `expected '/app/subscriptions' to be '/login?next=%2Fapp%2Fsubscriptions'`; 20 runs gave **2/20** failures on the PR branch and **1/20** on clean `main` |
+
+- **Whoever takes `T3_ForgotPasswordTests` reads item 51 first.** That is not a courtesy reference. The floor
+  this test measures (`Identity:ForgotPassword:MinimumResponseTime`) is what stops the forgot-password
+  response time from saying whether an address has an account, and **this test is the only evidence the floor
+  works**. The tolerance is traded against exactly that evidence, so the trade should be made by someone who
+  knows what is on the other side of it. The tolerance stays far below the 400 ms the test configures and far
+  below the half-floor difference its next assertion already allows, so what item 51 is actually protected by
+  does not change.
+- **Scope:** A3's tests and the web suite, not the PR that found them. The password-rule PR reported all three
+  with their provenance and changed none of them, which is why this item exists.
 
 ## For the next version of the document — not for the code
 
