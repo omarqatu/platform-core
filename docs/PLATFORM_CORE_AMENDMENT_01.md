@@ -10,10 +10,11 @@
 
 | فقرة 1.16 | نصّها في 1.16 | التعديل |
 | --- | --- | --- |
-| §4.3-أ/2 | «grants: `SELECT` على `users`، `user_password_credentials`، `membership_auth`؛ و`INSERT` + `SELECT` على `auth_attempts` فقط — الكتابة الوحيدة» لـ `authenticator` | يُضاف `INSERT` و`UPDATE (used_at)` على `password_reset_tokens` (§2.2، §3): الاستعادة تبدأ بلا جلسة، ولا دور غيره يعمل بلا جلسة. **ويُضاف `SELECT (id, email)` على `persons` — العمودان وحدهما** (§3، §5.1): `forgot` يحلّ عنوان بريد بلا جلسة، والعنوان يسكن `persons`؛ فتعداد قراءاته الثلاث في 1.16 لم يعد مغلقاً |
-| §4.3-أ/3 | «policies TO authenticator في الـ manifest: قراءة `USING (true)` على جداول الحلّ **الثلاثة**» | أربعة: `persons` ينضم إليها بسياسة `persons_authenticator_read` (§4.1) — جدول حلّ رابع يخدم `forgot` وحده، وحصرُه على العمودين بالـ grant لا بالسياسة (§3) |
+| §4.3-أ/2 | «grants: `SELECT` على `users`، `user_password_credentials`، `membership_auth`؛ و`INSERT` + `SELECT` على `auth_attempts` فقط — الكتابة الوحيدة» لـ `authenticator` | يُضاف `INSERT` و`UPDATE (used_at)` على `password_reset_tokens` (§2.2، §3): الاستعادة تبدأ بلا جلسة، ولا دور غيره يعمل بلا جلسة. **ويُضاف `SELECT (id, email)` على `persons` — العمودان وحدهما** (§3، §5.1): `forgot` يحلّ عنوان بريد بلا جلسة، والعنوان يسكن `persons`. **ويُضاف `SELECT` على `provider_accounts`** (§2.6، §3، §5.5): المسار الذي يرسل بلا جلسة هو مساره، فلا بد أن يقرأ بأي حساب يرسل. فتعداد قراءاته الثلاث في 1.16 لم يعد مغلقاً |
+| §4.3-أ/3 | «policies TO authenticator في الـ manifest: قراءة `USING (true)` على جداول الحلّ **الثلاثة**» | لا هي ثلاثة ولا كلها `USING (true)`: `persons` ينضم إلى جداول الحلّ بـ `persons_authenticator_read` — رابعها، `USING (true)`، وحصرُه على العمودين بالـ grant لا بالسياسة؛ و`provider_accounts_authenticator_read` (§4.1) قراءة لهذا الدور على جدول ليس من جداول الحلّ أصلاً، وشرطها `tenant_id IS NULL` لا `true` |
 | §4.3-أ/4 | «لا يكتب على جداول الهوية نفسها شيئاً» | يكتب `password_reset_tokens` وحده؛ لا يلمس `users` ولا `user_password_credentials` |
 | §4.3-ب | `app.user_id` يُضبط من الجلسة المصادَقة | استثناء مسمّى واحد: في `POST /api/auth/password/reset` تأخذ UoW-2 `app.user_id` من صاحب الرمز الذي تحققت منه UoW-1 واستهلكته (§5.1) |
+| §3.4 (صف `authenticator`) | «يحلّ الاعتماد + يسجّل المحاولات (كتابته الوحيدة)» | ويقرأ حساب المنصة للإرسال في `provider_accounts` — صفّ المنصة وحده (§2.6، §4.1): `forgot` يرسل بلا جلسة، وما من دور آخر على مساره؛ ولا كتابة جديدة، فـ «كتابته الوحيدة» باقية على حالها (§4.3-أ/4) |
 | §4.4/3 | «مساران محصوران اثنان لا غير» | مسار ثالث: الإجراء التشغيلي `src/Ops` بدور `provisioner` (§5.4) |
 | §4.4/5 | «لا مسار ثالث يكتب عابراً للعزل» | الإجراء التشغيلي هو الثالث المسمّى: جهة واحدة لكل معاملة، وتدقيقه في نفس المعاملة كالمسارين (§4.4/4) |
 | §3.4 (صف `migrator`) | «migrations فقط» | ومعها أمر الاستيراد في `src/Ops.Import` (§6) — أداة ترحيل بيانات لغرض واحد، بشروط §3.4 الثلاثة |
@@ -100,7 +101,7 @@ provider_accounts(id, tenant_id NULL, channel, provider_code, sender_id, credent
 -- في هذه المرحلة تُزرع صفوف المنصة فقط (migrator). صفوف الجهات: باب محجوز، لا مسار يكتبها.
 ```
 
-لماذا: `app_user` يقرأ هذا الجدول في كل معاملة إرسال؛ لو حمل مفاتيح المزوّدين لكان كل عضو جهة على بعد ثغرة واحدة من مفاتيح المنصة. المرجع إلى الإعدادات يُبقي السرّ حيث تعيش سلاسل الاتصال. **`NULLS NOT DISTINCT`:** بدونه لا يمنع `UNIQUE` صفّين للمنصة لنفس القناة، لأن `NULL` لا يساوي `NULL`. **سياسة القراءة** تحتاج صياغة خارج القالب: `tenant_id = app.tenant_id OR tenant_id IS NULL` — سياسة مُسمّاة تدخل الـ manifest (Check 2) حين تُبنى (§4.1).
+لماذا: `app_user` يقرأ هذا الجدول في كل معاملة إرسال؛ لو حمل مفاتيح المزوّدين لكان كل عضو جهة على بعد ثغرة واحدة من مفاتيح المنصة. المرجع إلى الإعدادات يُبقي السرّ حيث تعيش سلاسل الاتصال. **`NULLS NOT DISTINCT`:** بدونه لا يمنع `UNIQUE` صفّين للمنصة لنفس القناة، لأن `NULL` لا يساوي `NULL`. **سياسة القراءة** تحتاج صياغة خارج القالب: `tenant_id = app.tenant_id OR tenant_id IS NULL` — سياسة مُسمّاة تدخل الـ manifest (Check 2) حين تُبنى (§4.1). **ويقرؤه `authenticator` أيضاً، صفّ المنصة وحده**، بسياسة ثانية مُسمّاة: المسار الوحيد الذي يرسل بلا جلسة (`forgot`، §5.1) مساره، ولا جهة في سياقه ليقرأ لها صفّاً — فشرطها `tenant_id IS NULL` وحده، لا تجاوز الجهة أبداً. هذا يعدّل §3.4 و§4.3-أ/2 و§4.3-أ/3 (§0).
 
 ### 2.7 `notification_log` — لكل جهة ومُنطَّق (إلى الوحدة، بجوار `subscriptions`)
 
@@ -163,7 +164,7 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 | role_template_permissions (كتالوج عام — 1.13) | — | — | SELECT فقط — الكتابة لـ migrator (زرعاً) | — |
 | **plans (كتالوج عام — الملحق 01)** | **SELECT فقط — الكتابة لـ migrator (زرعاً)** | — | **SELECT** | **SELECT** |
 | **platform_subscriptions (الملحق 01)** | **SELECT** (بصلاحية `core.billing.read` في المسار) | — | **INSERT، SELECT، UPDATE (status, paid_until, period_start, plan_code)** | — |
-| **provider_accounts (الملحق 01)** | **SELECT** — الكتابة لـ migrator (زرعاً) | — | — | — |
+| **provider_accounts (الملحق 01)** | **SELECT** — الكتابة لـ migrator (زرعاً) | **SELECT (الملحق 01 — §5.1؛ السياسة تحصره بصفّ المنصة)** | — | — |
 | **tenant_notification_settings (الملحق 01)** | **SELECT، INSERT، UPDATE (is_enabled, reminder_days_before, sender_display_name)** | — | **INSERT** (تهيئة الوحدة عند bootstrap) | — |
 | **notification_log (الملحق 01)** | **SELECT، INSERT، UPDATE (status, provider_message_id, error, sent_at)** — **لا DELETE**؛ الحالة تتقدم فقط (outbox) | — | — | — |
 | جداول الموديولات | SELECT، INSERT، UPDATE، DELETE (ضمن RLS) | — | — | — |
@@ -176,6 +177,7 @@ notification_log(id, tenant_id, subscription_id, scope_ref_id NOT NULL, channel,
 - **`authenticator` على `password_reset_tokens`:** الاستعادة تبدأ بلا جلسة، وهو الدور الوحيد الذي يعمل بلا جلسة. **هذا يعدّل §4.3-أ/2 و§4.3-أ/4** (§0)، لا يضيف إليهما. الكتابة محصورة في الرمز نفسه؛ لا يلمس كلمة السر — التحديث يتم كـ `app_user` بسياق المستخدم صاحب الرمز عبر `password_self_update` الموجودة (استثناء §4.3-ب، §0).
 - **`authenticator` على `persons` (SELECT على `id` و`email` وحدهما):** `forgot` يبدأ بعنوان بريد ولا جلسة بعد، والعنوان يسكن `persons` وحده. **ولا دور آخر يصلح لحلّ بلا جلسة:** `app_user` لا يرى إلا صفّه عبر `person_self`، وهي مشروطة بـ `app.user_id` الذي لا وجود له قبل المصادقة؛ وكل سياسات `provisioner` مشروطة بـ `app.tenant_id` ولا جهة معروفة قبل الحلّ، و`provisioner` مسار محصور بلا HTTP (§4.4)؛ و`job_runner` بلا منح على `persons` أصلاً؛ و`migrator` ممنوع على التطبيق (§3.4). فيبقى `authenticator`، الدور الوحيد الذي يعمل بلا جلسة (§4.3-أ). **هذا يعدّل §4.3-أ/2 و§4.3-أ/3** (§0)، لا يضيف إليهما؛ **و§4.3-أ/4 يبقى على حاله**: قراءة لا كتابة، فلا يكتب على جداول الهوية نفسها شيئاً. والقراءة محصورة بالعمودين: لا اسم ولا هاتف — `persons.email` معرّف هوية فريد عالمياً بنصّ 1.16 §3.3، وتسرّب وجوده مقبول ومعالَج بردّ موحّد، أما بقية PII فيمنعها المنح العمودي لا السياسة.
   **وخطر مقبول مُعلَن:** السياسة `USING (true)`، فالدور يقرأ **كل** صفوف `persons`، لا الصفّ المطلوب وحده — المنح العمودي يضيّق الأعمدة لا الصفوف. وسياسة تضيّق الصفوف غير قابلة للتعبير هنا: الصف المقصود لا يُعرف إلا بعد البحث الذي هي نفسها تحكمه، ولا متغيّر جلسة يعرّفه قبله. فاختراق `authenticator` = تعداد كل عنوان نحتفظ به، و`persons.email` فريد عالمياً (§3.3). **مقبول** لأن مسار الدخول قائم على الأرض نفسها منذ 1.16 — `users` و`user_password_credentials` و`membership_auth` كلها `USING (true)` لهذا الدور — وهذا جدول حلّ رابع لا نوع خطر جديد. والتخفيف هو حصر الدور نفسه: اتصال ودور منفصلان، بلا جلسة، وسطح محصور بنائياً بمسار المصادقة (§4.3-أ/1). مسجَّل بند `OPEN_ITEMS` 56.
+- **`authenticator` على `provider_accounts` (SELECT، والسياسة تحصره بصفّ المنصة):** `forgot` يرسل، والإرسال يحتاج معرفة بأي حساب — والمسار كله لهذا الدور بلا جلسة (§5.1). **ولا دور آخر يصلح، للسبب نفسه الذي في صفّ `persons`:** `app_user` بلا `app.user_id` ولا `app.tenant_id` سطح لا يصفه أي نصّ — دور تطبيقي يعمل بلا سياق على مسار بلا جلسة — ولا يُفتح بالتأويل؛ فالمنح مكتوب هنا بدل أن يكون قراءةً للكود في §2.6. وهو منح جدول كامل لا عمودي: كل أعمدة الصفّ إعدادات ولا سرّ فيها (§2.6)، والحصر على **الصفوف** بسياسة `tenant_id IS NULL` — فصفّ جهةٍ، إن كُتب يوماً، خارج متناول هذا الدور ولو كان الجدول كله مقروءاً له. **هذا يعدّل §3.4 و§4.3-أ/2 و§4.3-أ/3** (§0)، لا يضيف إليها؛ **و§4.3-أ/4 يبقى على حاله**: قراءة لا كتابة، و«كتابته الوحيدة» لم تتغيّر.
 - **`app_user` على `provider_accounts` (SELECT فقط):** المهمة الخلفية تعمل لكل جهة كـ `app_user` (1.16 §8)، وتحتاج معرفة أي مزوّد. لا أسرار في الجدول (§2.6).
 - **`notification_log` (outbox):** المهمة تكتب السطر `pending` وتغلق المعاملة؛ خطوة الإرسال تحدّثه إلى `sent|failed` في معاملة قصيرة. لا DELETE؛ سياسة مقيِّدة تسمح بالانتقال `pending → sent|failed` فقط. الإعادة = سطر جديد.
 - **`provisioner` على `tenant_notification_settings` (INSERT):** يهيئ الإعدادات الافتراضية مع bootstrap كما يهيئ الأدوار من القوالب. لا SELECT: لا يحتاج قراءتها.
@@ -253,6 +255,10 @@ CREATE POLICY provider_accounts_read ON provider_accounts
   USING (tenant_id IS NULL
          OR tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));   -- صفّ المنصة أو صفّ الجهة الحالية (§2.6)
 
+CREATE POLICY provider_accounts_authenticator_read ON provider_accounts
+  FOR SELECT TO authenticator
+  USING (tenant_id IS NULL);   -- صفّ المنصة وحده: هذا الدور بلا جهة في سياقه، ولا يقرأ current_setting فلا محلّ لـ NULLIF
+
 CREATE POLICY tenant_isolation ON tenant_notification_settings
   FOR ALL TO app_user
   USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
@@ -316,7 +322,7 @@ CREATE POLICY notification_log_status_forward ON notification_log
 
 | المسار | النوع | الصلاحية | ملاحظة |
 | --- | --- | --- | --- |
-| `POST /api/auth/password/forgot` | own UoW (authenticator) | — | 204 دائماً؛ حدّ معدل (§5.2)؛ بريد عبر المُرسِل. الـ 204 موحّد وزمن الرد ليس موحّداً (OPEN_ITEMS 51) |
+| `POST /api/auth/password/forgot` | own UoW (authenticator) | — | 204 دائماً؛ حدّ معدل (§5.2)؛ بريد عبر المُرسِل. الـ 204 موحّد **وزمن الرد كذلك**: الإرسال يخرج من الطلب إلى المُرسِل، وأرضية زمنية تغطي ما تبقّى من فرق (OPEN_ITEMS 51، أُغلق) |
 | `POST /api/auth/password/reset` | own UoW ×2 | — | UoW-1 authenticator يتحقق من الرمز ويستهلكه؛ UoW-2 app_user (`app.user_id` = صاحب الرمز — الاستثناء المسمّى على §4.3-ب، §0) يحدّث الـ hash ويغيّر `security_stamp`؛ لا كوكي يُصدر |
 | `PUT /api/me/password` | own UoW ×2 | session | التحقق من الحالية (authenticator) ثم التحديث (app_user)؛ الكوكي يُعاد إصداره بالختم الجديد |
 | `GET /api/tenant/subscription` | normal | `core.billing.read` | الخطة، الحالة، `paid_until` |
