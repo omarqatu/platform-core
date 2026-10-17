@@ -76,3 +76,37 @@ RESET ROLE;
 SELECT '3e. a second platform row for the same channel (expect: unique violation — NULLS NOT DISTINCT)' AS case;
 INSERT INTO provider_accounts VALUES
   ('00000000-0000-0000-0000-0000000000c2', NULL, 'email', 'smtp', 'other@platform.test', 'Other', true, now());
+
+-- ============ 4. provider_accounts as authenticator: the platform's row and nothing else. ============
+GRANT SELECT ON provider_accounts TO authenticator;
+
+SET ROLE authenticator;
+SELECT '4a. the grant with no policy for this role (expect 0 rows)' AS case;
+SELECT channel, credential_ref FROM provider_accounts;
+RESET ROLE;
+
+CREATE POLICY provider_accounts_authenticator_read ON provider_accounts
+  FOR SELECT TO authenticator
+  USING (tenant_id IS NULL);
+
+-- A tenant's row, of the kind no path writes today, to show the policy and not the data is what hides it.
+INSERT INTO provider_accounts VALUES
+  ('00000000-0000-0000-0000-0000000000c3', '00000000-0000-0000-0000-0000000000e1', 'email', 'smtp',
+   'tenant@platform.test', 'tenant-email', true, now());
+
+SET ROLE authenticator;
+SELECT '4b. with the policy: the platform row, as the sender reads it (expect 1 row, the platform one)' AS case;
+SELECT tenant_id, channel, provider_code, sender_id, credential_ref FROM provider_accounts;
+
+SELECT '4c. the tenant row exists and is still invisible to this role (expect 0 rows)' AS case;
+SELECT id FROM provider_accounts WHERE tenant_id IS NOT NULL;
+
+SELECT '4d. setting a tenant in the context changes nothing: the policy never reads one (expect 1 row)' AS case;
+BEGIN;
+SET LOCAL app.tenant_id = '00000000-0000-0000-0000-0000000000e1';
+SELECT count(*) AS visible FROM provider_accounts;
+COMMIT;
+
+SELECT '4e. this role cannot write it either (expect: permission denied)' AS case;
+UPDATE provider_accounts SET credential_ref = 'stolen' WHERE tenant_id IS NULL;
+RESET ROLE;

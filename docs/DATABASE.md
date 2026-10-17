@@ -75,7 +75,7 @@ by `db/init/00-roles.sh`. **No role is a member of another** (no `GRANT role TO 
 |---|---|---|---|
 | `migrator` | The migration tool (`src/Migrations`), the seed script, the catalog checks, ops procedures | Owns every object. Runs migrations. Writes the global catalogs (modules, permissions, role templates). Has `BYPASSRLS` — a documented exception (PLATFORM_CORE §3.4) under three conditions: no application path reaches it; every data migration ends with a row-count check; the alternative (per-tenant migrations) was considered and rejected. | `src/Migrations/appsettings.json` / env. **Never** in Api or Worker — Api refuses to start if it sees it, and CI scans the Api image for the password (T0.3). |
 | `app_user` | Api (every normal request), Worker (per-tenant processing) | The application. Everything it reads or writes is filtered by policies using the session variables (§3). | Api, Worker |
-| `authenticator` | Api, login only (`Core.Identity.Authenticator`) | Resolves a username + password before any session exists, and writes one `auth_attempts` row per attempt. Since Amendment 01 §2.2 it also writes `password_reset_tokens` (insert, and consumption through `used_at`) — those two tables are its whole write surface. Since Amendment 01 §3 it also **reads `persons (id, email)`**, the sessionless address lookup of `POST /api/auth/password/forgot`; it writes nothing there. | Api |
+| `authenticator` | Api, login only (`Core.Identity.Authenticator`) | Resolves a username + password before any session exists, and writes one `auth_attempts` row per attempt. Since Amendment 01 §2.2 it also writes `password_reset_tokens` (insert, and consumption through `used_at`) — those two tables are its whole write surface. Since Amendment 01 §3 it also **reads `persons (id, email)`**, the sessionless address lookup of `POST /api/auth/password/forgot`, and **`provider_accounts`** — the platform's row alone, by policy — because that path sends as well as looks up; it writes nothing in either. | Api |
 | `provisioner` | Api, two paths only: bootstrap (create a tenant) and invitation acceptance | The two paths that legitimately cross isolation: they create rows in a tenant the caller is not (yet) a member of. Each path is one transaction for one tenant, with `app.tenant_id` set to that tenant first. | Api |
 | `job_runner` | Worker | Reads the list of **active** tenants to start a background job's fan-out — its only read. The actual work then runs as `app_user`, one tenant per transaction. | Worker |
 
@@ -349,9 +349,9 @@ many tenants. These tables are global because identity is shared, and login happ
 | **Holds** | One delivery account per channel: `tenant_id` (`NULL` = the platform's own), `channel` (`email`/`whatsapp`/`sms`/`telegram`), `provider_code`, `sender_id`, `credential_ref`, `is_active`. **No secret is a column here** — `credential_ref` names a key in the Api/Worker settings, and the secret lives there. |
 | **FKs** | `tenant_id → tenants(id)` (single-column: `tenants` carries no `tenant_id`, so §3.3 does not apply). |
 | **Uniqueness** | `provider_accounts_tenant_channel_key UNIQUE NULLS NOT DISTINCT (tenant_id, channel)`. Without `NULLS NOT DISTINCT` a second platform row per channel would be admitted, because `NULL <> NULL` (§2.6). |
-| **Policies** | `provider_accounts_read` (app: `tenant_id IS NULL OR tenant_id = app.tenant_id`). Its first arm is true with no `app.tenant_id` set at all, which is how the sessionless send path reads the platform's row. |
-| **Grants** | app `SELECT`. **Nobody writes it**: the rows are `migrator`'s, seeded — `tests/seed/seed-contract.sql` for dev and the tests, `docs/operations.md` for a deployment. The per-tenant override is a reserved slot; no path writes one. |
-| **Notes** | `Core.Notifications.PlatformProviderAccounts` reads the platform row as `app_user` with no user and no tenant, and holds it for `Notifications:ProviderAccounts:CacheFor`. Which role resolves the provider for a sessionless send is not something the amendment says — OPEN_ITEMS 58. |
+| **Policies** | `provider_accounts_read` (app: `tenant_id IS NULL OR tenant_id = app.tenant_id`) and `provider_accounts_authenticator_read` (auth: `tenant_id IS NULL` — the platform's row alone). Both permissive: each is the whole of its role's access to the table, not a narrowing of the other. The authenticator one reads no `current_setting`, so the `NULLIF` rule has nothing to apply to. |
+| **Grants** | app `SELECT`; auth `SELECT`. **Nobody writes it**: the rows are `migrator`'s, seeded — `tests/seed/seed-contract.sql` for dev and the tests, `docs/operations.md` for a deployment. The per-tenant override is a reserved slot; no path writes one. |
+| **Notes** | Two readers, for two different paths. The per-tenant delivery job will read it as `app_user` (§2.6, 1.16 §8); the sessionless send path — `POST /api/auth/password/forgot` — reads it as `authenticator`, which is why that role has a grant here at all (Amendment 01 §0 records it as the tenth amended v1.16 paragraph: §3.4 defines `authenticator` as resolving credentials and logging attempts, and a provider account is neither). The grant covers the table and the **policy** confines the rows, so a per-tenant row written here some day is out of `authenticator`'s reach with no grant to revisit. `Core.Notifications.PlatformProviderAccounts` holds the row for `Notifications:ProviderAccounts:CacheFor`. |
 
 ### 6.2 Tenancy and membership
 
@@ -608,7 +608,7 @@ policies say. Column lists in parentheses are column-level grants — `UPDATE` e
 | `user_password_credentials` | UPDATE (password_hash, updated_at) — **no SELECT** | INSERT | SELECT | — |
 | `auth_attempts` | — | — | SELECT, INSERT | — |
 | `password_reset_tokens` | — | — | SELECT, INSERT, UPDATE (used_at) | — |
-| `provider_accounts` | SELECT | — | — | — |
+| `provider_accounts` | SELECT | — | SELECT | — |
 | `memberships` | SELECT, UPDATE (status) | SELECT, INSERT, UPDATE (status) | — | — |
 | `membership_roles` | SELECT, INSERT, DELETE | SELECT, INSERT, DELETE | — | — |
 | `membership_auth` | SELECT | INSERT | SELECT | — |

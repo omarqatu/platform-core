@@ -43,12 +43,22 @@ CREATE TABLE provider_accounts (
 ALTER TABLE provider_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE provider_accounts FORCE ROW LEVEL SECURITY;
 
--- ===== §4.1 — the read policy, outside the template: the platform's row, or the current tenant's. Its first arm
--- is true with no app.tenant_id set at all, which is what the sessionless `forgot` path reads it under.
+-- ===== §4.1 — the two read policies, both outside the template.
 CREATE POLICY provider_accounts_read ON provider_accounts
   FOR SELECT TO app_user
   USING (tenant_id IS NULL
          OR tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));   -- the platform's row, or the current tenant's (§2.6)
 
--- ===== §3 — the grants of the new row: app_user reads, nobody writes. Writes are migrator's, seeding.
+-- The sessionless send path (`forgot`, §5.1) belongs to authenticator, so that role reads which account to send
+-- with. The platform's row alone: this role has no tenant in its context, and a per-tenant row — if one is ever
+-- written — is out of its reach without anyone having to revisit the grant. Permissive, because it is the whole
+-- of this role's access to the table and not a narrowing of another policy; and it reads no current_setting, so
+-- the NULLIF rule has nothing to apply to. Amends v1.16 §3.4 (the authenticator row), §4.3-a/2 and §4.3-a/3 — §0.
+CREATE POLICY provider_accounts_authenticator_read ON provider_accounts
+  FOR SELECT TO authenticator
+  USING (tenant_id IS NULL);   -- the platform's row alone: this role has no tenant in its context, and it reads no current_setting, so the NULLIF rule has nothing to apply to
+
+-- ===== §3 — the grants of the new row: app_user and authenticator read, nobody writes. Writes are migrator's,
+-- seeding. The authenticator grant is whole-table and the narrowing is the policy's, over rows (§3).
 GRANT SELECT ON provider_accounts TO app_user;
+GRANT SELECT ON provider_accounts TO authenticator;

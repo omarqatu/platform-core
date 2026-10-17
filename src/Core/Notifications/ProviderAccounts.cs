@@ -1,4 +1,5 @@
 using Core.Data;
+using Core.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -22,16 +23,20 @@ public sealed class PlatformProviderOptions
 
 /// <summary>
 /// Reads the platform's row of <c>provider_accounts</c> — <c>tenant_id IS NULL</c> (Amendment 01 §2.6) — as
-/// <c>app_user</c>, in a read-only unit of work with no user and no tenant.
+/// <c>authenticator</c>, in a read-only unit of work.
 /// <para>
-/// <b>Why that context, and why it is allowed:</b> §3 grants <c>SELECT</c> on this table to <c>app_user</c> alone;
-/// <c>authenticator</c> has nothing on it, so the <c>forgot</c> unit of work (§5.1) cannot read it itself. The
-/// <c>provider_accounts_read</c> policy of §4.1 is <c>tenant_id IS NULL OR tenant_id = app.tenant_id</c>, and its
-/// first arm is true with no <c>app.tenant_id</c> set at all — proven on a real engine in
-/// <c>docs/proposals/a3-forgot-pg-proof</c> (case 3b). So the platform row is reachable exactly as the policy
-/// writes it, with no tenant and no user, and nothing of any tenant's is reachable in the same transaction.
-/// The amendment does not say which role resolves the provider for a sessionless send; this is the PR's reading
-/// of §2.6 + §3, and it is recorded for the project owner (OPEN_ITEMS 58).
+/// <b>Why that role:</b> the one path that sends with no session (<c>forgot</c>, §5.1) is <c>authenticator</c>'s,
+/// so §3 grants it <c>SELECT</c> on this table and §4.1 gives it <c>provider_accounts_authenticator_read</c>,
+/// <c>USING (tenant_id IS NULL)</c> — the platform's row and no other. The grant covers the table and the policy
+/// confines the rows, so a per-tenant row, if one is ever written, is out of this role's reach without anyone
+/// having to revisit the grant. An earlier draft read the row as <c>app_user</c> with neither a user nor a
+/// tenant set; the project owner rejected it — an application role running contextless on a sessionless path is
+/// a surface no document describes, and it was a reading of §2.6 rather than its text. The grant above is that
+/// text (§0 records the three v1.16 paragraphs it amends).
+/// </para>
+/// <para>
+/// The per-tenant delivery job is the other reader and is not this class: it runs per tenant as <c>app_user</c>
+/// (§2.6, 1.16 §8) under <c>provider_accounts_read</c>, and it has no table yet (§5.5's outbox).
 /// </para>
 /// <para>
 /// The result is held for <see cref="PlatformProviderOptions.CacheFor"/>: this is platform configuration that
@@ -56,8 +61,9 @@ public sealed class PlatformProviderAccounts(IServiceScopeFactory scopes, IOptio
 
             var code = channel.Code();
             using var scope = scopes.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<CoreDbContext>();
-            // No user, no tenant: the policy's `tenant_id IS NULL` arm is what admits the row.
+            var db = scope.ServiceProvider.GetRequiredService<AuthenticatorDbContext>();
+            // No session of any kind, as everything this role does: the policy admits the platform's row and
+            // nothing else, so there is no tenant to set and none that could be read if there were.
             var row = await UnitOfWork.RunReadOnlyAsync(db, SessionContext.None, (c, ct) =>
                 c.ProviderAccounts
                     .Where(a => a.TenantId == null && a.Channel == code && a.IsActive)

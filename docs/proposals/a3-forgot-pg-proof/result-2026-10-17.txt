@@ -127,6 +127,50 @@ psql:/var/lib/postgresql/proof/02-behaviour.sql:73: ERROR:  permission denied fo
 
 psql:/var/lib/postgresql/proof/02-behaviour.sql:78: ERROR:  duplicate key value violates unique constraint "provider_accounts_tenant_id_channel_key"
 DETAIL:  Key (tenant_id, channel)=(null, email) already exists.
+                            case                            
+------------------------------------------------------------
+ 4a. the grant with no policy for this role (expect 0 rows)
+(1 row)
+
+ channel | credential_ref 
+---------+----------------
+(0 rows)
+
+                                              case                                              
+------------------------------------------------------------------------------------------------
+ 4b. with the policy: the platform row, as the sender reads it (expect 1 row, the platform one)
+(1 row)
+
+ tenant_id | channel | provider_code |       sender_id        |        credential_ref        
+-----------+---------+---------------+------------------------+------------------------------
+           | email   | smtp          | no-reply@platform.test | Notifications:Email:Platform
+(1 row)
+
+                                     case                                      
+-------------------------------------------------------------------------------
+ 4c. the tenant row exists and is still invisible to this role (expect 0 rows)
+(1 row)
+
+ id 
+----
+(0 rows)
+
+                                              case                                              
+------------------------------------------------------------------------------------------------
+ 4d. setting a tenant in the context changes nothing: the policy never reads one (expect 1 row)
+(1 row)
+
+ visible 
+---------
+       1
+(1 row)
+
+                               case                               
+------------------------------------------------------------------
+ 4e. this role cannot write it either (expect: permission denied)
+(1 row)
+
+psql:/var/lib/postgresql/proof/02-behaviour.sql:111: ERROR:  permission denied for table provider_accounts
 Pager usage is off.
 SET
                                          case                                         

@@ -110,6 +110,13 @@ Closed by the A3 PR:
   statements. **For the project owner:** Amendment 01 §5.1's table still says "the response time is not"
   uniform, with a reference to this item. That line is now false; whether the amendment records the closure is
   a text decision, not one this PR took.
+- **58 was raised and then withdrawn, so it is not an item.** It asked which role resolves the provider account
+  for a sessionless send, the amendment naming only `app_user`. The first answer here was to read the platform
+  row as `app_user` with neither a user nor a tenant set. The project owner rejected it: an application role
+  running contextless on a sessionless path is a surface no document describes, and it was a reading of §2.6
+  rather than its text — the same lesson as item 53. So the amendment says it instead (`SELECT` on
+  `provider_accounts` to `authenticator`, `provider_accounts_authenticator_read` `USING (tenant_id IS NULL)`,
+  §0's tenth amended paragraph), and there is nothing left to carry. The number is retired, not reused.
 
 ## For the project owner — a decision after T8
 
@@ -471,26 +478,11 @@ Closed by the A3 PR:
 - **As built:** exactly one active account → a token. Two or more → **nothing is minted**, and the answer is the
   same 204 as for an address nobody holds. Not an error, because an error would be the oracle the uniform answer
   prevents; and not a token for each, because the e-mail could not say which account it was for.
-- **For the project owner:** a person in that position cannot recover either account today. The options are a
-  token per account with the account named in the e-mail, recovery keyed by username for such a person, or a rule
-  that one address holds one account. Nothing is built until the decision; the seed and the live data have no
-  such person today.
-
-### 58. Which role resolves the provider account for a sessionless send
-
-- **Origin:** A3 (the sender), found while wiring `forgot`.
-- **The finding:** Amendment 01 §3 grants `SELECT` on `provider_accounts` to `app_user` alone, and §2.6 says
-  "`app_user` reads this table in every delivery transaction" — written for the per-tenant delivery job. But
-  `forgot` is an `authenticator` unit of work (§5.1), and `authenticator` has nothing on that table, so the path
-  that sends cannot read what to send with. The amendment does not say who reads it when there is no session.
-- **As built:** `Core.Notifications.PlatformProviderAccounts` reads the platform's row as `app_user` in a
-  read-only unit of work with **no user and no tenant**, which is exactly what the `provider_accounts_read`
-  policy's first arm (`tenant_id IS NULL`) admits — run on a real engine, `docs/proposals/a3-forgot-pg-proof`
-  case 3b. It is a separate unit of work from the identity one, it reads platform configuration and nothing of
-  any tenant's, and the result is cached, so it is not in the `forgot` path at all in the usual case.
-- **For the project owner:** whether that reading is what §2.6 intends, or whether the amendment should name the
-  role for a sessionless send, is a text decision. The code does not wait on it; a different answer changes where
-  the read lives, not what it reads.
+- **The project owner's decision (2026-10-17):** the behaviour above is **approved as it stands** — silence beats
+  an oracle — and the item **stays open by that decision**, not for want of one. What is still to be settled is
+  the eventual answer: a token per account with the account named in the e-mail, recovery keyed by username for
+  such a person, or a rule that one address holds one account. Nothing is built until then; the seed and the live
+  data have no such person today.
 
 ### 59. The password-reset screen does not exist
 

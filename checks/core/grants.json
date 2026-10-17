@@ -14,7 +14,7 @@
     "invitations":               { "app_user": ["SELECT", "INSERT"], "provisioner": ["SELECT"] },
     "auth_attempts":             { "authenticator": ["SELECT", "INSERT"] },
     "password_reset_tokens":     { "authenticator": ["SELECT", "INSERT"] },
-    "provider_accounts":         { "app_user": ["SELECT"] },
+    "provider_accounts":         { "app_user": ["SELECT"], "authenticator": ["SELECT"] },
     "audit_log":                 { "app_user": ["SELECT", "INSERT"], "provisioner": ["INSERT"] },
     "roles":                     { "app_user": ["SELECT", "INSERT", "UPDATE", "DELETE"], "provisioner": ["SELECT", "INSERT"] },
     "role_permissions":          { "app_user": ["SELECT", "INSERT", "DELETE"], "provisioner": ["INSERT"] },
