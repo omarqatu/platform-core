@@ -339,18 +339,26 @@ Closed by the password-screens PR:
 
 - **Origin:** Amendment 01, D1. It settles the condition v1.16 §0 left open ("two separate products until an explicit
   succession decision").
-- **The decision:** data moves, no code. The live system (SYSTEM_DESIGN 2.0) is read-only until the cutover, then
-  switched off.
-- **To build:** the import (§6), in the order of `docs/ROADMAP_SUBSCRIPTIONS.md`.
+- **The decision:** the succession stands. Data moves, no code.
+- **Corrected by Amendment 02 (2026-10-17) — the live system was described wrongly in every document until that
+  day:** it is not SYSTEM_DESIGN 2.0 on TypeScript and PG16. It is **an Excel workbook + n8n + GreenAPI**. And the
+  "three accounts" of the roadmap are **four clients inside one tenant**, not three tenants — Amendment 01 §6/3's
+  "each live account = a tenant" was wrong (Amendment 02 §0, §1).
+- **Withdrawn with it:** the import. There is no automated migration — the data is entered by hand through the
+  interface, and the switch-off is disabling a workflow in n8n (Amendment 02 §0, E7; roadmap M3, rewritten).
+- **Still open under this item:** nothing to build. It closes when M3's manual entry is done and the n8n workflow
+  is disabled.
 
 ### 43. The operations procedure: a third provisioner path (D2)
 
 - **Origin:** Amendment 01, D2, §5.4. It **amends** v1.16 §4.4/3 and §4.4/5 ("two paths, no third").
 - **The decision:** tenants are created in production by `src/Ops` (the `provisioner` and `job_runner` strings only;
   it refuses to run if it sees `migrator`), with no HTTP path and no public self-registration: `create-tenant`,
-  `mark-paid` (the only way back from suspension), `suspend-unpaid` (scheduled outside the platform; lists the
-  active tenants as `job_runner`, then one `provisioner` transaction per tenant), and `announce-migration` (once,
-  after the M3 cutover; item 47).
+  `mark-paid` (the only way back from suspension), and `suspend-unpaid` (scheduled outside the platform; lists the
+  active tenants as `job_runner`, then one `provisioner` transaction per tenant).
+- **Withdrawn by Amendment 02 (2026-10-17):** `announce-migration`, the fourth command. It existed to tell migrated
+  users to set a password, and there are no migrated users (Amendment 02 §0). `src/Ops` keeps its `migrator` guard;
+  `src/Ops.Import` is never built.
 - **The owner invitation (decided 2026-10-17):** `provisioner` gets `INSERT` on `invitations`, and
   `invitations.invited_by` becomes nullable: `NULL` means a bootstrap invitation, with no human inviter (this
   **amends** the `invitations` definition in v1.16 §4.1). `invitations_provisioner_insert` requires
@@ -386,9 +394,11 @@ Closed by the password-screens PR:
 ### 46. Audit of the migrated rows (D4)
 
 - **Origin:** Amendment 01, D4, answered 2026-10-17.
-- **The decision (revised 2026-10-17):** no `audit_log` entry for the import at all — `migrator` does not become a
-  fourth audit writer (v1.16 §7 stays as it is). The record is the row-count report the import command writes outside
-  the database, plus `legacy_id` for tracing until it is dropped.
+- **Closed as withdrawn, not as done (Amendment 02 §0, 2026-10-17):** there is no import, so there are no migrated
+  rows to audit and the question has no subject. `migrator` did not become a fourth audit writer and will not
+  (v1.16 §7 stays as it is); the row-count report and `legacy_id` fall with Amendment 01 §6.
+- **And what replaces it is better than what was designed:** manual entry goes through the ordinary `app_user`
+  path, so every row is audited automatically (v1.16 §7) — which the import, as `migrator`, could not have been.
 
 ### 47. Password recovery and change (D6) — see items 36 and 16
 
@@ -402,15 +412,11 @@ Closed by the password-screens PR:
   consumed token).
 - **The security stamp:** item 36 — it closes that item only in part.
 - **The attempt limiter:** item 16 — the same direction, extended to the forgot-password path.
-- **Migrated users (decided 2026-10-17, §2.12, §6/3 and §6/7):** the import (`src/Ops.Import`, `migrator` only)
-  creates a `user_password_credentials` row in a no-password state that no input matches and that the verifier
-  rejects without throwing — a marked assumption, to be proven on PostgreSQL 18 in the code PR. So
-  `password_self_update` stays valid and `provisioner` needs no new grant.
-- **Their first password:** the import sends nothing, issues no tokens and does not call forgot; it creates the
-  no-password row and stops. A separate `src/Ops` command, `announce-migration`, run only after the M3 cutover, sends
-  each migrated user a plain announcement email carrying a link to the forgot page, and each user starts the flow
-  themselves — no new token kind, no new lifetime, no per-IP ceiling reached (§5.2), and the 30-minute lifetime starts
-  from the user's own request. `src/Ops.Import` holds no provider configuration.
+- **Migrated users — withdrawn, not built (Amendment 02 §0, 2026-10-17):** both the no-password state (§2.12) and
+  `announce-migration` (§5.4) existed for migrated users alone, and there are none. The only user is created by a
+  `create-tenant` invitation and sets their password on acceptance. **The marked assumption of §2.12 falls
+  unproven** — nothing is built on it any more, so nothing needs proving on PostgreSQL 18. Were a no-password state
+  ever needed again, the assumption comes back with it.
 
 ### 48. The platform subscription register — layer 1 (D7)
 
@@ -615,6 +621,117 @@ Closed by the password-screens PR:
   all three mention this item by number, and all three come out together.
 - **Amendment 01 §5.1 names no status for this case**, so this is a gap in the document rather than a conflict
   with it; whether the amendment should name it is the project owner's call.
+
+## From Amendment 02 — the reminder engine (the project owner's decisions of 2026-10-17)
+
+### 65. The classification cannot carry `tenant_id`: Check 7 against a nullable tenant column
+
+- **Origin:** Amendment 02, found in the first review of its draft, corrected by the project owner before merge
+  (Amendment 02 §0, §3.1).
+- **The defect in the draft:** `categories`/`subcategories` were defined with a `tenant_id NULL` column, in the
+  `provider_accounts` pattern (Amendment 01 §2.6), so the platform's rows would sit in the `NULL` rows and a tenant
+  would add its own beside them. But `subscriptions` carries `tenant_id`, so the FK toward `categories` would be a
+  link between two `tenant_id` tables. **`checks/core/check-07.sql` is purely structural** — it joins on the
+  existence of a `tenant_id` attribute on both ends and never looks at whether it is nullable — so it demands a
+  composite key; and a composite key from a non-null `tenant_id` toward a `tenant_id IS NULL` row never matches
+  under MATCH SIMPLE. The platform's seven categories would have been unreferenceable from any subscription.
+- **As decided:** a global catalog with **no `tenant_id` at all**, exactly as `plans`, `modules` and `permissions`
+  (Amendment 02 §3.1). Check 7 then does not apply, and `categories_read` is `USING (true)` like `plans_read`.
+- **The general lesson, for the document:** a nullable `tenant_id` is a usable pattern only for a table that
+  **nothing with a `tenant_id` points at**. `provider_accounts` is such a table; a classification is not. v1.16
+  §3.3 does not say this, and it is worth one sentence there.
+
+### 66. Check 8 passes silently on a table that declares `client_scope` but lacks `scope_ref_id`
+
+- **Origin:** Amendment 02, found in the first review of its draft (Amendment 02 §0, §3.3).
+- **The gap:** Check 8 requires the `client_scope` template on every table **carrying** `scope_ref_id`. A table that
+  is meant to be scoped but names its column something else — the draft's `client_notification_settings(client_id)`,
+  with "client_scope (scope_ref_id = client_id)" in its prose — carries no `scope_ref_id`, so the check never looks
+  at it and reports nothing. The policy itself would fail at creation, since the template's text reads
+  `<t>.scope_ref_id` literally; but nothing in the ten checks says the table should have been scoped at all.
+- **The consequence if it were missed:** an `operator` in `assigned` mode reads and edits every client's settings in
+  the tenant. The second axis is "an explicit opt-in by carrying the column" (v1.16 §4.8), and the failure mode of an
+  opt-in is a silent omission.
+- **Corrected in Amendment 02 itself:** the column is `scope_ref_id`, with the composite FK toward `clients`, as
+  `subscriptions` and `notification_log` do.
+- **Still open — the check, not this table:** nothing detects the next table that should have opted in and did not.
+  The candidates are an eleventh check or a manifest entry listing the tables that must be scoped. **A new check is a
+  change to the check inputs, so it is the project owner's decision**, and it is not made here.
+
+### 67. A tenant adding its own categories — the second part of E3, deferred
+
+- **Origin:** Amendment 02, E3 and §3.1, deferred by the project owner 2026-10-17.
+- **What is built:** the platform's closed catalog alone — `domains, hosting, security, software, backup, ai,
+  other`, seeded by `migrator`, with no application role writing it.
+- **What is deferred and why:** how a tenant adds its own categories. It is **not** a `tenant_id` column on the
+  global catalog — item 65 says why — most likely a separate table for the tenant's categories, read alongside the
+  platform's. Its shape is decided by the first real request, not guessed now.
+- **Deferred with it:** the permission `subscriptions.categories.manage`, which the draft carried. With no
+  application write on a global catalog it governs nothing; it returns with the separate table if that is built.
+- **Opens it:** the first tenant that asks for a category outside the seven.
+
+### 68. Appointments as a second reminder kind — deferred
+
+- **Origin:** Amendment 02, E6 and §6, deferred by the project owner 2026-10-17.
+- **Why it is safe to defer:** `reminder_type` is built now with one seeded value, `subscription`, and the financial
+  fields are optional — so adding a second kind adds a value and a row, and reshapes no table (Amendment 02 §2).
+- **Opens it:** the first client from outside the technical sector who asks for it (a clinic, maintenance).
+
+### 69. One reminder for subscriptions that expire together — deferred
+
+- **Origin:** Amendment 02, §6, deferred by the project owner 2026-10-17.
+- **Why it is deferred and not cancelled:** the live system sent 14 messages in one minute to the same recipient
+  about seven subscriptions expiring together (2026-09-15). The **operational** half of that — the number being
+  blocked — is handled now by the spacing in Amendment 02 §4.3 (2); what grouping adds beyond it is an improvement
+  to the experience.
+- **What it will cost when it comes:** grouping changes the de-duplication key
+  (`UNIQUE (tenant_id, subscription_id, channel, reminder_day)`) and the message template together — which is why it
+  waits until one reminder works in production.
+
+### 70. The expense report — deferred
+
+- **Origin:** Amendment 02, §6, deferred by the project owner 2026-10-17.
+- **What it is:** what the subscriptions cost monthly, and their spread across providers. The columns it needs
+  (`cost`, `currency`, `billing_cycle`, `provider`) are built now (Amendment 02 §3.2), so there is no retrofit.
+- **Why it waits:** it is a screen and an aggregation over data that has not been entered yet.
+- **And it is not the cross-tenant dashboard** that the roadmap's M4 warns about: it reads inside one tenant, under
+  `tenant_isolation`, and crosses no boundary. The M4 warning stands for the aggregated metrics dashboard alone.
+- **Opens it:** after the manual entry of M3 and a first month of use.
+
+### 71. The spacing between sends to the same recipient — `[2 s]`, a marked assumption
+
+- **Origin:** Amendment 02 §4.3 (2), 2026-10-17.
+- **Why it exists:** on 2026-09-15 the live system sent 14 messages in one minute to the same number. On unofficial
+  WhatsApp (GreenAPI) that is what a number gets blocked for — a stoppage of the service, not an annoyance.
+- **What is assumed:** a gap of **2 seconds** between two consecutive sends to the same recipient on the same
+  channel. The number is a guess; nothing in the live system or the provider's terms fixes it.
+- **To settle before stage (d) is built:** the provider's own published rate limit, where there is one, in place of
+  the guess; otherwise the number is the project owner's decision, recorded in the code PR.
+
+### 72. The retry ceiling — `[5]`, a marked assumption
+
+- **Origin:** Amendment 02 §4.3 (4), 2026-10-17.
+- **Why it exists:** a `pending` row is retried in every run, and the run became hourly (§4.2) — so a message whose
+  provider is down is retried 24 times a day with no ceiling, which is the same behaviour item 71 exists to prevent.
+- **What is assumed:** an `attempt_count` column, an escalating gap between attempts, and a ceiling of **5** after
+  which the status becomes `failed` for good and the administrator alert of §4.3 (1) fires.
+- **To settle before stage (d) is built:** the ceiling and the escalation curve. A ceiling too low drops a reminder
+  over a transient provider error; too high is item 71 again by another route.
+
+### 73. The daylight-saving proof — owed on PostgreSQL 18 before stage (d)
+
+- **Origin:** Amendment 02 §4.3 (5), 2026-10-17.
+- **The problem:** on the night the clocks change an hour repeats or is removed, so a client's send window is seen
+  twice or not at all — a duplicated or a missed reminder, twice a year, in the zones that transition.
+- **`Asia/Amman` is not one of them:** Jordan has been fixed at UTC+3 since 2022. So the proof must **not** be
+  written against the zone the live system uses — it would pass while proving nothing. The zone is a per-client
+  setting (§3.3) and clients will not all be in Jordan.
+- **What is owed, on real PostgreSQL 18 (v1.16 rule: prove engine assumptions before building on them):** computing
+  `reminder_day` in the zone of a client that does transition (`Europe/Berlin`, say) across both transitions, and
+  the behaviour of `send_from`/`send_to` in the repeated hour and in the removed one.
+- **Why it is an item and not only a line in the amendment:** whoever builds stage (d) needs to know a proof is
+  owed **before** the code, not after. It is the one assumption of the three that a wrong guess hides for six
+  months and then breaks twice a year.
 
 ## For the next version of the document — not for the code
 

@@ -10,9 +10,11 @@ layer, §18 rules). For anything touching the schema, `docs/DATABASE.md`. The wh
 ## Authority
 
 1. `docs/PLATFORM_CORE_v1_16_FROZEN.md` (Arabic, authoritative; `_EN.md` is a translation) — the architecture,
-   **plus its amendments in order**: `docs/PLATFORM_CORE_AMENDMENT_01.md` (Arabic, authoritative; `_EN.md`). An
-   amendment adds to 1.16 and edits only the paragraphs its §0 names as amended; any other conflict between the two
-   is an error in the amendment.
+   **plus its amendments in order**: `docs/PLATFORM_CORE_AMENDMENT_01.md`, then
+   `docs/PLATFORM_CORE_AMENDMENT_02.md` (Arabic, authoritative in both; `_EN.md`). An amendment adds to 1.16 and
+   edits only the paragraphs its §0 names as amended; any other conflict between the two is an error in the
+   amendment. A later amendment may withdraw what an earlier one added: Amendment 02 §0 withdraws Amendment 01 §6
+   (the import) in full, so the earlier text that §0 names is history and not in force.
 2. `docs/PROOF_SPEC_v1_3.md` (Arabic, authoritative; `_EN.md`) — tasks and acceptance criteria.
 3. The code. 4. The guides.
 
