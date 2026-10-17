@@ -19,12 +19,14 @@ web/
       guards.tsx             RequireAuth (→ /login?next=…), RequireTenant (→ /organizations; one subtree per tenant)
       next.ts                safeNext(): the return path after signing in — internal paths only; needsTenant()
     invitations/             pendingInvitation: the token being accepted, in memory only
+    password/                pendingResetToken: the recovery token being used, in memory only
     components/              AppShell (top bar, sidebar), AccentPicker, Badge, Icon, LanguageSwitcher, ErrorAlert
     i18n/                    locale, compiled messages, I18nProvider, apiErrors
     screens/
       auth/                  the login screen
       tenants/               the organization selection (and "no active membership")
       invitations/           accepting an invitation: a new account, or signed in
+      password/              forgot, reset (from the e-mail's link), and changing one's own password
       status/                loading, not permitted, not found
       subscriptions/         the T8 screen
   e2e/                       Playwright [B] against a real Api (npm run e2e)
@@ -54,7 +56,8 @@ after Conformance, against the Api container. Locally: an Api with `Web__Root` p
 
 - **react-router** (library mode: `BrowserRouter`, `Routes`): the simplest router that gives deep links and history.
 - **Paths:** `/login`, `/organizations`, and the organization's screens under `/app/` (`/app/subscriptions`) — and
-  `/app/invitations/accept`, open signed in or not and inside no organization (accepting enters none). The API
+  `/app/invitations/accept`, `/app/password/forgot` and `/app/password/reset`, open signed in or not and inside no
+  organization, plus `/app/password/change`, which needs a session and no organization. The API
   is under `/api` only; the one other server route is the original T8 screen, `/subscriptions/screen`, which the
   interface never uses.
 - **The session** is the HTTP-only cookie and `GET /me` — nothing in `localStorage` or `sessionStorage` (the `lang`
@@ -66,11 +69,22 @@ after Conformance, against the Api container. Locally: an Api with `Web__Root` p
   the same for a second link opened in the tab (`hashchange`). Signed in: one button. Not signed in: a new account; an
   address that already has one is refused (`account_exists`) with "Sign in to accept", and signing in comes straight
   back (the token still in memory; a reload loses it). Afterwards, the selection — nothing entered by itself.
+- **Recovering a password** (Amendment 01 §5.1): the e-mail's link is `/app/password/reset#token=<token>`
+  (`Identity:ForgotPassword:ResetLinkTemplate`), and the token is handled exactly as the invitation's —
+  `pendingResetToken`, into memory before anything renders, out of the address, `hashchange` watched.
+  **Forgot answers the same way for every address**: the API's 204 is uniform and so is its timing, so the screen
+  shows one panel, in one wording, with no redirect and nothing timed in the browser; the only other answer is the
+  ip ceiling's `too_many_attempts` (§5.2), which depends on the caller's own address. **Reset** keeps a token that
+  is unknown, used or expired to one message (`invalid_token`) and ends on the sign-in screen: that path issues no
+  cookie. **Changing one's own password** re-issues this session's cookie with the new security stamp and ends
+  every other session of the user, and the screen says both halves of that. The two fields must match; no other
+  password rule is checked, here or anywhere else in the platform (OPEN_ITEMS 62).
 - **Switching or leaving an organization:** the state changes first, so the organization's subtree (keyed by it) is gone
   in the same render, and every request in flight is aborted. There is no data cache beyond that subtree's state. A
   switch then calls `POST /tenants/deselect` (the cookie keeps the user alone) before the selection shows, so a reload
   never re-enters the previous organization.
-- **An ended session** (any 401 but login's — expiry, or Api restarted, OPEN_ITEMS 18): the login screen with a
+- **An ended session** (any 401 but login's and a wrong current password's on `PUT /me/password`, which is a
+  refused credential and not an ended session, OPEN_ITEMS 64 — expiry, or Api restarted, OPEN_ITEMS 18): the login screen with a
   message and the way back (`?next=`, internal paths only). **A lost organization** (`/me` names none — a membership
   disabled, an organization suspended): checked on each navigation, when the window comes back (focus, visible), and
   when a data request is refused with `not_a_member`, `no_active_tenant` or `tenant_not_active`; everything is dropped

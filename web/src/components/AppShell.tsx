@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { useIntl } from 'react-intl';
-import { NavLink, useNavigate } from 'react-router';
+import { Link, NavLink, useNavigate } from 'react-router';
 import { useLocale } from '../i18n/I18nProvider';
+import { CHANGE_PATH } from '../screens/password/ChangePasswordScreen';
 import { useAuthenticated, useSession } from '../session/SessionProvider';
 import { useAppearance } from '../theme/ThemeProvider';
 import { AccentPicker } from './AccentPicker';
@@ -103,6 +104,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="label">{intl.formatMessage(messages.switchOrganization)}</span>
             </button>
           )}
+          {/* Changing one's own password needs no organization, so it is here and not in the sidebar. */}
+          <Link to={CHANGE_PATH} className="btn-link">
+            <Icon name="lock" size={16} />
+            <span className="label">{intl.formatMessage(messages.changePassword)}</span>
+          </Link>
           <button type="button" className="btn ghost" onClick={onSignOut} disabled={leaving}>
             <Icon name="logout" size={16} directional />
             <span className="label">{intl.formatMessage(messages.signOut)}</span>

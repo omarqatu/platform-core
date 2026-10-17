@@ -1165,8 +1165,24 @@ essentials:
   shown as entered in `<bdi dir="auto">`.
 - **Logical CSS only** (`margin-inline-start`, `text-align: start`) — `check-logical-css` and ESLint refuse physical
   sides.
-- Screens: login, organization selection, invitation acceptance (new account or signed in), status screens, the
-  subscriptions screen. Screenshots of every state, in both languages, are in `docs/screens/`.
+- Screens: login, organization selection, invitation acceptance (new account or signed in), the three screens of
+  password recovery and change, status screens, the subscriptions screen. Screenshots of every state, in both
+  languages, are in `docs/screens/` — made by hand, and not yet made for the password screens.
+- **The password screens** (Amendment 01 §5.1, OPEN_ITEMS 59): `/app/password/forgot` and `/app/password/reset` are
+  open; `/app/password/change` needs a session and no organization (`PUT /me/password` runs its own units of work
+  with `app.user_id` alone). The e-mail's link is `/app/password/reset#token=<token>` and its token is handled as
+  the invitation's is — `src/password/pendingResetToken.ts`, into memory before anything renders, out of the
+  address, `hashchange` watched — so it never reaches a server log or a referrer. Forgot shows **one panel in one
+  wording for every address**, with no redirect and nothing timed in the browser: the uniform 204 and its floor
+  (§7) are only uniform if the screen is. Reset keeps unknown, used and expired to the one `invalid_token`
+  message and ends on the sign-in screen, because that path issues no cookie. Change says in one line that this
+  session survives and every other one has ended — people expect to be signed out and worry when they are not.
+  The two password fields must match, and that is the only rule the interface checks: the platform has no
+  password policy (OPEN_ITEMS 62).
+- **A 401 is an ended session, with two exceptions** (`api/client.ts`): the login path's, and
+  `invalid_credentials` from `PUT /me/password`, which is a wrong *current* password and must not sign the user
+  out of a working session. A stale security stamp on the same request is `session_expired` and still ends it.
+  The status code is the backend's to correct (OPEN_ITEMS 64).
 
 ```bash
 cd web

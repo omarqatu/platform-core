@@ -12,6 +12,7 @@ export const messages = defineMessages({
   noOrganization: { id: 'identity.bar.noOrganization', defaultMessage: 'None chosen' },
   switchOrganization: { id: 'identity.bar.switchOrganization', defaultMessage: 'Switch organization' },
   signOut: { id: 'identity.bar.signOut', defaultMessage: 'Sign out' },
+  changePassword: { id: 'identity.bar.changePassword', defaultMessage: 'Change password' },
   navigation: { id: 'identity.bar.navigation', defaultMessage: 'Main' },
   subscriptions: { id: 'identity.bar.subscriptions', defaultMessage: 'Subscriptions' },
   // The shell (AppShell): the top bar, the sidebar, the appearance controls.
