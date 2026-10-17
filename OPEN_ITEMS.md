@@ -502,6 +502,24 @@ Closed by the A3 PR:
   not open. Left out deliberately rather than half-done.
 - **Related:** items 22 and 44.
 
+### 61. `Test28c_EveryEntityTypeInsert_SendsNoReturning` covers 19 of 21 entity types
+
+- **Origin:** A3, found while reading why the entity-count tripwires failed.
+- **The finding:** the test's name promises every entity type; what it does is insert a hand-written list and
+  assert `Assert.Equal(19, tablesInserted.Count)`, counting the tables that *received* an insert. So a new entity
+  cannot fail it — it is simply absent. `provider_accounts` (A3) and `password_reset_tokens` (A1) are both
+  outside it, and the count has stayed 19 across both PRs without anyone noticing.
+- **Why it was not widened here:** for `provider_accounts` the omission is correct on its merits — no application
+  role holds `INSERT` on it and the application never inserts it (migrator seeds it, §2.6), so there is no
+  command of ours that could carry a `RETURNING`. For `password_reset_tokens` there **is** an application insert
+  (A1's, and A3's), so that one is a real gap. Widening a T2 test is outside this PR, and the choice of what the
+  test should assert — every entity type, or every entity the application inserts — is the project owner's.
+- **The trap to close either way:** a test whose name claims "every" while a hardcoded count says otherwise will
+  be read as coverage that does not exist. If the list is deliberate, the name and the assertion should say so.
+- **Meanwhile, what does cover the new entity:** `Test28b_Model_EveryPropertyIsValueGeneratedNever` and
+  `T5_ModuleModelTests.Test28b_ModuleModel_EveryPropertyIsValueGeneratedNever` iterate every entity type's
+  properties, so `provider_accounts` is inside those.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12

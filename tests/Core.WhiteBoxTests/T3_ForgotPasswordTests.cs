@@ -53,13 +53,17 @@ public class T3_ForgotPasswordTests(WhiteBoxFixture fixture)
     {
         await using var connection = new NpgsqlConnection(fixture.MigratorConnectionString);
         await connection.OpenAsync();
+        // The fragment goes on a line of its own, interpolated, never concatenated onto the line above: a raw
+        // string literal does not keep the newline before its closing quotes, so `... = @e" + "AND t.used_at ...`
+        // produced `= @eAND t.used_at`, and the parameter name swallowed the AND — 42601 from the server.
         await using var command = new NpgsqlCommand(
-            """
-            SELECT count(*) FROM password_reset_tokens t
-              JOIN users u ON u.id = t.user_id
-              JOIN persons p ON p.id = u.person_id
-             WHERE lower(btrim(p.email)) = @e
-            """ + liveOnly, connection);
+            $"""
+             SELECT count(*) FROM password_reset_tokens t
+               JOIN users u ON u.id = t.user_id
+               JOIN persons p ON p.id = u.person_id
+              WHERE lower(btrim(p.email)) = @e
+                {liveOnly}
+             """, connection);
         command.Parameters.AddWithValue("e", email);
         return (long)(await command.ExecuteScalarAsync())!;
     }
