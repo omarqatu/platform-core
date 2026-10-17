@@ -13,6 +13,7 @@
     "scope_assignments":         { "app_user": ["SELECT", "INSERT"], "provisioner": ["SELECT"] },
     "invitations":               { "app_user": ["SELECT", "INSERT"], "provisioner": ["SELECT"] },
     "auth_attempts":             { "authenticator": ["SELECT", "INSERT"] },
+    "password_reset_tokens":     { "authenticator": ["SELECT", "INSERT"] },
     "audit_log":                 { "app_user": ["SELECT", "INSERT"], "provisioner": ["INSERT"] },
     "roles":                     { "app_user": ["SELECT", "INSERT", "UPDATE", "DELETE"], "provisioner": ["SELECT", "INSERT"] },
     "role_permissions":          { "app_user": ["SELECT", "INSERT", "DELETE"], "provisioner": ["INSERT"] },
@@ -25,13 +26,14 @@
     "subscriptions":             { "app_user": ["SELECT", "INSERT", "UPDATE", "DELETE"] }
   },
   "columns": {
-    "users":                     { "app_user": { "UPDATE": ["last_login_at", "language", "theme"] } },
+    "users":                     { "app_user": { "UPDATE": ["last_login_at", "language", "theme", "security_stamp"] } },
     "user_password_credentials": { "app_user": { "UPDATE": ["password_hash", "updated_at"] } },
     "memberships":               { "app_user": { "UPDATE": ["status"] }, "provisioner": { "UPDATE": ["status"] } },
     "membership_scope":          { "app_user": { "UPDATE": ["scope_mode"] }, "provisioner": { "UPDATE": ["scope_mode"] } },
     "scope_assignments":         { "app_user": { "UPDATE": ["active"] }, "provisioner": { "UPDATE": ["active"] } },
     "invitations":               { "app_user": { "UPDATE": ["status"] }, "provisioner": { "UPDATE": ["status"] } },
-    "tenant_modules":            { "app_user": { "UPDATE": ["is_active"] } }
+    "tenant_modules":            { "app_user": { "UPDATE": ["is_active"] } },
+    "password_reset_tokens":     { "authenticator": { "UPDATE": ["used_at"] } }
   },
   "database": { "CONNECT": ["app_user", "authenticator", "job_runner", "provisioner"], "TEMPORARY": [] },
   "schemas": { "public": { "USAGE": ["app_user", "authenticator", "job_runner", "provisioner"], "CREATE": [] } },

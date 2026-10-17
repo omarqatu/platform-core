@@ -110,6 +110,11 @@
       "CREATE POLICY audit_log_provisioner_insert ON audit_log\n  FOR INSERT TO provisioner\n  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));",
       "CREATE POLICY audit_log_insert ON audit_log\n  FOR INSERT TO app_user\n  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));",
       "CREATE POLICY audit_read ON audit_log\n  FOR SELECT TO app_user\n  USING (\n    tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid)\n    AND COALESCE((SELECT NULLIF(current_setting('app.scope_all', true), '')::boolean), false));"
+    ],
+    "password_reset_tokens": [
+      "CREATE POLICY password_reset_tokens_authenticator_select ON password_reset_tokens\n  FOR SELECT TO authenticator\n  USING (true);   -- the role sees every token; the match is by the hash in the query",
+      "CREATE POLICY password_reset_tokens_authenticator_insert ON password_reset_tokens\n  FOR INSERT TO authenticator\n  WITH CHECK (true);",
+      "CREATE POLICY password_reset_tokens_authenticator_use ON password_reset_tokens\n  FOR UPDATE TO authenticator\n  USING (used_at IS NULL)\n  WITH CHECK (used_at IS NOT NULL);   -- the only write is consumption"
     ]
   }
 }

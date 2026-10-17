@@ -164,7 +164,7 @@ platform-core/
 │
 ├── src/
 │   ├── Core/                      the platform core — no HTTP endpoints of its own
-│   │   ├── CoreDbContext.cs       the EF model of the 19 core tables (mapping only — the schema is SQL)
+│   │   ├── CoreDbContext.cs       the EF model of the 20 core tables (mapping only — the schema is SQL)
 │   │   ├── ApiErrorCodes.cs       every error code the API can return (a contract — never rename one)
 │   │   ├── Data/                  the transaction layer and everything that runs inside it
 │   │   │   ├── UnitOfWork.cs                 one transaction, context set first
@@ -425,6 +425,11 @@ response.
 Whatever the kind, **every database command runs inside an explicit transaction** — `TransactionRequiredInterceptor`
 throws otherwise. Opting out of the middleware is not opting out of the rule.
 
+And whatever the kind, a request carrying a session has its **security stamp** compared with the user's row before
+the endpoint runs (Amendment 01 §2.1, §7 below): inside the request's own transaction for the first two kinds, and
+in a short read-only transaction of its own for an endpoint that runs its own units of work. `logout` and
+`deselect` carry `WithoutSessionStampAttribute` and send no command at all.
+
 ### The rule
 
 > A request is one unit of work: transaction → context → resolution → permission → work → commit. The endpoint never
@@ -438,7 +443,7 @@ All of this lives in `src/Core/Data/` and `src/Core/CoreDbContext.cs`.
 
 ### `CoreDbContext` — a mapping, not a schema
 
-- Maps the 19 core tables. Module contexts (`SubscriptionsDbContext`) **inherit** from it and add their own tables,
+- Maps the 20 core tables. Module contexts (`SubscriptionsDbContext`) **inherit** from it and add their own tables,
   so a module's context also has the core tables and the whole transaction layer.
 - `Database.AutoTransactionBehavior = AutoTransactionBehavior.Never` — EF must not open its own transaction inside
   `SaveChanges`. Outside a unit of work, there is no transaction at all, and the interceptor throws.
@@ -548,8 +553,9 @@ The query must already be ordered (stable paging). Default limit 50, max 200.
 Every **tracked** insert, update or delete is captured at `SavingChanges` and written to `audit_log` by a second save
 in `SavedChanges` — same transaction, rolled back with it. You write no audit code.
 
-- Exempt: `audit_log` itself, `user_password_credentials`, `auth_attempts`, and a user updating their own
-  `last_login_at` / `language` / `theme`.
+- Exempt: `audit_log` itself, `user_password_credentials`, `auth_attempts`, `password_reset_tokens`
+  (Amendment 01 §2.2), and a user updating their own `last_login_at` / `language` / `theme` / `security_stamp`
+  (§2.1). The last one is why a password change leaves no trace at all — OPEN_ITEMS 52.
 - Masked: `password_hash` and `token_hash` are recorded as `"[masked]"`.
 - No audit context with a tenant → `AuditContextMissingException` before anything is written. Every audited write
   must happen inside a transaction that names its tenant.
@@ -592,7 +598,15 @@ sequenceDiagram
 - Every attempt — missing username, wrong password, right password — runs the same query and the same PBKDF2 work and
   writes one `auth_attempts` row. The response for any failure is the same `401 invalid_credentials`. This avoids
   revealing which usernames exist (T3.5).
-- After login the cookie holds the user only. No tenant is entered yet.
+- After login the cookie holds the user and their security stamp. No tenant is entered yet.
+- **The attempt limiter** (Amendment 01 §5.2, OPEN_ITEMS 16): before the credential is read, `Authenticator` counts
+  the window's failed attempts from the caller's address; at or above `PerIpCeiling` the request is refused with
+  `429 too_many_attempts` — before the password is read, so the refusal depends on the address alone and says
+  nothing about which usernames exist. Otherwise it counts the window's failures for this (username + address) and
+  delays the response by `FreeFailures`/`DelaySecondsByFailure`, **awaited after the transaction commits** and only
+  on a failure. **No account lockout**: a lockout would let anyone lock out a known user. Every number lives in
+  `Identity:LoginLimits` and is a marked assumption until launch; the Development and CI settings are deliberately
+  lenient, because the whole `[B]` suite comes from one address.
 
 ### The session cookie
 
@@ -603,8 +617,19 @@ An ASP.NET Core authentication cookie named `session`: `HttpOnly`, `SameSite=Str
 |---|---|
 | `user_id` | after login |
 | `tenant_id` | after selecting a tenant |
+| `security_stamp` | after login, and again after the user changes their own password |
 
 No role, no permission, no scope, no membership id. Those are resolved from the database on every transaction.
+
+**The security stamp** (Amendment 01 §2.1): `users.security_stamp` is written by the application when a user is
+created and changed on every password change. `UnitOfWorkMiddleware` compares the cookie's stamp with the row on
+every request — one read under `user_self_read`, inside the request's own transaction, or in a short read-only one
+where the endpoint runs its own units of work — and a difference is `401 session_expired`. So changing a password
+ends every session of that user; the session that changed it gets a new cookie and survives. Two endpoints are
+outside the comparison (`WithoutSessionStampAttribute`): `POST /auth/logout` and `POST /tenants/deselect` — they
+touch no data at all and only narrow the session, and logging out has to work with a session the stamp has already
+ended, or a stale cookie could never be cleared. This closes OPEN_ITEMS 36 **in part only**: logout still does not
+change the stamp, so a copied cookie survives a logout until it expires.
 
 ### Choosing a tenant
 
@@ -625,6 +650,27 @@ revoke it server-side (OPEN_ITEMS 36). Data-protection keys are not persisted ye
 `Core.Identity.PasswordHashing`: PBKDF2-HMAC-SHA512, 210,000 iterations, 16-byte salt, 64-byte key, stored as
 `pbkdf2-sha512$210000$<salt>$<key>`, compared in constant time. The application can **update** a password hash but
 has no `SELECT` on `user_password_credentials` — only the authenticator reads hashes.
+
+### Changing a password, and recovering one (Amendment 01 §5.1)
+
+Both paths are two units of work, in `Core.Identity.PasswordPaths`, and both end in the same second one:
+
+| | UoW-1 — `authenticator` | UoW-2 — `app_user` |
+|---|---|---|
+| `PUT /api/me/password` | the current password for the session's user, and one `auth_attempts` row | the new hash and a new stamp; the cookie is re-issued with it |
+| `POST /api/auth/password/reset` | the token by its hash: unknown, used or expired → `400 invalid_token`; otherwise consumed (`used_at`, a critical write) | the same, in the context of **the token's owner** — and no cookie is issued |
+
+UoW-2 runs with `app.user_id` alone and no tenant, writing through `password_self_update` and `user_self_update`.
+The reset path is the one place where `app.user_id` comes from something other than the session: the owner of the
+row UoW-1 consumed — the named exception to §4.3-b in Amendment 01 §0. It is a value the database handed back, never
+one from the request; the plaintext token is only ever hashed and matched.
+
+Neither path writes an audit entry (`user_password_credentials` is never audited, `security_stamp` is on the
+exemption list, `password_reset_tokens` is outside it) — OPEN_ITEMS 52 until the identity audit log exists.
+
+**`POST /api/auth/password/forgot` is not built yet.** It is the only path that mints a token, and it needs the
+address to send to: `authenticator` has no read on `persons`, and there is no sender. It lands with the e-mail
+sender (OPEN_ITEMS 53). Until then a token is created only by the operations path that will come with it.
 
 ---
 
@@ -992,6 +1038,8 @@ The rule: anything "across my tenants" is a fan-out of per-tenant transactions, 
 | `InvitationRefusedException` | 400 / 409 / 403 | its own code (`invalid_invitation`, `email_mismatch`, `account_exists`, …) |
 | `LastMemberException` | 409 | `last_owner` / `last_all_member` |
 | `RoleTemplatesUnavailableException` | 500 | `role_templates_unavailable` |
+| `SessionExpiredException` | 401 | `session_expired` — the cookie's stamp is not the user's current one |
+| `PasswordResetRefusedException` | 400 | `invalid_token` — unknown, used or expired, with nothing said about which |
 | `NotPermittedException` | 403 | `not_permitted` |
 | `CriticalWriteException` | 403 | `not_permitted` |
 | `42501` insufficient privilege (policy `WITH CHECK`, grant) | 403 | `not_permitted` |
@@ -1008,6 +1056,8 @@ and a mapping here — do not return 500s for expected situations.
 |---|---|---|
 | `POST /api/auth/login` | own UoW | — |
 | `POST /api/auth/logout` | no DB | — |
+| `POST /api/auth/password/reset` | own UoW ×2 | — (the token) |
+| `PUT /api/me/password` | own UoW ×2 | session |
 | `GET /api/me` | no active tenant | session |
 | `GET /api/tenants` | no active tenant | session |
 | `POST /api/tenants/{id}/select` | own UoW | active membership |
@@ -1029,7 +1079,7 @@ and a mapping here — do not return 500s for expected situations.
 | `POST /api/subscriptions` | module | `subscriptions.write` |
 | `GET /api/unified/subscriptions` | fan-out | `subscriptions.read` per tenant |
 
-> The endpoints in `docs/PLATFORM_CORE_AMENDMENT_01.md` §5.1 (password recovery and change, the tenant's platform subscription, module settings, clients, renewal and cancellation, the notification log) are specified, not built. None appears here until its PR lands.
+> The endpoints in `docs/PLATFORM_CORE_AMENDMENT_01.md` §5.1 still specified and not built: `POST /api/auth/password/forgot` (it waits for the e-mail sender — OPEN_ITEMS 53), the tenant's platform subscription, module settings, clients, renewal and cancellation, and the notification log. None appears above until its PR lands.
 
 ---
 

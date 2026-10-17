@@ -26,3 +26,23 @@ CALL prune_auth_attempts();
 - **Production requirement (spec item k, not built in the proof):** the scheduler that holds
   the `migrator` connection runs on the operations network. The application network cannot
   reach the `migrator` account (`pg_hba.conf`).
+
+## `password_reset_tokens` retention (Amendment 01 §2.2)
+
+The recovery tokens follow the same policy as `auth_attempts`: rows older than **90 days** are
+deleted by a `migrator` procedure, created by the migration `20261017000010_PasswordReset`:
+
+```sql
+CALL prune_password_reset_tokens();
+```
+
+- **Who runs it:** `migrator` alone, exactly as above — `EXECUTE` is revoked from `PUBLIC`, and no
+  application role holds `DELETE` on the table either (§3: `authenticator` has `SELECT`, `INSERT`
+  and `UPDATE (used_at)`, nothing more).
+- **When:** daily, beside the procedure above:
+  ```bash
+  psql "$MIGRATOR_CONNECTION" -c 'CALL prune_password_reset_tokens();'
+  ```
+- **What it does not do:** a token is consumed by being used (`used_at`), never by being deleted;
+  this only clears the history afterwards. An unused token is already dead to the reset path once
+  `expires_at` has passed.

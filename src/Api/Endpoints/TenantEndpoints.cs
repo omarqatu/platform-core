@@ -46,17 +46,25 @@ public static class TenantEndpoints
             if (refusal is not null)
                 return Results.Json(new { error = refusal }, statusCode: StatusCodes.Status403Forbidden);
 
-            await http.SignInAsync(SessionCookie.Scheme, SessionCookie.Principal(user, tenantId));
+            // The stamp travels with the session unchanged; the middleware has already compared it with the row
+            // (Amendment 01 §2.1), so a session the stamp has ended never reaches here.
+            await http.SignInAsync(SessionCookie.Scheme, SessionCookie.Principal(user, tenantId, session.SecurityStamp!.Value));
             return Results.NoContent();
         }).RequireAuthorization().WithMetadata(new OwnUnitsOfWorkAttribute());
 
         // Leaving the active tenant without logging out (the interface's "switch organization"): the cookie is issued
         // again with the user alone, so a reload cannot re-enter the previous tenant (OPEN_ITEMS 38, decided by the
-        // project owner). No database access; an unsafe request, so CsrfProtection applies.
+        // project owner). No database access; an unsafe request, so CsrfProtection applies. Like logout, it is
+        // outside the stamp comparison (Amendment 01 §2.1): it reads and writes nothing and only narrows the
+        // session, and the stamp it carries over is compared on the next request that does touch data.
         app.MapPost("/tenants/deselect", async (HttpContext http, ISessionContextAccessor session) =>
         {
-            await http.SignInAsync(SessionCookie.Scheme, SessionCookie.Principal(session.Current.UserId!.Value, null));
+            // This path is outside the stamp comparison, so the cookie's stamp is whatever it carried. A cookie
+            // with none (one minted before Amendment 01 §2.1) cannot be re-issued: that session is over.
+            if (session.SecurityStamp is not { } stamp)
+                throw new SessionExpiredException();
+            await http.SignInAsync(SessionCookie.Scheme, SessionCookie.Principal(session.Current.UserId!.Value, null, stamp));
             return Results.NoContent();
-        }).RequireAuthorization().WithMetadata(new OwnUnitsOfWorkAttribute());
+        }).RequireAuthorization().WithMetadata(new OwnUnitsOfWorkAttribute(), new WithoutSessionStampAttribute());
     }
 }

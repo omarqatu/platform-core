@@ -32,6 +32,9 @@ public sealed class User
     public string? Language { get; set; }
     public string? Theme { get; set; }
     public DateTime? LastLoginAt { get; set; }
+    // Amendment 01 §2.1: the session stamp. Generated when the user is created, changed on every password
+    // change; it enters the cookie and is compared on every request, so a changed password ends every session.
+    public Guid SecurityStamp { get; set; }
 }
 
 public sealed class UserPasswordCredential
@@ -79,6 +82,21 @@ public sealed class AuthAttempt
     public string? IpAddress { get; set; }
     public bool Succeeded { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// A password-recovery token (Amendment 01 §2.2): a global identity row beside auth_attempts, with no tenant_id.
+/// Only the token's SHA-256 is stored, and the only write after the insert is its consumption (used_at).
+/// </summary>
+public sealed class PasswordResetToken
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public string TokenHash { get; set; } = "";
+    public DateTime RequestedAt { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public DateTime? UsedAt { get; set; }
+    public string? RequestIp { get; set; }
 }
 
 public sealed class MembershipScope

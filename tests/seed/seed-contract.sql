@@ -71,8 +71,8 @@ BEGIN
       usr := uuidv7();
       INSERT INTO persons (id, full_name, email, phone_e164, created_at)
         VALUES (person, rec.full_name, rec.username || '@seed.test', NULL, now());
-      INSERT INTO users (id, person_id, user_type, username, status, language, theme, last_login_at)
-        VALUES (usr, person, 'employee', rec.username, 'active', 'ar', NULL, NULL);
+      INSERT INTO users (id, person_id, user_type, username, status, language, theme, last_login_at, security_stamp)
+        VALUES (usr, person, 'employee', rec.username, 'active', 'ar', NULL, NULL, uuidv7());
       -- <username>-seed-password, hashed (test values only — the header).
       pw_hash := CASE rec.username
         WHEN 'omar'   THEN 'pbkdf2-sha512$210000$To2DKiQdIccrJ9aE107OVA==$ZNnPHK1u+DqrSlpWyQmJWQ89yNLi5fCoJwrUJsPGdR/MHLF/dJ6DcB0cJqwD0WGvMlTfMVjOvqgfuhbl6D+AvA=='

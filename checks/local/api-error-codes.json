@@ -8,6 +8,8 @@
     "tenant_not_active",
     "step_up_required",
     "not_a_member",
+    "session_expired",
+    "too_many_attempts",
     "not_permitted",
     "membership_scope_missing",
     "invalid_value",
@@ -22,6 +24,7 @@
     "account_exists",
     "username_taken",
     "already_member",
-    "role_templates_unavailable"
+    "role_templates_unavailable",
+    "invalid_token"
   ]
 }

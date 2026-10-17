@@ -17,6 +17,10 @@ public static class ApiErrorCodes
     public const string TenantNotActive = "tenant_not_active";
     public const string StepUpRequired = "step_up_required";
     public const string NotAMember = "not_a_member";
+    // Amendment 01 §2.1, §5.2: the cookie's security stamp is not the user's current one — the password changed.
+    public const string SessionExpired = "session_expired";
+    // Amendment 01 §5.2 (OPEN_ITEMS 16): the window's failures from this address reached the ceiling.
+    public const string TooManyAttempts = "too_many_attempts";
 
     // Permission and data (3.5, 5, 3.3)
     public const string NotPermitted = "not_permitted";
@@ -38,4 +42,8 @@ public static class ApiErrorCodes
     public const string UsernameTaken = "username_taken";
     public const string AlreadyMember = "already_member";
     public const string RoleTemplatesUnavailable = "role_templates_unavailable";
+
+    // Password recovery (Amendment 01 §5.1): unknown, used or expired — one code, so the response says nothing
+    // about which.
+    public const string InvalidToken = "invalid_token";
 }

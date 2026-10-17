@@ -87,7 +87,13 @@ internal static class Identities
         var user = userId ?? Guid.CreateVersion7();
         db.Persons.Add(new Person { Id = personId, FullName = fullName, Email = email, CreatedAt = now });
         await CriticalWrite.SaveAsync(db, "persons", ct);
-        db.Users.Add(new User { Id = user, PersonId = personId, UserType = "employee", Username = username, Status = "active" });
+        // The security stamp is written with the row (Amendment 01 §2.1): the application generates it, as it
+        // generates every key.
+        db.Users.Add(new User
+        {
+            Id = user, PersonId = personId, UserType = "employee", Username = username, Status = "active",
+            SecurityStamp = Guid.CreateVersion7(),
+        });
         await CriticalWrite.SaveAsync(db, "users", ct);
         db.UserPasswordCredentials.Add(new UserPasswordCredential { UserId = user, PasswordHash = PasswordHashing.Hash(password), UpdatedAt = now });
         await CriticalWrite.SaveAsync(db, "user_password_credentials", ct);

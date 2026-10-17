@@ -56,6 +56,16 @@ public static class UnitOfWork
             return true;
         }, cancellationToken);
 
+    public static Task RunReadOnlyAsync<TContext>(
+        TContext db, SessionContext session, Func<TContext, CancellationToken, Task> work,
+        CancellationToken cancellationToken = default)
+        where TContext : CoreDbContext =>
+        RunReadOnlyAsync<TContext, bool>(db, session, async (context, ct) =>
+        {
+            await work(context, ct);
+            return true;
+        }, cancellationToken);
+
     // Each variable is its own SET LOCAL statement (3.5/2), in the order app.user_id, app.tenant_id,
     // then — when both a user and an active tenant are present — the four second-axis variables,
     // resolved from the database on every transaction in the order of Rule 6 (3.5/1, 3.5/6).

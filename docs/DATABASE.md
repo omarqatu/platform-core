@@ -55,7 +55,7 @@ The tables fall into five groups:
 
 | Group | Tables | Carries `tenant_id`? |
 |---|---|---|
-| **Identity** (global — one person, many tenants) | `persons`, `users`, `user_password_credentials`, `auth_attempts` | No |
+| **Identity** (global — one person, many tenants) | `persons`, `users`, `user_password_credentials`, `auth_attempts`, `password_reset_tokens` | No |
 | **Tenancy and membership** | `tenants`, `memberships`, `membership_roles`, `membership_auth`, `invitations` | Yes (except `tenants`, whose `id` *is* the tenant) |
 | **The second axis** | `membership_scope`, `scope_assignments` | Yes |
 | **Modules and permissions** | `modules`, `permissions`, `role_templates`, `role_template_permissions` (global catalogs); `roles`, `role_permissions`, `tenant_modules` (per tenant) | Per tenant ones only |
@@ -74,7 +74,7 @@ by `db/init/00-roles.sh`. **No role is a member of another** (no `GRANT role TO 
 |---|---|---|---|
 | `migrator` | The migration tool (`src/Migrations`), the seed script, the catalog checks, ops procedures | Owns every object. Runs migrations. Writes the global catalogs (modules, permissions, role templates). Has `BYPASSRLS` — a documented exception (PLATFORM_CORE §3.4) under three conditions: no application path reaches it; every data migration ends with a row-count check; the alternative (per-tenant migrations) was considered and rejected. | `src/Migrations/appsettings.json` / env. **Never** in Api or Worker — Api refuses to start if it sees it, and CI scans the Api image for the password (T0.3). |
 | `app_user` | Api (every normal request), Worker (per-tenant processing) | The application. Everything it reads or writes is filtered by policies using the session variables (§3). | Api, Worker |
-| `authenticator` | Api, login only (`Core.Identity.Authenticator`) | Resolves a username + password before any session exists, and writes one `auth_attempts` row per attempt — its **only** write. | Api |
+| `authenticator` | Api, login only (`Core.Identity.Authenticator`) | Resolves a username + password before any session exists, and writes one `auth_attempts` row per attempt. Since Amendment 01 §2.2 it also writes `password_reset_tokens` (insert, and consumption through `used_at`) — those two tables are its whole write surface. | Api |
 | `provisioner` | Api, two paths only: bootstrap (create a tenant) and invitation acceptance | The two paths that legitimately cross isolation: they create rows in a tenant the caller is not (yet) a member of. Each path is one transaction for one tenant, with `app.tenant_id` set to that tenant first. | Api |
 | `job_runner` | Worker | Reads the list of **active** tenants to start a background job's fan-out — its only read. The actual work then runs as `app_user`, one tenant per transaction. | Worker |
 
@@ -308,11 +308,11 @@ many tenants. These tables are global because identity is shared, and login happ
 #### `users`
 | | |
 |---|---|
-| **Holds** | The login account: `username` (globally unique), `user_type` (`employee`/`customer`), `status`, user preferences `language` and `theme`, `last_login_at`. |
+| **Holds** | The login account: `username` (globally unique), `user_type` (`employee`/`customer`), `status`, user preferences `language` and `theme`, `last_login_at`, and `security_stamp` (Amendment 01 §2.1). |
 | **FKs** | `person_id → persons(id)`. |
 | **Policies** | `user_self_read`, `user_self_update` (app: own row), `user_visible_via_membership` (app: members of the active tenant), `users_authenticator_read` (auth), `users_provisioner_select` / `users_provisioner_insert` (prov). |
-| **Grants** | app `SELECT` + `UPDATE (last_login_at, language, theme)` only; auth `SELECT`; prov `SELECT, INSERT`. |
-| **Notes** | A user can change their own preferences but nothing else about their account. These self-service updates are exempt from auditing (they are not tenant data). |
+| **Grants** | app `SELECT` + `UPDATE (last_login_at, language, theme, security_stamp)` only; auth `SELECT`; prov `SELECT, INSERT`. |
+| **Notes** | A user can change their own preferences and their own session stamp, but nothing else about their account. These self-service updates are exempt from auditing (they are not tenant data). `security_stamp` is written by the application on every password change, travels in the session cookie, and is compared with this row on every request — a changed password ends every session (Amendment 01 §2.1; OPEN_ITEMS 36 is closed only in part, because logging out does not change it, and OPEN_ITEMS 52 stays open because the change is not audited). |
 
 #### `user_password_credentials`
 | | |
@@ -329,7 +329,18 @@ many tenants. These tables are global because identity is shared, and login happ
 | **Policies** | `auth_attempts_authenticator_read`, `auth_attempts_authenticator_insert` (auth). |
 | **Grants** | auth `SELECT, INSERT`. Nothing for anyone else. |
 | **Retention** | Rows older than 90 days are deleted by `CALL prune_auth_attempts();`, a procedure only `migrator` can execute, scheduled outside the application (`docs/operations.md`). |
-| **Notes** | It is its own log, so it is not written to `audit_log`. Attempt limiting is not built yet (OPEN_ITEMS 16). |
+| **Notes** | It is its own log, so it is not written to `audit_log`. The limiter of Amendment 01 §5.2 reads it: an escalating delay per (`username_entered` + `ip_address`) and a ceiling per `ip_address`, with no account lockout. Its numbers are Api configuration (`Identity:LoginLimits`) and are settled at launch (OPEN_ITEMS 16). |
+
+#### `password_reset_tokens` (Amendment 01 §2.2)
+| | |
+|---|---|
+| **Holds** | One row per recovery request: `user_id`, `token_hash` (SHA-256 of a 32-byte token — the token itself is never stored), `requested_at`, `expires_at`, `used_at` (NULL until consumed), `request_ip`. Global, no `tenant_id`. |
+| **FKs** | `user_id → users(id)`. |
+| **Uniqueness** | `password_reset_tokens_token_hash_key UNIQUE (token_hash)` — the lookup path, and no two rows for one hash. |
+| **Policies** | `password_reset_tokens_authenticator_select`, `…_insert`, `…_use` (auth). The last is `FOR UPDATE` with `USING (used_at IS NULL)` and `WITH CHECK (used_at IS NOT NULL)`: a token is consumed once, and nothing puts it back. |
+| **Grants** | auth `SELECT, INSERT, UPDATE (used_at)`. Nothing for anyone else — no `DELETE` for any application role. |
+| **Retention** | Rows older than 90 days are deleted by `CALL prune_password_reset_tokens();`, a `migrator` procedure scheduled outside the application (`docs/operations.md`), like `auth_attempts`. |
+| **Notes** | Outside automatic auditing, like `auth_attempts`, and `token_hash` is on the masking list. The row that mints a token (`POST /api/auth/password/forgot`) is **not built yet** — it waits for the e-mail sender (OPEN_ITEMS 53); `POST /api/auth/password/reset` consumes one. |
 
 ### 6.2 Tenancy and membership
 
@@ -582,9 +593,10 @@ policies say. Column lists in parentheses are column-level `UPDATE` grants.
 |---|---|---|---|---|
 | `tenants` | SELECT | INSERT | — | SELECT |
 | `persons` | SELECT | SELECT, INSERT | — | — |
-| `users` | SELECT, UPDATE (last_login_at, language, theme) | SELECT, INSERT | SELECT | — |
+| `users` | SELECT, UPDATE (last_login_at, language, theme, security_stamp) | SELECT, INSERT | SELECT | — |
 | `user_password_credentials` | UPDATE (password_hash, updated_at) — **no SELECT** | INSERT | SELECT | — |
 | `auth_attempts` | — | — | SELECT, INSERT | — |
+| `password_reset_tokens` | — | — | SELECT, INSERT, UPDATE (used_at) | — |
 | `memberships` | SELECT, UPDATE (status) | SELECT, INSERT, UPDATE (status) | — | — |
 | `membership_roles` | SELECT, INSERT, DELETE | SELECT, INSERT, DELETE | — | — |
 | `membership_auth` | SELECT | INSERT | SELECT | — |
@@ -603,8 +615,8 @@ policies say. Column lists in parentheses are column-level `UPDATE` grants.
 | `subscriptions` | SELECT, INSERT, UPDATE, DELETE | — | — | — |
 
 **Database and schema.** Nothing is granted through `PUBLIC`. `CONNECT` on the database goes to the four application
-roles; `TEMP` to none; `USAGE` on schema `public` to the four; `CREATE` on it to none. `prune_auth_attempts()` is
-executable by `migrator` alone.
+roles; `TEMP` to none; `USAGE` on schema `public` to the four; `CREATE` on it to none. `prune_auth_attempts()` and
+`prune_password_reset_tokens()` are executable by `migrator` alone.
 
 The authoritative statement is `checks/core/grants.json`; Check 6 fails on any difference, in either direction.
 
@@ -751,4 +763,6 @@ These are deliberate and tracked. Do not "fix" them in passing — each needs a 
 | `tenant_modules` not enforced | A tenant can use a module it has not activated. | OPEN_ITEMS 25 |
 | `assigned` members cannot read `audit_log` | `audit_read` requires `scope_all`. | Deferred until a real user needs per-entity history. |
 | `membership_auth_authenticator_read` unused | A policy and grant with no consumer. | OPEN_ITEMS 14 (for the next document version). |
-| Login attempt limiting | `auth_attempts` is recorded but not acted upon. | OPEN_ITEMS 16 |
+| Login attempt limiting | Built (Amendment 01 §5.2): an escalating delay per (username + ip) and a ceiling per ip, no lockout. The deployed numbers are still open, and the dev/CI numbers are deliberately lenient. | OPEN_ITEMS 16, 54 |
+| No audit trail for a password change | `user_password_credentials`, `users.security_stamp` and `password_reset_tokens` are all outside automatic auditing. | OPEN_ITEMS 52 |
+| `POST /api/auth/password/forgot` is not built | A token can be consumed but nothing mints one: the path needs an address, and `authenticator` has no read on `persons`. | OPEN_ITEMS 53 |

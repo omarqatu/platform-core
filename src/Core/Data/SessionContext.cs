@@ -17,4 +17,11 @@ public sealed record SessionContext(Guid? UserId, Guid? TenantId)
 public interface ISessionContextAccessor
 {
     SessionContext Current { get; }
+
+    /// <summary>
+    /// The security stamp the session carries (Amendment 01 §2.1), or null when it carries none. It is not part
+    /// of <see cref="SessionContext"/>: no transaction variable is set from it — it is compared with the user's
+    /// row on every request, and a difference ends the session.
+    /// </summary>
+    Guid? SecurityStamp => null;
 }

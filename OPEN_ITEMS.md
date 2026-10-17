@@ -164,9 +164,10 @@ Closed by the manifest PR:
   expires.
 - **When needed:** server-side revocation — a session id or a security stamp in the cookie, checked on every request
   against a store (and a "log out everywhere"). Not built.
-- **Partly closed once Amendment 01 is built (D6, §2.1, §5.2):** `users.security_stamp` in the cookie, compared on
-  every request, ends every session when the password changes. Logging out does not change the stamp, so a copied
-  cookie still survives logout until it expires: this item stays open for that part.
+- **Partly closed, built in A1 (D6, §2.1, §5.2):** `users.security_stamp` is in the cookie and compared with the
+  user's row on every request, so changing a password ends every session. Logging out does not change the stamp,
+  so a copied cookie still survives logout until it expires: **this item stays open for that part**, and for
+  "log out everywhere" as a deliberate action rather than a side effect of a password change.
 
 ## From invitation acceptance
 
@@ -242,6 +243,13 @@ Closed by the manifest PR:
 - **The numbers** (delays, windows, ceilings) are settled at launch.
 - **Amendment 01 §5.2** keeps this direction and extends it: the same limiter also covers the forgot-password path
   (`POST /api/auth/password/forgot`), by (email + IP). The numbers stay open.
+- **Built in A1 (the mechanism, not the numbers):** `Authenticator` reads `auth_attempts` — the window's failures
+  from the caller's address at or above the ceiling → 429 `too_many_attempts` before the password is read; below
+  it, an escalating delay from the window's failures for that (username + address), awaited after the transaction
+  commits and only on a failure. No lockout, no new table. The numbers live in Api configuration
+  (`Identity:LoginLimits`: `Window`, `FreeFailures`, `DelaySecondsByFailure`, `PerIpCeiling`) and **stay open**
+  until launch; the Development and CI values are deliberately lenient (see item 54). The forgot path's half of
+  §5.2 travels with that path (item 53).
 
 ### 51. Forgot-password: the response time reveals whether an account exists
 
@@ -333,6 +341,11 @@ Closed by the manifest PR:
 
 ### 47. Password recovery and change (D6) — see items 36 and 16
 
+- **Built in A1 (PR for this item):** `users.security_stamp` with its backfill, `password_reset_tokens` with the
+  three §4.1 policies and the §3 grants, `POST /api/auth/password/reset`, `PUT /api/me/password`, the stamp in the
+  cookie and its comparison in `UnitOfWorkMiddleware` (401 `session_expired`), and the limiter of §5.2.
+- **Still open under this item:** `POST /api/auth/password/forgot` — item 53 — and the three screens, which follow
+  it. The migration's "no password" row (§2.12) belongs to the import command and is not built either.
 - **Origin:** Amendment 01, D6, §2.1, §2.2, §5.1. It **amends** v1.16 §4.3-a/2 and §4.3-a/4 (`authenticator` writes
   `password_reset_tokens`) and §4.3-b (in `POST /api/auth/password/reset`, UoW-2 takes `app.user_id` from the
   consumed token).
@@ -363,6 +376,36 @@ Closed by the manifest PR:
 - **Origin:** Amendment 01, D9.
 - **For the document:** merge the amendments into a v2.0 when they accumulate or the second module starts. Until then
   the authority is v1.16 plus its amendments in order (`CLAUDE.md`).
+
+### 53. `POST /api/auth/password/forgot`: the address, and who may read it
+
+- **Origin:** A1 (the code PR for item 47), recorded by the project owner on 2026-10-17 when the path was deferred.
+- **The conflict found:** Amendment 01 §5.1 makes `forgot` an `authenticator` unit of work and §5.2 keys its limiter
+  by (email + IP), but the amendment's own grants matrix (§3) carries v1.16's `persons` row verbatim —
+  `authenticator` has no read on `persons`, where the address lives, and no policy on it either. No other role can
+  resolve an address with no session: `app_user` sees only its own row (`user_self_read`), and every `provisioner`
+  policy requires `app.tenant_id`.
+- **The decision (2026-10-17):** `forgot` is deferred to **A3, with the e-mail sender** — a token nobody receives is
+  not a feature — and the conflict is resolved there **by the narrow grant**: `GRANT SELECT (id, email) ON persons
+  TO authenticator` plus a new §4.1 policy, written into the amendment **first**, because the manifest is extracted
+  from its text (`checks/core/generate-manifest.py`).
+- **Until then:** nothing mints a recovery token; `POST /api/auth/password/reset` consumes one that exists, and the
+  `[B]` tests write their own as `authenticator`. Item 51 (the response time of `forgot`) stays open behind this one.
+
+### 54. The limiter's numbers, and T3.5's two arms
+
+- **Origin:** A1 (the code PR for item 47), recorded by the project owner on 2026-10-17.
+- **The finding:** PROOF_SPEC v1.3's T3.5 timing test interleaves 12 failures against one **existing** username with
+  12 against a **fresh random missing** username each round, and requires the medians to be within 1.5×. Under the
+  escalating delay of Amendment 01 §5.2 the first arm escalates and the second does not — not because one account
+  exists and the other does not, but because one username repeats and the other never does. The two arms are not
+  symmetric; the property T3.5 proves is not what breaks.
+- **The decision (2026-10-17):** **PROOF_SPEC stays untouched** and no test is edited. The Development and CI
+  configuration leaves the first 40 failures per (username + address) free and sets a high per-address ceiling, so
+  T3.5 passes as written; the mechanism is proven in `[W]` (`T3_LoginLimiterTests`) with numbers of its own.
+- **The consequence, stated plainly:** CI does not exercise the deployed numbers. **At launch**, with the numbers of
+  item 16, restating T3.5's timing arm (both arms repeating one username) is a PROOF_SPEC decision to take at the
+  same time.
 
 ## For the next version of the document — not for the code
 

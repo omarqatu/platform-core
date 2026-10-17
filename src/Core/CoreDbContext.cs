@@ -26,6 +26,7 @@ public class CoreDbContext : DbContext
     public DbSet<MembershipRole> MembershipRoles => Set<MembershipRole>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<AuthAttempt> AuthAttempts => Set<AuthAttempt>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<MembershipScope> MembershipScopes => Set<MembershipScope>();
     public DbSet<ScopeAssignment> ScopeAssignments => Set<ScopeAssignment>();
     public DbSet<MembershipAuth> MembershipAuths => Set<MembershipAuth>();
@@ -73,6 +74,13 @@ public class CoreDbContext : DbContext
             invitation.Property(x => x.Status).IsConcurrencyToken();
         });
         modelBuilder.Entity<AuthAttempt>().ToTable("auth_attempts");
+        // Single-use (Amendment 01 §2.2, §4.1): consumption updates WHERE used_at is the value read —
+        // NULL — so a second consumption racing it writes zero rows, and EF's concurrency check is loud.
+        modelBuilder.Entity<PasswordResetToken>(token =>
+        {
+            token.ToTable("password_reset_tokens");
+            token.Property(x => x.UsedAt).IsConcurrencyToken();
+        });
         modelBuilder.Entity<MembershipScope>().ToTable("membership_scope");
         modelBuilder.Entity<ScopeAssignment>().ToTable("scope_assignments");
         modelBuilder.Entity<MembershipAuth>().ToTable("membership_auth").Property(x => x.ProviderConfig).HasColumnType("jsonb");
