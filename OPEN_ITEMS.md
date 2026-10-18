@@ -622,8 +622,13 @@ Closed by the password-rule PR:
 | Test | What it asserts, and why it races | Seen as |
 |---|---|---|
 | `T3_ForgotPasswordTests.TheAnswerTakesTheSameTime_…` [W] | each answer took **at least** the floor, exactly. `UniformTiming.HoldAsync` awaits `Task.Delay(remaining)`; `Task.Delay` sits on a timer whose due time is rounded and can return a fraction of a millisecond early relative to `Stopwatch`, and the work before the handler's `Stopwatch.GetTimestamp()` does not always cover it. An exact comparison against an inexact sleep. | `answered in 00:00:00.3999202, below the floor 00:00:00.4000000` — **79.8 µs** — then passed on a re-run of the **same commit** |
-| `T3_LoginLimiterTests.TheDelayEscalates…` [W] | the first failure waited **under** 500 ms, on a path that derives a password hash (210,000 PBKDF2 iterations). A fixed threshold against work whose cost depends on the machine. | `the first failure waited 585 ms`, reproduced identically on clean `main` (`629 ms`) |
+| `T3_LoginLimiterTests.TheDelayEscalates…` [W] | the first failure waited **under** 500 ms, on a path that derives a password hash (210,000 PBKDF2 iterations). A fixed threshold against work whose cost depends on the machine. | `the first failure waited 585 ms`, reproduced identically on clean `main` (`629 ms`), and again at `657 ms` in the stage (b) session (item 82) |
 | `App.test.tsx > a 401 during the session` (and its siblings asserting `probe.location`) | awaits `findByText(…)`, then reads `probe.location` **synchronously**. The probe is written by a render-time effect, so the message appearing and the redirect being observed are two different commits; between them the assertion reads the old path. | `expected '/app/subscriptions' to be '/login?next=%2Fapp%2Fsubscriptions'`; 20 runs gave **2/20** failures on the PR branch and **1/20** on clean `main` |
+
+- **How often it bites, measured (item 82, 2026-10-18):** the limiter test alone accounted for an intermittent
+  `[W]` failure at roughly **one run in seven** on one machine, and was caught on run 1 of a 20-run capture. That
+  is the first rate anyone has recorded for any of the three, and it is high enough that leaving it is already
+  costing red CI runs that mean nothing.
 
 - **Whoever takes `T3_ForgotPasswordTests` reads item 51 first.** That is not a courtesy reference. The floor
   this test measures (`Identity:ForgotPassword:MinimumResponseTime`) is what stops the forgot-password
@@ -846,41 +851,35 @@ Closed by the password-rule PR:
 - **For stage (د):** the sender reads `clients.is_active` (the project owner's decision of 2026-10-17) **and**
   `subscriptions.status`; whether T7's own count narrows with it is a PROOF_SPEC decision to take at the same time.
 
-### 82. An unidentified intermittent failure in `[W]` — **a merge condition until it has a name**
+### 82. ~~An unidentified intermittent failure in `[W]`~~ — **identified: it is item 66's limiter test. Closed into 66.**
 
-- **Origin:** the stage (b) PR, 2026-10-18.
-- **The leading hypothesis, and it is only that: one of item 66's own two `[W]` flakes.**
-  `T3_ForgotPasswordTests.TheAnswerTakesTheSameTime_…` and `T3_LoginLimiterTests.TheDelayEscalates…` both live in
-  `tests/Core.WhiteBoxTests`, both fail intermittently, and both fail **one at a time** — which is exactly the
-  shape seen here (`Failed: 1`). Item 66 records the first at 2/20 and the second reproducing on clean `main`, so
-  a rate of about one in seven in this suite is unremarkable for them. **This is not evidence, it is a candidate:**
-  the name was never captured, so it has not been checked against them.
-- **Why it is still its own item.** Item 66's flakes are *identified* — each names what it asserts and carries its
-  own fix. This one has no name, so it cannot be scoped, cannot be fixed, and cannot be called harmless, because
-  nobody knows what it asserts. **The project owner's position (2026-10-18): it is not merged as understood.**
-  Either its name, or a recorded decision to take the risk knowingly. If the name turns out to be one of item 66's
-  two, this item closes **into** 66 and the rate recorded here becomes a data point for it.
-- **What was seen:** `tests/Core.WhiteBoxTests` reported `Failed: 1, Passed: 111` **twice in about fifteen runs**
-  — roughly one in seven. The console summary names no test, so neither sighting was identified.
-- **What was ruled out, and how — do not redo this:**
-  | Ruled out | How |
-  |---|---|
-  | Ordering against Conformance | The second sighting had **no** Conformance run before it. CI runs `[W]` first anyway, so CI's order is the one that failed. |
-  | Shared database state from the worlds Conformance leaves behind | Same sighting: there were none. |
-  | Something peculiar to a dirty database | Reproduced on a **clean database, freshly migrated and seeded** — CI's exact condition. |
-  | A fixture of this PR's that is simply wrong | Both suites are otherwise green across every run, including the fixtures this PR extended; a wrong fixture would fail every time, not one run in seven. |
-  | **Not** ruled out: item 66's two `[W]` flakes | They are the leading candidate, above. Checking them is the first thing to do with a captured name — not the last. |
-  Nothing narrows it beyond "intermittent, about one run in seven, on CI's own starting state".
-- **How to capture it** (the run this PR made, for whoever picks it up):
-  `tests/Core.WhiteBoxTests` alone, in a loop, on a clean migrated-and-seeded database, each run with
-  `--logger "trx;LogFileName=<run>.trx"` and **every** trx kept — then read the `UnitTestResult` whose
-  `outcome="Failed"` for the test name, its `<Message>` and its `<StackTrace>`. A loop that reports green must
-  prove it ran: a run that produces no `Passed!`/`Failed!` summary line ran nothing, and counting it as green is
-  how a broken harness reads as twenty clean runs (that happened once here, when the Docker daemon had died
-  underneath it).
-- **What would close it:** the test's name, checked first against item 66's two. Then item 66's rule applies and
-  not before — the fix for a flake is in the test, once the test is known. **Nothing here is a reason to change a
-  test that has not been identified.**
+- **Origin:** the stage (b) PR, 2026-10-18. Opened when `tests/Core.WhiteBoxTests` reported `Failed: 1,
+  Passed: 111` twice in about fifteen runs — once after Conformance, once on a clean migrated-and-seeded database,
+  which is CI's own starting state — with no test named in the console summary.
+- **Captured, by the project owner's condition (2026-10-18): the name, or a run configured to take it.** `[W]`
+  alone, in a loop on a clean seeded database, every run keeping its own `trx`. It failed on **run 1 of 20**:
+
+  ```
+  FAILED TEST: T3_LoginLimiterTests.TheDelayEscalatesWithTheFailures_TheCeilingRefusesBeforeThePassword_AndNoAccountIsLockedOut
+  MESSAGE:     the first failure waited 657 ms
+  STACK:       tests/Core.WhiteBoxTests/T3_LoginLimiterTests.cs:48
+  ```
+
+- **It is item 66's second row, verbatim** — the same test, the same assertion (`first < 500 ms` on a path that
+  derives a 210,000-iteration PBKDF2 hash), the same failure shape. Item 66 records it at `585 ms` and at `629 ms`
+  on clean `main`; this is a third sighting at `657 ms`. **The rate this item measured — about one run in seven,
+  and 1/20 in the capture — belongs to item 66 now**, and is the first number anyone has for how often it bites.
+- **What this closes, and what it does not.** It closes the question this item existed to ask: there is no unknown
+  intermittent failure in `[W]`. It does **not** close item 66, whose fix — a threshold that does not race
+  PBKDF2 on a loaded machine — is still owed and is still "the fix is in the test, never in production code".
+- **Not caused by the stage (b) PR**, and nothing in that PR touches it: item 66 already records this test failing
+  on clean `main`. It was not fixed inside that PR either, because the fix is item 66's and widening a threshold
+  from inside an unrelated change is how a test quietly stops testing.
+- **For whoever takes item 66:** the capture recipe is worth keeping. `[W]` alone, clean seeded database, each run
+  `--logger "trx;LogFileName=<run>.trx"`, every `trx` kept, read the `UnitTestResult` with `outcome="Failed"`. And
+  the harness lesson: **a loop that reports green must prove it ran.** Twenty "green" runs here proved nothing
+  until a run with no `Passed!`/`Failed!` summary line was made to fail the loop — the Docker daemon had died
+  underneath it and every run was a no-op.
 
 ## For the next version of the document — not for the code
 
