@@ -236,7 +236,45 @@ CREATE POLICY client_scope ON client_notification_settings
         AND sa.scope_ref_id  = client_notification_settings.scope_ref_id
         AND sa.membership_id = (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
         AND sa.active));
+
+-- ===== دورة حياة الاشتراك (الملحق 01 §2.9) =====
+-- ‎`subscriptions` يدخل الـ manifest بسياسة خارج القالبين، ومجموعة سياسات جدول الـ manifest تُفحص كاملة
+-- (الملحق 01 §4.1)، فيكتب قالبيه هنا صراحةً كما فعل `notification_log`. ونصّهما هو نصّ القالبين بلا تغيير.
+CREATE POLICY tenant_isolation ON subscriptions
+  FOR ALL TO app_user
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY client_scope ON subscriptions
+  AS RESTRICTIVE FOR ALL TO app_user
+  USING (
+    COALESCE((SELECT NULLIF(current_setting('app.scope_all', true), '')::boolean), false)
+    OR EXISTS (
+      SELECT 1 FROM scope_assignments sa
+      WHERE sa.tenant_id     = subscriptions.tenant_id
+        AND sa.scope_ref_id  = subscriptions.scope_ref_id
+        AND sa.membership_id = (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+        AND sa.active))
+  WITH CHECK (
+    COALESCE((SELECT NULLIF(current_setting('app.scope_all', true), '')::boolean), false)
+    OR EXISTS (
+      SELECT 1 FROM scope_assignments sa
+      WHERE sa.tenant_id     = subscriptions.tenant_id
+        AND sa.scope_ref_id  = subscriptions.scope_ref_id
+        AND sa.membership_id = (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+        AND sa.active));
+
+CREATE POLICY subscriptions_status_gate ON subscriptions
+  AS RESTRICTIVE FOR UPDATE TO app_user
+  USING (status = 'active')
+  WITH CHECK (true);   -- البوابة على الصف كما هو قبل الكتابة؛ القيمة الجديدة يحرسها CHECK العمود
 ```
+
+**لماذا `WITH CHECK` مكتوبة صراحةً في بوابة الحالة:** PostgreSQL يستعمل تعبير `USING` تعبيرَ `WITH CHECK` حين تُترك
+الثانية — فـ `USING (status = 'active')` وحدها تشترط أن يكون **الصفّ الجديد** نشطاً أيضاً، فتَرفض الإلغاء نفسه
+(`42501`)، وهو عين ما تقوم البوابة لأجله. مُثبت على PostgreSQL 18.6 قبل كتابة هذا النصّ. فالبوابة تقرأ الصفّ كما هو
+قبل الكتابة وحده: من `active` إلى `active` (تعديل عادي) أو `cancelled` أو `renewed`؛ ولا شيء يخرج من `cancelled` ولا
+من `renewed` — لا تعديلاً ولا إحياءً. والقيم الثلاث يحرسها `CHECK` العمود لا السياسة.
 
 **لماذا `categories_read` داخل القالب هذه المرة:** الصيغة الأولى كتبت شرطاً خارج القالب (`tenant_id IS NULL OR tenant_id = NULLIF(app.tenant_id)`) على نمط `provider_accounts_read`. وبعد سقوط `tenant_id` من الجدول (§3.1) صار الشرط `USING (true)` حرفياً كـ `plans_read` — كتالوج عالمي، لا استثناء ولا شرح.
 

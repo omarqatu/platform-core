@@ -800,6 +800,69 @@ Closed by the password-rule PR:
 - **What would close it:** a picker the interface draws itself, in `ar-u-nu-latn`, with Gregorian month names — a
   component decision for the design system, not for this form alone.
 
+### 79. `subscriptions.clients.write` is narrowed at creation by the second axis, not by the permission
+
+- **Origin:** the stage (b) PR, 2026-10-18. Proven on PostgreSQL 18.6 **before** the stage was designed around it.
+- **The finding:** a client is its own scoped entity (`scope_ref_id = id`), so a **new** row has no
+  `scope_assignments` row by virtue of being new, and `client_scope`'s `WITH CHECK` refuses its `INSERT` from a
+  member whose scope mode is `assigned` — `42501`, which `ErrorResponses` already answers as `403 not_permitted`.
+  Amendment 01 §4.2 gives `subscriptions.clients.write` to `operator`, and every seeded operator is `assigned`, so
+  in practice an operator creates a client only when their mode is `all`. The same member **edits** the clients
+  assigned to them with no trouble: the narrowing is at creation and only there.
+- **The decision (2026-10-18, the project owner):** accept it and describe it — a **one-line clarification beside
+  the permission in Amendment 01 §4.2**, in both languages, because the amendment is the thing people read and a
+  permission row that reads broader than it is will mislead the next reader. No `§0` row was added for it: §0 lists
+  what an amendment **amends**, and this describes behaviour v1.16 §3.1 already has rather than changing any
+  paragraph. Proven in `T5_ClientLifecycleTests`.
+- **Rejected, and why:** writing a `scope_assignments` row for the creating member in the same transaction would
+  let a member widen their own scope without `core.scope.manage` — a hole, not a convenience.
+- **What it does not affect:** the manual entry of M3 is done by the owner, whose mode is `all`.
+
+### 80. The subscription's status gate is the database's; the renewal's "once" is a UNIQUE
+
+- **Origin:** the stage (b) PR, 2026-10-18.
+- **What was built:** `subscriptions_status_gate` (Amendment 02 §5.1) — `AS RESTRICTIVE FOR UPDATE TO app_user
+  USING (status = 'active') WITH CHECK (true)`. No `UPDATE` reaches a row that has left `active`, so a cancelled or
+  renewed subscription is not edited, not revived and not renewed again, whatever the code does. Beside it,
+  `UNIQUE (tenant_id, renewed_from_id)` means one subscription is renewed **once**.
+- **The engine finding, which changed the policy's text:** PostgreSQL uses the `USING` expression as the
+  `WITH CHECK` expression when the latter is omitted. The policy as first dictated carried no `WITH CHECK`, which
+  would have required the **new** row to be active too and refused the cancellation itself (`42501`) — the very
+  thing the gate exists for. Proven on PostgreSQL 18.6, then `WITH CHECK (true)` was written out, with the reason
+  beside it in the amendment, in the migration and in `DATABASE.md` §7.7.
+- **The consequence for the API:** a failing `USING` reaches no row rather than erroring, so the endpoints read
+  `status` first and answer `409 subscription_not_active`; without that the caller would see `403 not_permitted`
+  on a row they can plainly read. `PUT /api/subscriptions/{id}` answers the same code for the same reason — a
+  change to stage (a)'s endpoint that the gate made necessary.
+
+### 81. `ExpiringSubscriptionsJob` counts cancelled subscriptions — for stage (د) to settle
+
+- **Origin:** the stage (b) PR, 2026-10-18, by the project owner's decision not to touch it now.
+- **What is true:** the job counts every subscription ending within 30 days regardless of `status`, so a cancelled
+  one is still counted — and, when stage (د) sends, would still be reminded about.
+- **Why it was not changed here:** PROOF_SPEC v1.3 T7 defines the count as "subscriptions ending within 30 days",
+  and narrowing it would change a definition from inside a PR that is not about the job. The filter belongs with
+  the sender.
+- **For stage (د):** the sender reads `clients.is_active` (the project owner's decision of 2026-10-17) **and**
+  `subscriptions.status`; whether T7's own count narrows with it is a PROOF_SPEC decision to take at the same time.
+
+### 82. One unexplained `[W]` failure during the stage (b) session, not reproduced
+
+- **Origin:** the stage (b) PR, 2026-10-18. Recorded rather than dismissed, under the pattern of item 66.
+- **What happened:** `tests/Core.WhiteBoxTests` reported `Failed: 1, Passed: 111` **twice** in about fifteen runs.
+  The first came after a full Conformance run against the same database; the second came on a **clean database,
+  freshly migrated and seeded**, which is exactly CI's state. The runner's console summary names no test, and the
+  ten runs attempted afterwards with a `trx` logger — some on a pristine seeded database, some not — were all
+  green, so the name was never captured.
+- **What it is not:** not order-dependent on Conformance (the second sighting had no Conformance before it), and
+  not shared state from the worlds Conformance leaves behind (same reason). It is intermittent, at roughly one run
+  in seven, and nothing narrows it further than that.
+- **Why it is written down:** a flake seen twice and left unrecorded is a flake nobody connects to the third
+  sighting. CI may well show it; when it does, the run's own report names the test and this item can be closed.
+- **What would close it:** the test's name, from a run that reproduces it — run `[W]` with
+  `--logger "trx;LogFileName=…"` and read the `UnitTestResult` with `outcome="Failed"`. Nothing here is a reason to
+  change a test: item 66's rule stands, the fix for a flake is in the test, once the test is known.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12

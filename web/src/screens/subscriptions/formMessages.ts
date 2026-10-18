@@ -44,6 +44,20 @@ type Values = {
   columnActions: NoMessageValues;
   edit: NoMessageValues;
   editLabel: { service: string };
+  renew: NoMessageValues;
+  renewLabel: { service: string };
+  cancelSubscription: NoMessageValues;
+  cancelLabel: { service: string };
+  confirmCancel: { service: string };
+  working: NoMessageValues;
+  renewTitle: NoMessageValues;
+  renewService: NoMessageValues;
+  renewCurrentEnd: NoMessageValues;
+  renewNewEnd: NoMessageValues;
+  renewNewEndHint: NoMessageValues;
+  renewNote: NoMessageValues;
+  renewSubmit: NoMessageValues;
+  renewAfter: NoMessageValues;
 };
 
 /**
@@ -107,4 +121,27 @@ export const messages = defineMessages<Values>({
   edit: { id: 'subscriptions.list.edit', defaultMessage: 'Edit' },
   // The link's accessible name: which row's "Edit" it is.
   editLabel: { id: 'subscriptions.list.editLabel', defaultMessage: 'Edit {service}' },
+  renew: { id: 'subscriptions.list.renew', defaultMessage: 'Renew' },
+  renewLabel: { id: 'subscriptions.list.renewLabel', defaultMessage: 'Renew {service}' },
+  cancelSubscription: { id: 'subscriptions.list.cancelSubscription', defaultMessage: 'Cancel subscription' },
+  cancelLabel: { id: 'subscriptions.list.cancelLabel', defaultMessage: 'Cancel {service}' },
+  // Said plainly: cancelling keeps the row and its history, and nothing about it can be changed afterwards.
+  confirmCancel: {
+    id: 'subscriptions.list.confirmCancel',
+    defaultMessage: 'Cancel {service}? It stays in the list with its history, and it cannot be edited or renewed afterwards.',
+  },
+  working: { id: 'subscriptions.list.working', defaultMessage: 'Working…' },
+  // Renewing (Amendment 01 §2.9): a new subscription that keeps every detail of the one it renews but its end date.
+  renewTitle: { id: 'subscriptions.renew.title', defaultMessage: 'Renew subscription' },
+  renewService: { id: 'subscriptions.renew.service', defaultMessage: 'Service' },
+  renewCurrentEnd: { id: 'subscriptions.renew.currentEnd', defaultMessage: 'Ends on' },
+  renewNewEnd: { id: 'subscriptions.renew.newEnd', defaultMessage: 'New end date' },
+  renewNewEndHint: { id: 'subscriptions.renew.newEndHint', defaultMessage: 'yyyy-MM-dd, for example 2028-01-31' },
+  renewNote: {
+    id: 'subscriptions.renew.note',
+    defaultMessage:
+      'A renewal is a new subscription that keeps the client and every other detail of this one. This one is kept too, marked as renewed.',
+  },
+  renewSubmit: { id: 'subscriptions.renew.submit', defaultMessage: 'Renew' },
+  renewAfter: { id: 'subscriptions.renew.after', defaultMessage: 'Must be later than the current end date' },
 });

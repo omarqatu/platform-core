@@ -39,7 +39,12 @@ export interface SubscriptionDetail {
   billing_cycle: BillingCycle;
   auto_renew: boolean;
   login_url: string | null;
+  status: LifecycleStatus;
+  renewed_from_id: string | null;
 }
+
+/** The subscription's own lifecycle (Amendment 01 §2.9) — not the date-derived status the list colours a row by. */
+export type LifecycleStatus = 'active' | 'cancelled' | 'renewed';
 
 /** What the fields hold: text as typed, '' for nothing chosen. */
 export interface FormValues {

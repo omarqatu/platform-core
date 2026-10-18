@@ -68,6 +68,12 @@ export const apiErrors = defineMessages({
     id: 'errors.password_too_short',
     defaultMessage: 'The password must be at least 12 characters. Nothing else is required: no symbol, no digit, no capital letter.',
   },
+  // The subscription's lifecycle (Amendment 01 §2.9): one message for both acts, because the state is the reason
+  // for both refusals and the reader needs to know the state, not which button they pressed.
+  subscription_not_active: {
+    id: 'errors.subscription_not_active',
+    defaultMessage: 'This subscription has already been cancelled or renewed, so it cannot be changed.',
+  },
   unknown: { id: 'errors.unknown', defaultMessage: 'Something went wrong. Try again.' },
 });
 

@@ -10,6 +10,9 @@
   ],
   "02": [
     "categories.categories_read",
-    "subcategories.subcategories_read"
+    "subcategories.subcategories_read",
+    "subscriptions.tenant_isolation",
+    "subscriptions.client_scope",
+    "subscriptions.subscriptions_status_gate"
   ]
 }

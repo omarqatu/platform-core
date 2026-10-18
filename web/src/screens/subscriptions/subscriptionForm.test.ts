@@ -108,6 +108,8 @@ describe('the request body', () => {
       billing_cycle: 'monthly',
       auto_renew: true,
       login_url: null,
+      status: 'active',
+      renewed_from_id: null,
     });
     expect(values.cost).toBe('0.000');
     expect(toBody(values, 'edit')).toMatchObject({ cost: '0.000', currency: 'EUR', provider: 'Hetzner', login_url: null });

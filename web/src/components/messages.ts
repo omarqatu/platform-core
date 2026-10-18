@@ -15,6 +15,7 @@ export const messages = defineMessages({
   changePassword: { id: 'identity.bar.changePassword', defaultMessage: 'Change password' },
   navigation: { id: 'identity.bar.navigation', defaultMessage: 'Main' },
   subscriptions: { id: 'identity.bar.subscriptions', defaultMessage: 'Subscriptions' },
+  clients: { id: 'identity.bar.clients', defaultMessage: 'Clients' },
   // The shell (AppShell): the top bar, the sidebar, the appearance controls.
   skipToContent: { id: 'shell.topbar.skipToContent', defaultMessage: 'Skip to content' },
   brand: { id: 'shell.topbar.brand', defaultMessage: 'Platform' },

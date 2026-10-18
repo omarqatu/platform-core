@@ -1,5 +1,5 @@
-import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import type { Lang } from '../../i18n/locale';
 import {
@@ -8,6 +8,7 @@ import {
   subscriptionStatus,
   SubscriptionsView,
   type ClientItem,
+  type ListActions,
   type ScopedList,
   type SubscriptionItem,
 } from './SubscriptionsScreen';
@@ -19,8 +20,8 @@ function list<T>(items: T[], scope: 'all' | 'assigned', visible = items.length, 
 }
 
 const clients: ClientItem[] = [
-  { id: 'c1', name: 'Client A' },
-  { id: 'c2', name: 'شركة النور' },
+  { id: 'c1', name: 'Client A', is_active: true },
+  { id: 'c2', name: 'شركة النور', is_active: true },
 ];
 const subscriptions = (n: number): SubscriptionItem[] =>
   Array.from({ length: n }, (_, i) => ({
@@ -28,6 +29,7 @@ const subscriptions = (n: number): SubscriptionItem[] =>
     client_id: i % 2 ? 'c2' : 'c1',
     service_name: i === 0 ? 'استضافة' : `A service ${i}`,
     ends_on: '2027-01-02',
+    status: 'active' as const,
   }));
 
 function show(lang: Lang, subs: ScopedList<SubscriptionItem>, cs = list(clients, subs.scope_mode)) {
@@ -155,5 +157,82 @@ describe('the status badge', () => {
     cleanup();
     const ar = show('ar', list(subscriptions(1), 'all'));
     expect(['نشط', 'قريب الانتهاء', 'منتهٍ']).toContain(ar.querySelector('tbody .badge')!.textContent);
+  });
+});
+
+describe('the lifecycle on the list (Amendment 01 §2.9)', () => {
+  const lifecycle = (status: SubscriptionItem['status']): SubscriptionItem[] => [
+    { id: 's1', client_id: 'c1', service_name: 'VPS', ends_on: '2027-01-02', status },
+  ];
+
+  const actions: ListActions = {
+    create: () => null,
+    edit: () => <span data-testid="edit" />,
+    renew: () => <span data-testid="renew" />,
+    cancel: () => undefined,
+  };
+
+  function withActions(items: SubscriptionItem[]) {
+    return render(
+      <I18nProvider initial="en">
+        <SubscriptionsView
+          state={{ status: 'ready', data: { subscriptions: list(items, 'all'), clients: list(clients, 'all') } }}
+          actions={actions}
+        />
+      </I18nProvider>,
+    ).container;
+  }
+
+  // The lifecycle wins over the date: once a row has left 'active' its remaining days say nothing worth saying.
+  it.each([
+    ['cancelled' as const, 'Cancelled'],
+    ['renewed' as const, 'Renewed'],
+  ])('shows %s in place of the date-derived status', (status, label) => {
+    const badge = show('en', list(lifecycle(status), 'all')).querySelector('tbody .badge')!;
+
+    expect(badge.querySelector('[data-status]')!.getAttribute('data-status')).toBe(status);
+    expect(badge.textContent).toBe(label);
+  });
+
+  it('keeps the date-derived status while the row is active', () => {
+    const badge = show('en', list(lifecycle('active'), 'all')).querySelector('tbody .badge')!;
+
+    expect(['Active', 'Due soon', 'Expired']).toContain(badge.textContent);
+  });
+
+  // The database refuses an edit, a renewal and a cancellation on a row that has left 'active', so the screen
+  // offers none of the three rather than offering what it knows will be refused.
+  it('offers edit, renew and cancel on an active row and none of them otherwise', () => {
+    expect(withActions(lifecycle('active')).querySelectorAll('[data-testid]')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Cancel VPS' })).toBeDefined();
+    cleanup();
+    for (const status of ['cancelled', 'renewed'] as const) {
+      const page = withActions(lifecycle(status));
+      expect(page.querySelectorAll('[data-testid]')).toHaveLength(0);
+      expect(page.querySelectorAll('.row-actions button')).toHaveLength(0);
+      cleanup();
+    }
+  });
+
+  it('asks before cancelling, and says the row is kept', () => {
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
+    const cancel = vi.fn();
+    render(
+      <I18nProvider initial="en">
+        <SubscriptionsView
+          state={{ status: 'ready', data: { subscriptions: list(lifecycle('active'), 'all'), clients: list(clients, 'all') } }}
+          actions={{ ...actions, cancel }}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel VPS' }));
+
+    expect(confirm).toHaveBeenCalledWith(
+      'Cancel VPS? It stays in the list with its history, and it cannot be edited or renewed afterwards.',
+    );
+    expect(cancel).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

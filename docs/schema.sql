@@ -140,7 +140,14 @@ CREATE TABLE public.clients (
     scope_ref_id uuid NOT NULL,
     name text NOT NULL,
     created_at public.app_ts NOT NULL,
-    CONSTRAINT clients_scope_ref_id_is_id CHECK ((scope_ref_id = (id)::uuid))
+    email text,
+    phone_e164 text,
+    telegram_chat_id text,
+    is_active boolean NOT NULL,
+    CONSTRAINT clients_email_check CHECK (((email ~ '^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$'::text) AND (length(email) <= 320))),
+    CONSTRAINT clients_phone_e164_check CHECK ((phone_e164 ~ '^\+[1-9][0-9]{1,14}$'::text)),
+    CONSTRAINT clients_scope_ref_id_is_id CHECK ((scope_ref_id = (id)::uuid)),
+    CONSTRAINT clients_telegram_chat_id_check CHECK ((telegram_chat_id ~ '^-?[0-9]{1,20}$'::text))
 );
 
 ALTER TABLE ONLY public.clients FORCE ROW LEVEL SECURITY;
@@ -457,10 +464,13 @@ CREATE TABLE public.subscriptions (
     billing_cycle text NOT NULL,
     auto_renew boolean NOT NULL,
     login_url text,
+    status text NOT NULL,
+    renewed_from_id uuid,
     CONSTRAINT subscriptions_billing_cycle_check CHECK ((billing_cycle = ANY (ARRAY['monthly'::text, 'yearly'::text]))),
     CONSTRAINT subscriptions_cost_check CHECK ((cost >= (0)::numeric)),
     CONSTRAINT subscriptions_currency_check CHECK ((currency ~ '^[A-Z]{3}$'::text)),
-    CONSTRAINT subscriptions_reminder_type_check CHECK ((reminder_type = 'subscription'::text))
+    CONSTRAINT subscriptions_reminder_type_check CHECK ((reminder_type = 'subscription'::text)),
+    CONSTRAINT subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'cancelled'::text, 'renewed'::text])))
 );
 
 ALTER TABLE ONLY public.subscriptions FORCE ROW LEVEL SECURITY;
@@ -788,6 +798,22 @@ ALTER TABLE ONLY public.subscriptions
 
 
 --
+-- Name: subscriptions subscriptions_renewed_from_id_key; Type: CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.subscriptions
+    ADD CONSTRAINT subscriptions_renewed_from_id_key UNIQUE (tenant_id, renewed_from_id);
+
+
+--
+-- Name: subscriptions subscriptions_tenant_id_id_key; Type: CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.subscriptions
+    ADD CONSTRAINT subscriptions_tenant_id_id_key UNIQUE (tenant_id, id);
+
+
+--
 -- Name: tenant_modules tenant_modules_pkey; Type: CONSTRAINT; Schema: public; Owner: migrator
 --
 
@@ -1036,6 +1062,14 @@ ALTER TABLE ONLY public.subscriptions
 
 ALTER TABLE ONLY public.subscriptions
     ADD CONSTRAINT subscriptions_client_fkey FOREIGN KEY (tenant_id, scope_ref_id) REFERENCES public.clients(tenant_id, id);
+
+
+--
+-- Name: subscriptions subscriptions_renewed_from_fkey; Type: FK CONSTRAINT; Schema: public; Owner: migrator
+--
+
+ALTER TABLE ONLY public.subscriptions
+    ADD CONSTRAINT subscriptions_renewed_from_fkey FOREIGN KEY (tenant_id, renewed_from_id) REFERENCES public.subscriptions(tenant_id, id);
 
 
 --
@@ -1648,6 +1682,13 @@ CREATE POLICY subcategories_read ON public.subcategories FOR SELECT TO app_user,
 --
 
 ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: subscriptions subscriptions_status_gate; Type: POLICY; Schema: public; Owner: migrator
+--
+
+CREATE POLICY subscriptions_status_gate ON public.subscriptions AS RESTRICTIVE FOR UPDATE TO app_user USING ((status = 'active'::text)) WITH CHECK (true);
+
 
 --
 -- Name: roles system_role_guard_delete; Type: POLICY; Schema: public; Owner: migrator

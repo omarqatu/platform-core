@@ -20,8 +20,8 @@ const data: FormData = {
     },
   ],
   clients: [
-    { id: 'c1', name: 'Client A' },
-    { id: 'c2', name: 'شركة النور' },
+    { id: 'c1', name: 'Client A', is_active: true },
+    { id: 'c2', name: 'شركة النور', is_active: true },
   ],
   values: EMPTY,
 };

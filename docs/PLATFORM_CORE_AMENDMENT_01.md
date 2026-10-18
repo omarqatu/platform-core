@@ -315,6 +315,10 @@ CREATE POLICY notification_log_status_forward ON notification_log
 | `subscriptions.clients.manage` | subscriptions | تعطيل عميل وإعادة تفعيله | owner, admin |
 | `subscriptions.notifications.read` | subscriptions | قراءة سجل الإرسال | owner, admin, operator, viewer |
 
+**على `subscriptions.clients.write`:** المحور الثاني يضيّقها عند الإنشاء وحده — العميل هو كيانه المُنطَّق،
+وصفّ جديد لا إسناد له بحكم أنه جديد، فـ `client_scope` (1.16 §3.1) ترفض إدراجه من عضو بنمط `assigned`. فالـ `operator`
+بنمط `assigned` يعدّل عميلاً مُسنداً إليه ولا يُنشئ عميلاً؛ وبنمط `all` يُنشئ. وصف لسلوك قائم في 1.16، لا تعديل عليه.
+
 الإدخال بنفس وصفة الدليل §11: الصلاحية، القوالب، ترقية أدوار الجهات القائمة، فحص عدد الصفوف — في ترحيل واحد.
 
 ### 4.3 ما يبقى بلا صلاحية جديدة

@@ -1,13 +1,16 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 import { Link } from 'react-router';
-import { ApiError, getJson, isAbort } from '../../api/client';
+import { ApiError, getJson, isAbort, request } from '../../api/client';
 import { Badge, type BadgeTone } from '../../components/Badge';
+import { ErrorAlert } from '../../components/ErrorAlert';
 import { errorMessage } from '../../i18n/apiErrors';
 import { useSession } from '../../session/SessionProvider';
 import { ForbiddenScreen } from '../status/StatusScreens';
 import { messages as form } from './formMessages';
+import type { ClientItem } from '../clients/clientForm';
 import { messages } from './messages';
+import type { LifecycleStatus } from './subscriptionForm';
 import './SubscriptionsScreen.css';
 
 /** A page of an aggregate list with its scope declaration (PLATFORM_CORE 3.5) — ScopedList in Core. */
@@ -24,17 +27,15 @@ export interface SubscriptionItem {
   client_id: string;
   service_name: string;
   ends_on: string; // yyyy-MM-dd
-}
-
-export interface ClientItem {
-  id: string;
-  name: string;
+  status: LifecycleStatus;
 }
 
 export interface SubscriptionsData {
   subscriptions: ScopedList<SubscriptionItem>;
   clients: ScopedList<ClientItem>;
 }
+
+export type { ClientItem };
 
 export const LIST_PATH = '/app/subscriptions';
 export const PAGE_SIZE = 50;
@@ -52,6 +53,8 @@ export const TENANT_LOST = new Set(['not_a_member', 'no_active_tenant', 'tenant_
  */
 export function SubscriptionsScreen() {
   const [state, setState] = useState<State>({ status: 'loading' });
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   const { revalidate } = useSession();
 
   useEffect(() => {
@@ -69,10 +72,32 @@ export function SubscriptionsScreen() {
       },
     );
     return () => abort.abort();
-  }, [revalidate]);
+  }, [revalidate, reload]);
 
   if (state.status === 'error' && state.code === 'not_permitted') return <ForbiddenScreen />;
-  return <SubscriptionsView state={state} actions={ROUTED_ACTIONS} />;
+  return (
+    <SubscriptionsView
+      state={state}
+      refusal={refusal}
+      actions={{
+        create: () => <NewLink />,
+        edit: (subscription) => <EditLink subscription={subscription} />,
+        renew: (subscription) => <RenewLink subscription={subscription} />,
+        cancel: async (subscription) => {
+          setRefusal(null);
+          try {
+            await request('POST', `/subscriptions/${subscription.id}/cancel`);
+            setReload((n) => n + 1);
+          } catch (e) {
+            if (isAbort(e)) return;
+            const code = e instanceof ApiError ? e.code : null;
+            setRefusal(code);
+            if (code && TENANT_LOST.has(code)) revalidate().catch(() => undefined);
+          }
+        },
+      }}
+    />
+  );
 }
 
 /**
@@ -83,6 +108,8 @@ export function SubscriptionsScreen() {
 export interface ListActions {
   create: () => ReactNode;
   edit: (subscription: SubscriptionItem) => ReactNode;
+  renew: (subscription: SubscriptionItem) => ReactNode;
+  cancel: (subscription: SubscriptionItem) => void | Promise<void>;
 }
 
 function NewLink() {
@@ -91,6 +118,44 @@ function NewLink() {
     <Link to={`${LIST_PATH}/new`} className="btn">
       {intl.formatMessage(form.newSubscription)}
     </Link>
+  );
+}
+
+function RenewLink({ subscription }: { subscription: SubscriptionItem }) {
+  const intl = useIntl();
+  return (
+    <Link
+      to={`${LIST_PATH}/${subscription.id}/renew`}
+      aria-label={intl.formatMessage(form.renewLabel, { service: subscription.service_name })}
+    >
+      {intl.formatMessage(form.renew)}
+    </Link>
+  );
+}
+
+/**
+ * Cancelling from the list: a status change, never a delete (Amendment 01 §2.9). It asks first, because the row
+ * stops being editable afterwards — the database's own gate sees to that.
+ */
+function CancelButton({ subscription, cancel }: { subscription: SubscriptionItem; cancel: ListActions['cancel'] }) {
+  const intl = useIntl();
+  const [pending, setPending] = useState(false);
+  const act = async () => {
+    if (!globalThis.confirm(intl.formatMessage(form.confirmCancel, { service: subscription.service_name }))) return;
+    setPending(true);
+    await cancel(subscription);
+    setPending(false);
+  };
+  return (
+    <button
+      type="button"
+      className="link"
+      disabled={pending}
+      aria-label={intl.formatMessage(form.cancelLabel, { service: subscription.service_name })}
+      onClick={act}
+    >
+      {intl.formatMessage(pending ? form.working : form.cancelSubscription)}
+    </button>
   );
 }
 
@@ -106,12 +171,17 @@ function EditLink({ subscription }: { subscription: SubscriptionItem }) {
   );
 }
 
-const ROUTED_ACTIONS: ListActions = {
-  create: () => <NewLink />,
-  edit: (subscription) => <EditLink subscription={subscription} />,
-};
 
-export function SubscriptionsView({ state, actions }: { state: State; actions?: ListActions }) {
+
+export function SubscriptionsView({
+  state,
+  actions,
+  refusal,
+}: {
+  state: State;
+  actions?: ListActions;
+  refusal?: string | null;
+}) {
   const intl = useIntl();
   return (
     <main className="subscriptions">
@@ -119,6 +189,7 @@ export function SubscriptionsView({ state, actions }: { state: State; actions?: 
         <h1>{intl.formatMessage(messages.title)}</h1>
         {state.status === 'ready' && actions?.create()}
       </div>
+      <ErrorAlert message={refusal ? intl.formatMessage(errorMessage(refusal)) : null} />
       {state.status === 'loading' && <p>{intl.formatMessage(messages.loading)}</p>}
       {state.status === 'error' && <p role="alert">{intl.formatMessage(errorMessage(state.code))}</p>}
       {state.status === 'ready' && <SubscriptionsTable data={state.data} actions={actions} />}
@@ -158,9 +229,21 @@ function SubscriptionsTable({ data: { subscriptions, clients }, actions }: { dat
                   <time dateTime={s.ends_on}>{formatDay(intl.formatDate, s.ends_on)}</time>
                 </td>
                 <td>
-                  <StatusBadge status={subscriptionStatus(s.ends_on, today)} />
+                  <RowStatus subscription={s} today={today} />
                 </td>
-                {actions && <td>{actions.edit(s)}</td>}
+                {actions && (
+                  <td className="row-actions">
+                    {/* A cancelled or renewed subscription is not edited, renewed or cancelled: the database's own
+                        gate refuses the write, so the screen offers nothing it knows will be refused. */}
+                    {s.status === 'active' && (
+                      <>
+                        {actions.edit(s)}
+                        {actions.renew(s)}
+                        <CancelButton subscription={s} cancel={actions.cancel} />
+                      </>
+                    )}
+                  </td>
+                )}
               </tr>
             );
           })}
@@ -225,6 +308,30 @@ function StatusBadge({ status }: { status: SubscriptionStatus }) {
   return (
     <Badge tone={tone}>
       <span data-status={status}>{intl.formatMessage(label)}</span>
+    </Badge>
+  );
+}
+
+const LIFECYCLE: Record<'cancelled' | 'renewed', { tone: BadgeTone; label: typeof messages.statusCancelled }> = {
+  cancelled: { tone: 'neutral', label: messages.statusCancelled },
+  renewed: { tone: 'neutral', label: messages.statusRenewed },
+};
+
+/**
+ * One status column for two meanings. While a subscription is active its end date decides what the row says —
+ * expired, due soon, active. Once it is cancelled or renewed the date says nothing worth saying: the lifecycle
+ * does, and it wins.
+ */
+function RowStatus({ subscription, today }: { subscription: SubscriptionItem; today: string }) {
+  const intl = useIntl();
+  // Anything but the two the interface knows falls back to the date: a value the server gains later shows a row
+  // that is merely less informative, never a screen that fails to render.
+  const lifecycle = LIFECYCLE[subscription.status as 'cancelled' | 'renewed'] as (typeof LIFECYCLE)['cancelled'] | undefined;
+  if (!lifecycle) return <StatusBadge status={subscriptionStatus(subscription.ends_on, today)} />;
+  const { tone, label } = lifecycle;
+  return (
+    <Badge tone={tone}>
+      <span data-status={subscription.status}>{intl.formatMessage(label)}</span>
     </Badge>
   );
 }

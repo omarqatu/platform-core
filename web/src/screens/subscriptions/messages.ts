@@ -14,6 +14,8 @@ type Values = {
   statusActive: NoMessageValues;
   statusDueSoon: NoMessageValues;
   statusExpired: NoMessageValues;
+  statusCancelled: NoMessageValues;
+  statusRenewed: NoMessageValues;
   clientUnavailable: NoMessageValues;
   more: { shown: number };
 };
@@ -44,6 +46,9 @@ export const messages = defineMessages<Values>({
   statusActive: { id: 'subscriptions.list.statusActive', defaultMessage: 'Active' },
   statusDueSoon: { id: 'subscriptions.list.statusDueSoon', defaultMessage: 'Due soon' },
   statusExpired: { id: 'subscriptions.list.statusExpired', defaultMessage: 'Expired' },
+  // The lifecycle (Amendment 01 §2.9), shown in place of the date-derived status once the row has left 'active'.
+  statusCancelled: { id: 'subscriptions.list.statusCancelled', defaultMessage: 'Cancelled' },
+  statusRenewed: { id: 'subscriptions.list.statusRenewed', defaultMessage: 'Renewed' },
   clientUnavailable: { id: 'subscriptions.list.clientUnavailable', defaultMessage: 'Not shown' },
   more: {
     id: 'subscriptions.list.more',

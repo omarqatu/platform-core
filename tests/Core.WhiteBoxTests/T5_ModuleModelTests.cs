@@ -46,13 +46,18 @@ public class T5_ModuleModelTests(WhiteBoxFixture fixture)
         db.Audit = new AuditContext(fixture.W1, null, "test", null);
         var client = Guid.CreateVersion7();
 
-        db.Clients.Add(new Client { Id = client, TenantId = fixture.W1, ScopeRefId = client, Name = "wb", CreatedAt = DateTime.UtcNow });
+        // (Amendment 01 §2.8, §2.9) is_active and status are NOT NULL with no DEFAULT, so this fixture names them
+        // as every writer must.
+        db.Clients.Add(new Client
+        {
+            Id = client, TenantId = fixture.W1, ScopeRefId = client, Name = "wb", CreatedAt = DateTime.UtcNow, IsActive = true,
+        });
         await db.SaveChangesAsync();
         db.Subscriptions.Add(new Subscription
         {
             Id = Guid.CreateVersion7(), TenantId = fixture.W1, ScopeRefId = client, ServiceName = "wb", EndsOn = new DateOnly(2027, 6, 1),
             CreatedAt = DateTime.UtcNow, ReminderType = Subscription.Kind, CategoryId = await db.Categories.Where(c => c.Code == "other").Select(c => c.Id).SingleAsync(),
-            BillingCycle = "yearly", AutoRenew = false,
+            BillingCycle = "yearly", AutoRenew = false, Status = Subscription.Active, RenewedFromId = null,
         });
         await db.SaveChangesAsync();
         var audited = await db.AuditLog.Where(a => a.TenantId == fixture.W1 && (a.EntityType == "clients" || a.EntityType == "subscriptions"))

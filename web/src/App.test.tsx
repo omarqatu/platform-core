@@ -21,7 +21,7 @@ function fakeApi(options: { me?: typeof A | null; signedIn?: boolean; tenants?: 
   const overrides = new Map<string, () => Response | Promise<Response>>();
   const calls: { method: string; path: string; headers: Record<string, string> }[] = [];
   const rows = (tenant: typeof A) =>
-    Array.from({ length: 3 }, (_, i) => ({ id: `${tenant.tenant_id}-${i}`, client_id: 'c', service_name: `${tenant.name} row ${i}`, ends_on: '2027-01-02' }));
+    Array.from({ length: 3 }, (_, i) => ({ id: `${tenant.tenant_id}-${i}`, client_id: 'c', service_name: `${tenant.name} row ${i}`, ends_on: '2027-01-02', status: 'active' }));
 
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const method = init?.method ?? 'GET';

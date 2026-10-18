@@ -222,6 +222,7 @@ erDiagram
     permissions ||--o{ role_template_permissions : "in template"
 
     clients ||--o{ subscriptions : "(T) scope_ref_id"
+    subscriptions |o--o| subscriptions : "(T) renewed_from_id"
     categories ||--o{ subscriptions : "category_id"
     subcategories |o--o{ subscriptions : "subcategory_id"
     categories ||--o{ subcategories : "category_id"
@@ -278,6 +279,10 @@ erDiagram
         uuid scope_ref_id "CHECK = id"
         text name
         app_ts created_at
+        text email "NULL"
+        text phone_e164 "NULL, E.164"
+        text telegram_chat_id "NULL, signed integer"
+        boolean is_active "disable, never delete"
     }
     subscriptions {
         app_id id PK
@@ -295,6 +300,8 @@ erDiagram
         text billing_cycle "monthly | yearly"
         boolean auto_renew
         text login_url "NULL"
+        text status "active | cancelled | renewed"
+        uuid renewed_from_id "NULL, the row renewed"
     }
     categories {
         app_id id PK
@@ -466,7 +473,9 @@ app/prov: `SELECT` via `permissions_read`. Current codes:
 | `core.members.manage` | core | Invite, revoke invitations, enable/disable members, add/remove their roles | owner, admin |
 | `core.audit.read` | core | Read the tenant's audit log | owner, admin, operator, viewer |
 | `subscriptions.read` | subscriptions | List clients and subscriptions | owner, admin, operator, viewer |
-| `subscriptions.write` | subscriptions | Create and edit subscriptions (their fields and classification since Amendment 02) | owner, admin, operator |
+| `subscriptions.write` | subscriptions | Create and edit subscriptions (their fields and classification since Amendment 02; renewing and cancelling since stage (b) — Amendment 01 §4.3 adds no permission for either) | owner, admin, operator |
+| `subscriptions.clients.write` | subscriptions | Create and edit clients. The second axis narrows it at creation: an `assigned` member edits their own clients and creates none (see `clients` in §6.6) | owner, admin, operator |
+| `subscriptions.clients.manage` | subscriptions | Disable a client and enable it again — **not** operator, so an operator may create and edit a client but not disable one | owner, admin |
 
 #### `role_templates`, `role_template_permissions` (global catalogs)
 The base roles every new tenant receives: `owner`, `admin`, `operator`, `viewer`, with their permissions. Read only by
@@ -505,25 +514,27 @@ Which modules a tenant has enabled. `UNIQUE (tenant_id, module_id)`. Policies: `
 | **Grants** | app `SELECT, INSERT`; prov `INSERT`. **No `UPDATE` or `DELETE` for any application role**: append-only (Test 12). |
 | **Notes** | An `assigned` member cannot read the audit log at all today (reading it per entity is a later decision). The API also requires `core.audit.read`. `password_hash` and `token_hash` appear as `"[masked]"`. Bulk EF commands (`ExecuteUpdate`/`ExecuteDelete`) would bypass the interceptor, so they are forbidden in `src/` (`check-no-bulk-writes`). |
 
-### 6.6 Module: Subscriptions (`0008_subscriptions.sql`)
+### 6.6 Module: Subscriptions (`0008_subscriptions.sql`, `0012_classification.sql`, `0013_clients_and_lifecycle.sql`)
 
 The first module, owned by `Modules.Subscriptions`. It shows the full pattern a scoped module follows.
 
 #### `clients`
 | | |
 |---|---|
-| **Holds** | A tenant's clients: `name`. A client **is its own scoped entity**: `scope_ref_id` always equals `id`, held by `CHECK (scope_ref_id = id)`. (A generated column was not allowed — §9 — so the application writes the same value twice.) |
+| **Holds** | A tenant's clients: `name`. A client **is its own scoped entity**: `scope_ref_id` always equals `id`, held by `CHECK (scope_ref_id = id)`. (A generated column was not allowed — §9 — so the application writes the same value twice.) Since `0013_clients_and_lifecycle.sql` (Amendment 01 §2.8): `email`, `phone_e164`, `telegram_chat_id` — the three channels a reminder can reach the client by, all optional — and `is_active`, which was backfilled `true` for rows that existed, followed by a row-count check, and carries no `DEFAULT`. |
 | **Keys** | `UNIQUE (tenant_id, id)`; FK `tenant_id → tenants`; index `(tenant_id, scope_ref_id)`. |
+| **Constraints** | `CHECK`s on the three channels, so one line has one spelling across the tenant: `phone_e164 ~ '^\+[1-9][0-9]{1,14}$'` (E.164 and nothing else), `telegram_chat_id ~ '^-?[0-9]{1,20}$'` (signed — a group's chat id is negative), and the e-mail held to one shape and 320 characters. No uniqueness and no normalization: a client is not an account, and two clients of one tenant may share an address. |
 | **Policies** | `tenant_isolation` (permissive) + `client_scope` (restrictive) — both standard templates. |
-| **Grants** | app `SELECT, INSERT, UPDATE, DELETE`. Nothing for any other role. |
+| **Grants** | app `SELECT, INSERT, UPDATE, DELETE`. Nothing for any other role. The `DELETE` is v1.16 §3.8's table-wide grant for module tables and **stays** (Amendment 01 §2.9 says so explicitly): "disable, never delete" is held by there being **no endpoint that deletes**, not by the grant. |
+| **Note** | A client is its own scoped entity, so a **new** row has no assignment by virtue of being new and `client_scope`'s `WITH CHECK` refuses the insert from a member in mode `assigned` (`42501` → `403`). An `operator` in mode `assigned` therefore edits the clients assigned to them but creates none; in mode `all` they create. The second axis narrows `subscriptions.clients.write` at creation and only there — stated in Amendment 01 §4.2, proven in `T5_ClientLifecycleTests`. |
 
 #### `subscriptions`
 | | |
 |---|---|
-| **Holds** | `service_name`, `ends_on` (date), and `scope_ref_id` — the client it belongs to. Since `0012_classification.sql` (Amendment 02 §2, §3.2): `reminder_type` (one value, `subscription` — the kind of thing reminded about), `category_id`, `subcategory_id` (optional), `provider`, `cost` (`numeric(14,3)`, optional, zero allowed), `currency` (optional, ISO 4217), `billing_cycle` (`monthly` or `yearly`), `auto_renew`, `login_url` (optional). The four `NOT NULL` ones were backfilled in the migration for rows that existed (`subscription`, `other`, `yearly`, `false`), each followed by a row-count check, and carry no `DEFAULT`. |
-| **Keys** | FK `(tenant_id, scope_ref_id) → clients (tenant_id, id)` — composite: a subscription can't point at another tenant's client (Test 21). FK `tenant_id → tenants`; index `(tenant_id, scope_ref_id)`. FKs `category_id → categories (id)` and `subcategory_id → subcategories (id)` — single-column, because the catalog carries no `tenant_id`, so Check 7 does not apply. Whether a subcategory belongs to the subscription's category is the API's check, not a constraint. |
-| **Constraints** | `CHECK`s: `reminder_type IN ('subscription')`, `billing_cycle IN ('monthly', 'yearly')` (no free text — `Monthly` is refused), `cost >= 0`, `currency ~ '^[A-Z]{3}$'`. |
-| **Policies** | `tenant_isolation` + `client_scope`. Creating a subscription for a client you are not assigned to fails `client_scope`'s `WITH CHECK` (`42501`). |
+| **Holds** | `service_name`, `ends_on` (date), and `scope_ref_id` — the client it belongs to. Since `0012_classification.sql` (Amendment 02 §2, §3.2): `reminder_type` (one value, `subscription` — the kind of thing reminded about), `category_id`, `subcategory_id` (optional), `provider`, `cost` (`numeric(14,3)`, optional, zero allowed), `currency` (optional, ISO 4217), `billing_cycle` (`monthly` or `yearly`), `auto_renew`, `login_url` (optional). The four `NOT NULL` ones were backfilled in the migration for rows that existed (`subscription`, `other`, `yearly`, `false`), each followed by a row-count check, and carry no `DEFAULT`. Since `0013_clients_and_lifecycle.sql` (Amendment 01 §2.9): `status` (`active`, `cancelled` or `renewed` — backfilled `active`, with a row-count check) and `renewed_from_id`, the subscription this one renews. **A renewal is a NEW row pointing at the old one, never an extension of it; a cancellation is a status change. Nothing is deleted.** |
+| **Keys** | `UNIQUE (tenant_id, id)` — added by `0013` because `renewed_from_id` references it; FK `(tenant_id, scope_ref_id) → clients (tenant_id, id)` — composite: a subscription can't point at another tenant's client (Test 21). FK `(tenant_id, renewed_from_id) → subscriptions (tenant_id, id)` — composite for the same reason, and `UNIQUE (tenant_id, renewed_from_id)`, so one subscription is renewed **once** and the history cannot fork in silence (`NULL` repeats freely, so unrenewed rows are unaffected). FK `tenant_id → tenants`; index `(tenant_id, scope_ref_id)`. FKs `category_id → categories (id)` and `subcategory_id → subcategories (id)` — single-column, because the catalog carries no `tenant_id`, so Check 7 does not apply. Whether a subcategory belongs to the subscription's category is the API's check, not a constraint. |
+| **Constraints** | `CHECK`s: `reminder_type IN ('subscription')`, `billing_cycle IN ('monthly', 'yearly')` (no free text — `Monthly` is refused), `cost >= 0`, `currency ~ '^[A-Z]{3}$'`, `status IN ('active', 'cancelled', 'renewed')`. |
+| **Policies** | `tenant_isolation` + `client_scope`, and since `0013` a third: `subscriptions_status_gate` (§7.7). Creating a subscription for a client you are not assigned to fails `client_scope`'s `WITH CHECK` (`42501`). Because it carries a policy outside the two templates, the table is now **in the manifest**, so Amendment 02 §5.1 writes its two templates out as well (Amendment 01 §4.1 — a manifest table's policy set is checked whole). |
 | **Grants** | app `SELECT, INSERT, UPDATE, DELETE`. |
 
 #### `categories`, `subcategories` (global catalogs — `0012_classification.sql`)
@@ -617,6 +628,14 @@ Several update policies constrain both the **before** (`USING`) and the **after*
 | `invitations_tenant_update` | `pending` → `revoked` |
 | `memberships_provisioner_rejoin` | `left` → `active` |
 | `scope_assignments_provisioner_disable` | of a member who left: → `active = false` |
+| `subscriptions_status_gate` | **restrictive**, `FOR UPDATE`: the row must be `active` *before* the write (`USING (status = 'active')`); the value written is not constrained (`WITH CHECK (true)` — the column's `CHECK` holds the three values). So `active` → `active` (an ordinary edit), `cancelled` or `renewed`; and nothing leaves `cancelled` or `renewed`, neither an edit nor a revival |
+
+**On that last one's `WITH CHECK (true)`:** PostgreSQL uses the `USING` expression as the `WITH CHECK` expression when
+the latter is omitted, so `USING (status = 'active')` alone would require the **new** row to be active too and refuse
+the cancellation itself (`42501`) — the very thing the gate exists for. Proven on PostgreSQL 18.6 before the policy
+was written. When `USING` fails the `UPDATE` simply reaches no row, so the application sees zero rows affected
+(`CriticalWriteException` → `403`) rather than an error; the endpoints read `status` first and answer
+`409 subscription_not_active`, which says what is actually true.
 
 ### 7.8 The provisioner's policies
 

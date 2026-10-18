@@ -122,6 +122,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Icon name="grid" />
               <span>{intl.formatMessage(messages.subscriptions)}</span>
             </NavLink>
+            <NavLink to="/app/clients" className="side-link">
+              <Icon name="layers" />
+              <span>{intl.formatMessage(messages.clients)}</span>
+            </NavLink>
           </nav>
         </aside>
       )}

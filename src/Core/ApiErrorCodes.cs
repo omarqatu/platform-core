@@ -50,4 +50,9 @@ public static class ApiErrorCodes
     // The password rule (OPEN_ITEMS 62): shorter than PasswordPolicy.MinimumLength. Length is the whole rule, so
     // the code says length and nothing vaguer; a composition rule, if one ever arrives, gets a code of its own.
     public const string PasswordTooShort = "password_too_short";
+
+    // The subscription's lifecycle (Amendment 01 §2.9): renewing or cancelling a subscription that is already
+    // cancelled or already renewed. Named for the state, not for the act, because both acts fail on the same
+    // state and the interface says the same thing about either.
+    public const string SubscriptionNotActive = "subscription_not_active";
 }
