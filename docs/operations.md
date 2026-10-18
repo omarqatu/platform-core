@@ -273,6 +273,7 @@ long step is visible as long, not hung. **Note the real durations of the first t
 
 **Check** — on the server:
 ```bash
+curl -sI -H 'Host: platform.ask-palestine.com' http://127.0.0.1:5100/api/tenants | head -n 1
 curl -sI http://127.0.0.1:5100/api/tenants | head -n 1
 docker port platform-core-api-1
 docker port platform-core-postgres-1
@@ -281,7 +282,8 @@ docker ps --format '{{.Names}}\t{{.Status}}'
 free -m
 sudo dmesg -T | grep -i 'killed process' | tail -n 5
 ```
-→ `HTTP/1.1 401 Unauthorized`; `8080/tcp -> 127.0.0.1:5100`; nothing for PostgreSQL; our two containers within
+→ `HTTP/1.1 401 Unauthorized` with the real host name, and `HTTP/1.1 400 Bad Request` without it (Api answers
+only `PUBLIC_HOST`: `AllowedHosts`); `8080/tcp -> 127.0.0.1:5100`; nothing for PostgreSQL; our two containers within
 512 MB each; **every other container still Up, with the same uptime as before the deploy**; no new OOM kill.
 
 And **from anywhere else** (a laptop, or a phone on mobile data):

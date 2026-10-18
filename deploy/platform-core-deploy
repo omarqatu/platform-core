@@ -50,6 +50,9 @@ log "deploy $sha"
 [ -f "$env_file" ] || fail "$env_file is missing (docs/operations.md, step 2)."
 [ "$(stat -c %u "$env_file")" = "$(id -u)" ] || fail "$env_file must be owned by $(id -un)."
 [ "$(stat -c %a "$env_file")" = 600 ] || fail "$env_file must be mode 600 (chmod 600)."
+# Api answers only this Host (AllowedHosts); any other gets 400.
+public_host="$(sed -n 's/^PUBLIC_HOST=//p' "$env_file" | tail -n 1)"
+[ -n "$public_host" ] || fail "PUBLIC_HOST is empty in $env_file."
 
 # --- 3. The commit: on main, checked out cleanly. ---
 cd "$repo"
@@ -88,7 +91,7 @@ log "api"
 "${compose[@]}" up --detach --no-deps api
 code=""
 for _ in $(seq 1 90); do
-  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$api_url/api/tenants" || true)"
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 -H "Host: $public_host" "$api_url/api/tenants" || true)"
   [ "$code" = 401 ] && break
   sleep 1
 done
