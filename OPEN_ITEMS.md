@@ -536,6 +536,8 @@ Closed by the password-rule PR:
 
 ### 61. `Test28c_EveryEntityTypeInsert_SendsNoReturning` covers 19 of 21 entity types — and the real hole is A1's
 
+- **The shape it belongs to: item 83** — a verifier that verifies nothing reports success. This is sighting one
+  of three; read 83 before fixing this, because the fix below (assert on the set, not on a count) is 83's first rule.
 - **Origin:** A3, found while reading why the entity-count tripwires failed. **The gap itself is A1's**, merged
   2026-10-17 in PR #22: A1 added `password_reset_tokens` and the application inserts into it, and this test has
   never covered that insert. A3 found it; A3 did not cause it, and did not fix it (below).
@@ -664,6 +666,9 @@ Closed by the password-rule PR:
 
 ### 68. Check 8 passes silently on a table that declares `client_scope` but lacks `scope_ref_id`
 
+- **The shape it belongs to: item 83** — a verifier that verifies nothing reports success. This is sighting two
+  of three; 83's second rule (derive the set from the system, never by hand) is what an eleventh check would have
+  to satisfy.
 - **Origin:** Amendment 02, found in the first review of its draft (Amendment 02 §0, §3.3).
 - **The gap:** Check 8 requires the `client_scope` template on every table **carrying** `scope_ref_id`. A table that
   is meant to be scoped but names its column something else — the draft's `client_notification_settings(client_id)`,
@@ -879,7 +884,47 @@ Closed by the password-rule PR:
   `--logger "trx;LogFileName=<run>.trx"`, every `trx` kept, read the `UnitTestResult` with `outcome="Failed"`. And
   the harness lesson: **a loop that reports green must prove it ran.** Twenty "green" runs here proved nothing
   until a run with no `Passed!`/`Failed!` summary line was made to fail the loop — the Docker daemon had died
-  underneath it and every run was a no-op.
+  underneath it and every run was a no-op. That is sighting three of **item 83**, which names the shape these
+  share with items 61 and 68; the loop's fix is the pattern 83 points at.
+
+### 83. A verifier that verifies nothing must fail, not pass — one shape, three sightings in two days
+
+- **Origin:** named by the project owner on 2026-10-18, after the third sighting in two days. The three were
+  found separately, by different work, and read as three unrelated bugs. They are one.
+- **The shape.** A verifier — a test, a check, a loop — is given a set to look at. The set comes out empty, or
+  smaller than it should be, for a reason the verifier never examines. It finds no violation, because there was
+  nothing to find a violation in. **It reports success.** Every one of these is green in exactly the case it
+  exists to catch, and the greenness is what hides it: nobody investigates a passing check.
+
+| Sighting | What it was given | Why it found nothing | What it reported |
+|---|---|---|---|
+| **Item 61** — `Test28c_EveryEntityTypeInsert_SendsNoReturning` | a hand-written list of entity types | a new entity is absent from **both** sides of `Assert.Equal(19, …)`, so it cannot move the count | passing, at 19 of 21, across two PRs |
+| **Item 68** — Check 8 | the tables carrying `scope_ref_id` | a table meant to be scoped that named its column `client_id` is not in the set at all | passing, on a table whose own prose claimed `client_scope` |
+| **Item 82** — the `[W]` capture loop (this session) | twenty runs of the suite | the Docker daemon had died, so every run was a no-op and produced no summary line; the `grep` matched nothing and the loop read empty as "not failed" | **"20 runs, all green"** — having run the suite zero times |
+
+- **The rule: a verifier must fail when it verifies nothing.** Not warn, not report zero — fail. Passing is a
+  claim about the thing under test, and a verifier that found nothing to test has no grounds to make it. Three
+  ways to hold it, in the order they are worth reaching for:
+  1. **Assert on the set, not on a count.** `Assert.Empty(expected - covered - declared)` fails on a new member;
+     `Assert.Equal(19, covered)` cannot (item 61).
+  2. **Derive the set from the system, never by hand** — the model, the catalog, `pg_policy`. A hand-written list
+     goes stale silently; a derived one grows and the assertion notices (items 61, 68).
+  3. **Make "no evidence" an error.** A step that produces no output where output is the proof of work is a
+     failure of the harness, and must stop the run (item 82).
+- **The fix made this session, as the pattern to copy:** the capture loop now treats a run that emits no
+  `Passed!`/`Failed!` summary line as fatal — `if [ -z "$line" ]; then echo "FATAL: …"; exit 2; fi` — so a dead
+  daemon stops the loop instead of being counted twenty times as a pass. Three lines, and the difference between
+  a report and a lie.
+- **This item fixes nothing on its own.** Items 61 and 68 each hold their own fix and their own decision (68's is
+  a change to the check inputs, so it is the project owner's). This exists so that whoever picks up either one —
+  or writes the next check, or the next loop — finds the shape named in one place rather than meeting it a fourth
+  time as something new.
+- **Where it is worth looking next, unaudited:** any assertion in the suites of the form "count equals N" over a
+  set that can grow; any check whose input is a hand-maintained file (`grants.json`, `policy-chains.json`,
+  `rls-exemptions.json`, `scope-variable-writers.json`) and which reports nothing when a table is simply absent
+  from it; and the `--self-test` of each check, which is the one mechanism the project already has against this
+  shape — it proves the check fails on a planted violation, but not that the check *looked at anything* on a
+  clean run.
 
 ## For the next version of the document — not for the code
 
