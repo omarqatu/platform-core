@@ -926,6 +926,37 @@ Closed by the password-rule PR:
   shape — it proves the check fails on a planted violation, but not that the check *looked at anything* on a
   clean run.
 
+### 84. An unidentified intermittent failure in Conformance — and CI's failure path destroys the evidence
+
+- **Origin:** the stage (b) PR, 2026-10-18. Two items in one, because the second is why the first is still open.
+- **What happened:** CI's `proof` job went red on the Conformance step at `0fd48fa`, and green on `138f55e` —
+  **two commits whose only difference is `OPEN_ITEMS.md`.** The code is identical, so the suite is intermittently
+  failing. Locally, on a clean migrated-and-seeded database running CI's exact sequence, **six rounds were green,
+  237/237 each**. Rate: 1 in 2 CI runs, 0 in 6 local rounds. No test was ever named.
+- **Why no test was named — and this is the part to fix.** CI's own failure path buries the failure it exists to
+  report:
+  - `Api logs on failure` runs `docker logs api` with **no `--tail`**. After 237 tests at EF `Information` level
+    that is tens of thousands of lines, appended **after** the Conformance output.
+  - The logs API returns at most ~103 KB from the tail (confirmed: identical cap at 120 and 260 requested lines),
+    so the Conformance summary can never be reached by tailing.
+  - The full-log blob URL is refused by the development container's egress proxy, and its `gh` token is invalid.
+  **This is item 83's shape, in CI itself:** the step whose whole purpose is to preserve evidence of a failure
+  made that evidence unreadable, and reported success while doing it.
+- **The fix, which is a change to CI and therefore the project owner's decision:**
+  1. `--logger "trx;LogFileName=conformance.trx"` on the Conformance step (and on `White-box tests`), plus
+     `actions/upload-artifact` for the `.trx` on failure. Then a failing run names the test, its message and its
+     stack, as an artefact rather than as scrollback.
+  2. `docker logs --tail 200 api` instead of unbounded, and the same for `docker compose logs postgres`. A
+     diagnostic step that destroys the diagnosis is worse than no step.
+- **What is ruled out so far:** not the seed state (reproduced attempts were on a clean migrated-and-seeded
+  database, CI's own); not the extra tenants this PR's tests create seen by a cross-tenant assertion
+  (`T7_BackgroundJobTests` asserts per-seed-tenant counts and is robust to them — read and checked). Not ruled
+  out: anything else, including whether the step **failed an assertion or aborted** — CI's Conformance step ran
+  71 s against 82–105 s locally, which is short enough to raise the question and not enough to answer it.
+- **Why it is not dismissed as a flake:** "flake" is a conclusion about a named test, not a substitute for naming
+  one. Until it has a name nobody can say whether it is a racing assertion or a real defect in what this stage
+  built, and the suite it is in is the one that proves the tenant-isolation contract.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12
