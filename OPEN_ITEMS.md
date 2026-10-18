@@ -986,6 +986,15 @@ Closed by the password-rule PR:
   gap in the evidence; it is the evidence**, and it points at the 71 s gap above rather than at any test. Do not
   read "no artefact" as "nothing to see" — that would be this list's own item 83 all over again, at the level of
   reading the report.
+- **The merge is taken with this item OPEN, by the project owner's decision of 2026-10-18 — do not read the
+  merge as the item having been resolved.** The decision was recorded **before** the merge and conditional on the
+  two CI runs then in flight coming back green, on these terms: one red in six runs of byte-identical code, zero
+  in twenty local rounds, **no test ever named**, and the suite now configured to name it the next time it
+  bites. (A red run would have been the better outcome: it would have produced the name.) The reasoning is that waiting longer buys nothing — it samples the same code hoping
+  for a failure we have *made legible* rather than one we cannot read. What makes it acceptable is the CI change
+  in this PR and nothing else: before it a recurrence told us nothing. **This item is open because the failure is
+  unexplained, not because it was forgotten**, and the first red `proof` run after the merge should be brought
+  straight back here.
 - **Why it is not dismissed as a flake:** "flake" is a conclusion about a named test, not a substitute for naming
   one. Until it has a name nobody can say whether it is a racing assertion or a real defect in what this stage
   built, and the suite it is in is the one that proves the tenant-isolation contract.
