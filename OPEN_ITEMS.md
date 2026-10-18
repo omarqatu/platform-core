@@ -947,15 +947,29 @@ Closed by the password-rule PR:
   (verified with `git diff --name-only`). So the suite is intermittently failing, and the denominator is four,
   not two:
 
-  | run | commit | `proof` |
-  |---|---|---|
-  | 90 | `f3788f0` | success |
-  | 91 | `0fd48fa` | **failure — Conformance** |
-  | 92 | `138f55e` | success |
-  | 93 | `ed1b0de` | success |
+  | run | commit | `proof` | |
+  |---|---|---|---|
+  | 90 | `f3788f0` | success | |
+  | 91 | `0fd48fa` | **failure — Conformance** | unnamed; before the `.trx` artefact existed |
+  | 92 | `138f55e` | success | |
+  | 93 | `ed1b0de` | success | |
+  | 94 | `62f8032` | success | first run with the artefact and the bounded log dumps |
+  | 95 | `851d355` | success | |
+  | 96 | `63333cb` | success | |
 
-  Locally, on a clean migrated-and-seeded database running CI's exact sequence, **nine rounds green, 237/237
-  each** and counting. **Rate: 1 red in 4 CI runs, 0 in 9 local rounds.** No test was ever named.
+  **Precisely what "identical" means here:** runs 90–93 differ only in `OPEN_ITEMS.md`; run 94 also changed
+  `ci.yml`. **Nothing under `src/` or `tests/` changed across any of the seven**, so the code under test is
+  identical — which is the claim the rate rests on, and it is weaker than "byte-identical" would have been.
+
+  Locally, on a clean migrated-and-seeded database running CI's exact sequence, **twenty rounds, all green,
+  237/237 each** — twenty result lines, no `Failed!`, no aborted round, and the loop's own guard (a round
+  emitting no summary line is fatal) never fired, so the twenty is twenty runs that ran.
+
+- **The observed rate, as of 2026-10-18 08:08 UTC: 1 red in 7 CI runs, 0 in 20 local rounds.** Recorded
+  separately from the decision below on purpose: the project owner decided at **one in six**, which is what the
+  history showed at the moment of the call, and the seventh run landed green while the local rounds finished.
+  **The record carries the rate that was measured; the decision carries the rate it was taken on.** They are not
+  the same number and should not be collapsed. **No test was ever named.**
 - **Why no test was named — and this is the part to fix.** CI's own failure path buries the failure it exists to
   report:
   - `Api logs on failure` runs `docker logs api` with **no `--tail`**. After 237 tests at EF `Information` level
@@ -988,9 +1002,11 @@ Closed by the password-rule PR:
   reading the report.
 - **The merge is taken with this item OPEN, by the project owner's decision of 2026-10-18 — do not read the
   merge as the item having been resolved.** The decision was recorded **before** the merge and conditional on the
-  two CI runs then in flight coming back green, on these terms: one red in six runs of byte-identical code, zero
-  in twenty local rounds, **no test ever named**, and the suite now configured to name it the next time it
-  bites. (A red run would have been the better outcome: it would have produced the name.) The reasoning is that waiting longer buys nothing — it samples the same code hoping
+  two CI runs then in flight coming back green, on these terms: **one red in six runs** with the code under test
+  identical, zero in twenty local rounds, **no test ever named**, and the suite now configured to name it the
+  next time it bites. Those two runs (94, 95) and the head run (96) all came back green, and the rate as finally
+  measured was one in seven — see above. (A red run would have been the better outcome: it would have produced
+  the name, and both of us said so.) The reasoning is that waiting longer buys nothing — it samples the same code hoping
   for a failure we have *made legible* rather than one we cannot read. What makes it acceptable is the CI change
   in this PR and nothing else: before it a recurrence told us nothing. **This item is open because the failure is
   unexplained, not because it was forgotten**, and the first red `proof` run after the merge should be brought
