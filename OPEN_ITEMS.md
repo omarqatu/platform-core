@@ -846,22 +846,41 @@ Closed by the password-rule PR:
 - **For stage (د):** the sender reads `clients.is_active` (the project owner's decision of 2026-10-17) **and**
   `subscriptions.status`; whether T7's own count narrows with it is a PROOF_SPEC decision to take at the same time.
 
-### 82. One unexplained `[W]` failure during the stage (b) session, not reproduced
+### 82. An unidentified intermittent failure in `[W]` — **a merge condition until it has a name**
 
-- **Origin:** the stage (b) PR, 2026-10-18. Recorded rather than dismissed, under the pattern of item 66.
-- **What happened:** `tests/Core.WhiteBoxTests` reported `Failed: 1, Passed: 111` **twice** in about fifteen runs.
-  The first came after a full Conformance run against the same database; the second came on a **clean database,
-  freshly migrated and seeded**, which is exactly CI's state. The runner's console summary names no test, and the
-  ten runs attempted afterwards with a `trx` logger — some on a pristine seeded database, some not — were all
-  green, so the name was never captured.
-- **What it is not:** not order-dependent on Conformance (the second sighting had no Conformance before it), and
-  not shared state from the worlds Conformance leaves behind (same reason). It is intermittent, at roughly one run
-  in seven, and nothing narrows it further than that.
-- **Why it is written down:** a flake seen twice and left unrecorded is a flake nobody connects to the third
-  sighting. CI may well show it; when it does, the run's own report names the test and this item can be closed.
-- **What would close it:** the test's name, from a run that reproduces it — run `[W]` with
-  `--logger "trx;LogFileName=…"` and read the `UnitTestResult` with `outcome="Failed"`. Nothing here is a reason to
-  change a test: item 66's rule stands, the fix for a flake is in the test, once the test is known.
+- **Origin:** the stage (b) PR, 2026-10-18.
+- **The leading hypothesis, and it is only that: one of item 66's own two `[W]` flakes.**
+  `T3_ForgotPasswordTests.TheAnswerTakesTheSameTime_…` and `T3_LoginLimiterTests.TheDelayEscalates…` both live in
+  `tests/Core.WhiteBoxTests`, both fail intermittently, and both fail **one at a time** — which is exactly the
+  shape seen here (`Failed: 1`). Item 66 records the first at 2/20 and the second reproducing on clean `main`, so
+  a rate of about one in seven in this suite is unremarkable for them. **This is not evidence, it is a candidate:**
+  the name was never captured, so it has not been checked against them.
+- **Why it is still its own item.** Item 66's flakes are *identified* — each names what it asserts and carries its
+  own fix. This one has no name, so it cannot be scoped, cannot be fixed, and cannot be called harmless, because
+  nobody knows what it asserts. **The project owner's position (2026-10-18): it is not merged as understood.**
+  Either its name, or a recorded decision to take the risk knowingly. If the name turns out to be one of item 66's
+  two, this item closes **into** 66 and the rate recorded here becomes a data point for it.
+- **What was seen:** `tests/Core.WhiteBoxTests` reported `Failed: 1, Passed: 111` **twice in about fifteen runs**
+  — roughly one in seven. The console summary names no test, so neither sighting was identified.
+- **What was ruled out, and how — do not redo this:**
+  | Ruled out | How |
+  |---|---|
+  | Ordering against Conformance | The second sighting had **no** Conformance run before it. CI runs `[W]` first anyway, so CI's order is the one that failed. |
+  | Shared database state from the worlds Conformance leaves behind | Same sighting: there were none. |
+  | Something peculiar to a dirty database | Reproduced on a **clean database, freshly migrated and seeded** — CI's exact condition. |
+  | A fixture of this PR's that is simply wrong | Both suites are otherwise green across every run, including the fixtures this PR extended; a wrong fixture would fail every time, not one run in seven. |
+  | **Not** ruled out: item 66's two `[W]` flakes | They are the leading candidate, above. Checking them is the first thing to do with a captured name — not the last. |
+  Nothing narrows it beyond "intermittent, about one run in seven, on CI's own starting state".
+- **How to capture it** (the run this PR made, for whoever picks it up):
+  `tests/Core.WhiteBoxTests` alone, in a loop, on a clean migrated-and-seeded database, each run with
+  `--logger "trx;LogFileName=<run>.trx"` and **every** trx kept — then read the `UnitTestResult` whose
+  `outcome="Failed"` for the test name, its `<Message>` and its `<StackTrace>`. A loop that reports green must
+  prove it ran: a run that produces no `Passed!`/`Failed!` summary line ran nothing, and counting it as green is
+  how a broken harness reads as twenty clean runs (that happened once here, when the Docker daemon had died
+  underneath it).
+- **What would close it:** the test's name, checked first against item 66's two. Then item 66's rule applies and
+  not before — the fix for a flake is in the test, once the test is known. **Nothing here is a reason to change a
+  test that has not been identified.**
 
 ## For the next version of the document — not for the code
 
