@@ -13,7 +13,8 @@ It is a reading guide, not the authority. When it disagrees with one of these, t
 from clean. Read it when you want to see the final state without replaying nine migrations in your head. Never edit it:
 regenerate it (§10). CI fails while it differs from a fresh dump.
 
-> **Snapshot.** Numbers in this document (21 tables, 71 policies, 9 migrations) are as of migration `0009`. The
+> **Snapshot.** Numbers in this document (21 tables, 71 policies, 9 migrations) are as of migration `0009`; migration
+> `0012` brings the catalog to 25 tables and 79 policies. The
 > catalog is the truth; `docs/schema.sql` is always current because CI enforces it. When you add a migration, update
 > the affected sections here in the same PR.
 
@@ -62,6 +63,7 @@ The tables fall into five groups:
 | **Delivery** | `provider_accounts` | Optional (`NULL` = the platform's own row) |
 | **Audit** | `audit_log` | Yes |
 | **Module: Subscriptions** | `clients`, `subscriptions` | Yes, and `scope_ref_id` |
+| **Module: Subscriptions — the classification** (global catalogs, Amendment 02 §3.1) | `categories`, `subcategories` | No |
 
 ---
 
@@ -220,6 +222,9 @@ erDiagram
     permissions ||--o{ role_template_permissions : "in template"
 
     clients ||--o{ subscriptions : "(T) scope_ref_id"
+    categories ||--o{ subscriptions : "category_id"
+    subcategories |o--o{ subscriptions : "subcategory_id"
+    categories ||--o{ subcategories : "category_id"
     scope_assignments }o..o{ clients : "scope_ref_id (no FK)"
 
     tenants {
@@ -280,6 +285,32 @@ erDiagram
         uuid scope_ref_id "the client"
         text service_name
         date ends_on
+        app_ts created_at
+        text reminder_type "subscription"
+        uuid category_id FK
+        uuid subcategory_id FK "NULL"
+        text provider "NULL"
+        numeric cost "NULL, >= 0"
+        text currency "NULL, ISO 4217"
+        text billing_cycle "monthly | yearly"
+        boolean auto_renew
+        text login_url "NULL"
+    }
+    categories {
+        app_id id PK
+        text code "UNIQUE"
+        text name_ar
+        text name_en
+        boolean is_active
+        app_ts created_at
+    }
+    subcategories {
+        app_id id PK
+        uuid category_id FK
+        text code "UNIQUE per category"
+        text name_ar
+        text name_en
+        boolean is_active
         app_ts created_at
     }
 ```
@@ -435,7 +466,7 @@ app/prov: `SELECT` via `permissions_read`. Current codes:
 | `core.members.manage` | core | Invite, revoke invitations, enable/disable members, add/remove their roles | owner, admin |
 | `core.audit.read` | core | Read the tenant's audit log | owner, admin, operator, viewer |
 | `subscriptions.read` | subscriptions | List clients and subscriptions | owner, admin, operator, viewer |
-| `subscriptions.write` | subscriptions | Create subscriptions | owner, admin, operator |
+| `subscriptions.write` | subscriptions | Create and edit subscriptions (their fields and classification since Amendment 02) | owner, admin, operator |
 
 #### `role_templates`, `role_template_permissions` (global catalogs)
 The base roles every new tenant receives: `owner`, `admin`, `operator`, `viewer`, with their permissions. Read only by
@@ -489,10 +520,19 @@ The first module, owned by `Modules.Subscriptions`. It shows the full pattern a 
 #### `subscriptions`
 | | |
 |---|---|
-| **Holds** | `service_name`, `ends_on` (date), and `scope_ref_id` — the client it belongs to. |
-| **Keys** | FK `(tenant_id, scope_ref_id) → clients (tenant_id, id)` — composite: a subscription can't point at another tenant's client (Test 21). FK `tenant_id → tenants`; index `(tenant_id, scope_ref_id)`. |
+| **Holds** | `service_name`, `ends_on` (date), and `scope_ref_id` — the client it belongs to. Since `0012_classification.sql` (Amendment 02 §2, §3.2): `reminder_type` (one value, `subscription` — the kind of thing reminded about), `category_id`, `subcategory_id` (optional), `provider`, `cost` (`numeric(14,3)`, optional, zero allowed), `currency` (optional, ISO 4217), `billing_cycle` (`monthly` or `yearly`), `auto_renew`, `login_url` (optional). The four `NOT NULL` ones were backfilled in the migration for rows that existed (`subscription`, `other`, `yearly`, `false`), each followed by a row-count check, and carry no `DEFAULT`. |
+| **Keys** | FK `(tenant_id, scope_ref_id) → clients (tenant_id, id)` — composite: a subscription can't point at another tenant's client (Test 21). FK `tenant_id → tenants`; index `(tenant_id, scope_ref_id)`. FKs `category_id → categories (id)` and `subcategory_id → subcategories (id)` — single-column, because the catalog carries no `tenant_id`, so Check 7 does not apply. Whether a subcategory belongs to the subscription's category is the API's check, not a constraint. |
+| **Constraints** | `CHECK`s: `reminder_type IN ('subscription')`, `billing_cycle IN ('monthly', 'yearly')` (no free text — `Monthly` is refused), `cost >= 0`, `currency ~ '^[A-Z]{3}$'`. |
 | **Policies** | `tenant_isolation` + `client_scope`. Creating a subscription for a client you are not assigned to fails `client_scope`'s `WITH CHECK` (`42501`). |
 | **Grants** | app `SELECT, INSERT, UPDATE, DELETE`. |
+
+#### `categories`, `subcategories` (global catalogs — `0012_classification.sql`)
+| | |
+|---|---|
+| **Holds** | The platform's classification of subscriptions (Amendment 02 §3.1): `code`, `name_ar`, `name_en`, `is_active`. Seven categories seeded by the migration, in this order — `domains`, `hosting`, `security`, `software`, `backup`, `ai`, `other` — which is the order `GET /api/subscriptions/categories` lists them in (by `id`). No subcategory is seeded yet. |
+| **Keys** | `UNIQUE (code)`; `subcategories`: FK `category_id → categories`, `UNIQUE (category_id, code)`. **No `tenant_id`**, as `modules` and `permissions`: a nullable `tenant_id` here would make the FK from `subscriptions` a link between two tenant tables, which Check 7 requires to be composite — and a composite key never matches a `NULL` tenant (OPEN_ITEMS 67). A tenant's own categories are deferred (OPEN_ITEMS 69). |
+| **Policies** | `categories_read`, `subcategories_read` — `FOR SELECT TO app_user, provisioner, job_runner USING (true)`, verbatim from Amendment 02 §5.1; in the manifest through `amendment-policies-built.json` (`"02"`). |
+| **Grants** | app `SELECT`, prov `SELECT`. Nobody writes them but `migrator`, seeding. **`job_runner` is named by the policies and not granted**: Amendment 02 §5 grants it, and that one role is deferred until a job needs the catalog — the grant is the guard, and the gap is deliberate (OPEN_ITEMS 76). |
 
 ---
 
@@ -625,6 +665,8 @@ policies say. Column lists in parentheses are column-level grants — `UPDATE` e
 | `audit_log` | SELECT, INSERT | INSERT | — | — |
 | `clients` | SELECT, INSERT, UPDATE, DELETE | — | — | — |
 | `subscriptions` | SELECT, INSERT, UPDATE, DELETE | — | — | — |
+| `categories` | SELECT | SELECT | — | — (deferred, OPEN_ITEMS 76) |
+| `subcategories` | SELECT | SELECT | — | — (deferred, OPEN_ITEMS 76) |
 
 **Database and schema.** Nothing is granted through `PUBLIC`. `CONNECT` on the database goes to the four application
 roles; `TEMP` to none; `USAGE` on schema `public` to the four; `CREATE` on it to none. `prune_auth_attempts()` and
@@ -777,4 +819,5 @@ These are deliberate and tracked. Do not "fix" them in passing — each needs a 
 | `membership_auth_authenticator_read` unused | A policy and grant with no consumer. | OPEN_ITEMS 14 (for the next document version). |
 | Login attempt limiting | Built (Amendment 01 §5.2): an escalating delay per (username + ip) and a ceiling per ip, no lockout. The deployed numbers are still open, and the dev/CI numbers are deliberately lenient. | OPEN_ITEMS 16, 54 |
 | No audit trail for a password change | `user_password_credentials`, `users.security_stamp` and `password_reset_tokens` are all outside automatic auditing. | OPEN_ITEMS 52 |
+| `job_runner` has no grant on the catalog its policies name | Amendment 02 §5 grants it `SELECT` on `categories` and `subcategories`; `grants.json` lags that by one role until a job needs it, because v1.16 §8 and T7.4 hold `job_runner` to the active tenants. | OPEN_ITEMS 76 — the question for stage (d). |
 | `POST /api/auth/password/forgot` is not built | A token can be consumed but nothing mints one: the path needs an address, and `authenticator` has no read on `persons`. | OPEN_ITEMS 53 |

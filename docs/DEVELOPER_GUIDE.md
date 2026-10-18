@@ -185,7 +185,7 @@ platform-core/
 │   │
 │   ├── Modules.Subscriptions/     the first module (clients + subscriptions)
 │   │   ├── SubscriptionsDbContext.cs    extends CoreDbContext with the module's two tables
-│   │   ├── SubscriptionEndpoints.cs     GET clients, GET subscriptions, POST subscription
+│   │   ├── SubscriptionEndpoints.cs     clients, the categories catalog, subscriptions: list, one, create, edit
 │   │   ├── UnifiedSubscriptions.cs      GET /unified/subscriptions — across all your tenants
 │   │   ├── ExpiringSubscriptionsJob.cs  the trial background job
 │   │   └── SubscriptionScreen.cs        the original server-rendered T8 screen (frozen, never edited)
@@ -200,7 +200,7 @@ platform-core/
 │   │
 │   ├── Worker/                    runs one background job once, then exits (scheduled externally)
 │   └── Migrations/                the migration tool — the only holder of migrator's connection
-│       ├── Sql/0001…0009_*.sql    THE SCHEMA, as SQL files, applied in order
+│       ├── Sql/0001…0012_*.sql    THE SCHEMA, as SQL files, applied in order
 │       ├── Migrations/M000N_*.cs  one tiny class per SQL file
 │       └── Program.cs             refuses to run as anyone but migrator
 │
@@ -858,13 +858,13 @@ A module is a project (`Modules.<Name>`) that owns some tables and endpoints, de
 database. A foreign key between two modules would make them inseparable later — that is accepted, but each such FK is a
 conscious decision.
 
-> **Current stage:** the subscriptions module is being brought onto the platform under `docs/PLATFORM_CORE_AMENDMENT_01.md` (additions to v1.16), in the order of `docs/ROADMAP_SUBSCRIPTIONS.md`. This section describes the module as built today.
+> **Current stage:** the subscriptions module is being brought onto the platform under `docs/PLATFORM_CORE_AMENDMENT_01.md` and `docs/PLATFORM_CORE_AMENDMENT_02.md` (additions to v1.16), in the order of `docs/ROADMAP_SUBSCRIPTIONS.md` and Amendment 02 §7. Stage (a) — the classification and the subscription's fields, with their screens — is built. This section describes the module as built today.
 
 ### Anatomy of `Modules.Subscriptions`
 
 | Piece | File | Notes |
 |---|---|---|
-| Tables | `src/Migrations/Sql/0008_subscriptions.sql` | `clients` (scoped entity, `scope_ref_id = id`), `subscriptions` (`scope_ref_id` = its client). Both templates, grants, composite FK, indexes, permissions, template upgrades. |
+| Tables | `src/Migrations/Sql/0008_subscriptions.sql`, `0012_classification.sql` | `clients` (scoped entity, `scope_ref_id = id`), `subscriptions` (`scope_ref_id` = its client). Both templates, grants, composite FK, indexes, permissions, template upgrades. Then (Amendment 02 §3) the global catalog `categories`/`subcategories` — no `tenant_id`, seeded, read under `categories_read`/`subcategories_read` — and the subscription's own fields, four of them `NOT NULL` with a backfill each. |
 | Entities + context | `SubscriptionsDbContext.cs` | `Client`, `Subscription`; `SubscriptionsDbContext : CoreDbContext`. `OnModelCreating` maps its tables, then calls `base` **last** (the base names every column and marks every property `ValueGenerated.Never`). |
 | Endpoints | `SubscriptionEndpoints.cs` | A route group marked `OwnUnitsOfWorkAttribute`; each handler runs `UnitOfWork.RunAsync` on the module context. |
 | Registration | `src/Api/Program.cs` | `AddDbContext<SubscriptionsDbContext>(… UseCoreDataAccess(the app_user data source))` and `api.MapSubscriptionEndpoints()` |
@@ -1163,6 +1163,9 @@ and a mapping here — do not return 500s for expected situations.
 | `GET /api/subscriptions/clients` | module | `subscriptions.read` |
 | `GET /api/subscriptions` | module | `subscriptions.read` |
 | `POST /api/subscriptions` | module | `subscriptions.write` |
+| `GET /api/subscriptions/{id}` | module | `subscriptions.read` — an invisible one is `403 not_permitted` |
+| `PUT /api/subscriptions/{id}` | module | `subscriptions.write` — every field but the client |
+| `GET /api/subscriptions/categories` | module | `subscriptions.read` — the global catalog, no scope declaration |
 | `GET /api/unified/subscriptions` | fan-out | `subscriptions.read` per tenant |
 
 > The endpoints in `docs/PLATFORM_CORE_AMENDMENT_01.md` §5.1 still specified and not built: `POST /api/auth/password/forgot` (it waits for the e-mail sender — OPEN_ITEMS 53), the tenant's platform subscription, module settings, clients, renewal and cancellation, and the notification log. None appears above until its PR lands.
@@ -1187,8 +1190,23 @@ essentials:
 - **Logical CSS only** (`margin-inline-start`, `text-align: start`) — `check-logical-css` and ESLint refuse physical
   sides.
 - Screens: login, organization selection, invitation acceptance (new account or signed in), the three screens of
-  password recovery and change, status screens, the subscriptions screen. Screenshots of every state, in both
-  languages, are in `docs/screens/` — made by hand, and not yet made for the password screens.
+  password recovery and change, status screens, the subscriptions screen, and creating and editing a subscription.
+  Screenshots of every state, in both languages, are in `docs/screens/` — made by hand, and not yet made for the
+  password screens.
+- **The subscription form** (Amendment 02 §3.2): `/app/subscriptions/new` and `/app/subscriptions/:id/edit`, reached
+  from the list's "New subscription" and each row's "Edit". The category is chosen from the platform's catalog,
+  named in the interface's language from the catalog's own `name_ar`/`name_en` (data, not messages); the
+  subcategory field appears only for a category that has some — none is seeded yet. Editing keeps the client. The
+  rules the server holds (the closed `billing_cycle`, three decimals on the cost, a currency with every cost, an
+  `http(s)` link) are said beside the field before the request. **Money is a decimal string on the wire, both
+  ways** (`"cost": "12.500"`): a JSON number is read by the browser as binary floating point, so the cost goes from
+  the field to `decimal` to `numeric(14,3)` as text, and a cost sent as a number is refused (`400 invalid_value`).
+  An edit that names a `client_id` is refused (`400 invalid_value`): moving a subscription between clients is a
+  scope crossing inside the tenant, and there is no path from `PUT` to `scope_ref_id`. The end date and the cost
+  are text fields written left-to-right, and a digit typed on an Arabic keyboard becomes a Western one as it is typed
+  (`subscriptionForm.westernDigits`) — a native date picker would show the browser's own digits (OPEN_ITEMS 78).
+  The list shows both actions to every member, because the interface does not know the caller's permissions: a
+  viewer's attempt is refused by the server (OPEN_ITEMS 77).
 - **The password screens** (Amendment 01 §5.1, OPEN_ITEMS 59): `/app/password/forgot` and `/app/password/reset` are
   open; `/app/password/change` needs a session and no organization (`PUT /me/password` runs its own units of work
   with `app.user_id` alone). The e-mail's link is `/app/password/reset#token=<token>` and its token is handled as

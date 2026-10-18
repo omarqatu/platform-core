@@ -51,8 +51,9 @@ await Migrator($"""
       INSERT INTO membership_auth (id, tenant_id, membership_id, provider) VALUES (uuidv7(), t, m, 'password');
       CREATE TEMP TABLE t8_clients ON COMMIT DROP AS SELECT uuidv7() AS id, n FROM generate_series(1, {Clients}) n;
       INSERT INTO clients (id, tenant_id, scope_ref_id, name, created_at) SELECT id, t, id, 'Client ' || n, now() FROM t8_clients;
-      INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at)
-        SELECT uuidv7(), t, c.id, 'Service ' || k, DATE '2027-01-01' + ((c.n * 7 + k) % 365), now()
+      INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at, reminder_type, category_id, billing_cycle, auto_renew)
+        SELECT uuidv7(), t, c.id, 'Service ' || k, DATE '2027-01-01' + ((c.n * 7 + k) % 365), now(),
+               'subscription', (SELECT id FROM categories WHERE code = 'other'), 'yearly', false
         FROM t8_clients c CROSS JOIN generate_series(1, {SubscriptionsPerClient}) k;
       -- 20 assigned clients, spread across the tenant (every 25th).
       INSERT INTO scope_assignments (id, tenant_id, membership_id, scope_ref_id, assignment_role, active, reason)

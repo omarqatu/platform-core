@@ -24,7 +24,9 @@
     "role_templates":            { "provisioner": ["SELECT"] },
     "role_template_permissions": { "provisioner": ["SELECT"] },
     "clients":                   { "app_user": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-    "subscriptions":             { "app_user": ["SELECT", "INSERT", "UPDATE", "DELETE"] }
+    "subscriptions":             { "app_user": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
+    "categories":                { "app_user": ["SELECT"], "provisioner": ["SELECT"] },
+    "subcategories":             { "app_user": ["SELECT"], "provisioner": ["SELECT"] }
   },
   "columns": {
     "users":                     { "app_user": { "UPDATE": ["last_login_at", "language", "theme", "security_stamp"] } },

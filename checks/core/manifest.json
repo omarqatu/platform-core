@@ -120,6 +120,12 @@
     "provider_accounts": [
       "CREATE POLICY provider_accounts_read ON provider_accounts\n  FOR SELECT TO app_user\n  USING (tenant_id IS NULL\n         OR tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));   -- the platform's row, or the current tenant's (§2.6)",
       "CREATE POLICY provider_accounts_authenticator_read ON provider_accounts\n  FOR SELECT TO authenticator\n  USING (tenant_id IS NULL);   -- the platform's row alone: this role has no tenant in its context, and it reads no current_setting, so the NULLIF rule has nothing to apply to"
+    ],
+    "categories": [
+      "CREATE POLICY categories_read ON categories\n  FOR SELECT TO app_user, provisioner, job_runner\n  USING (true);   -- a global catalog with no tenant_id, in the same text as plans_read (Amendment 01 §4.1)"
+    ],
+    "subcategories": [
+      "CREATE POLICY subcategories_read ON subcategories\n  FOR SELECT TO app_user, provisioner, job_runner\n  USING (true);"
     ]
   }
 }

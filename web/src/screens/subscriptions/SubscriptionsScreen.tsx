@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useIntl } from 'react-intl';
+import { Link } from 'react-router';
 import { ApiError, getJson, isAbort } from '../../api/client';
 import { Badge, type BadgeTone } from '../../components/Badge';
 import { errorMessage } from '../../i18n/apiErrors';
 import { useSession } from '../../session/SessionProvider';
 import { ForbiddenScreen } from '../status/StatusScreens';
+import { messages as form } from './formMessages';
 import { messages } from './messages';
 import './SubscriptionsScreen.css';
 
@@ -34,13 +36,14 @@ export interface SubscriptionsData {
   clients: ScopedList<ClientItem>;
 }
 
+export const LIST_PATH = '/app/subscriptions';
 export const PAGE_SIZE = 50;
 const CLIENTS_LIMIT = 200; // the API's maximum page
 
 type State = { status: 'loading' } | { status: 'error'; code: string | null } | { status: 'ready'; data: SubscriptionsData };
 
 /** The tenant can no longer be entered: the session asks /me again, and the interface returns to the selection. */
-const TENANT_LOST = new Set(['not_a_member', 'no_active_tenant', 'tenant_not_active']);
+export const TENANT_LOST = new Set(['not_a_member', 'no_active_tenant', 'tenant_not_active']);
 
 /**
  * The subscription list (PROOF_SPEC T8), from GET /subscriptions and GET /subscriptions/clients: the scope declaration,
@@ -69,22 +72,61 @@ export function SubscriptionsScreen() {
   }, [revalidate]);
 
   if (state.status === 'error' && state.code === 'not_permitted') return <ForbiddenScreen />;
-  return <SubscriptionsView state={state} />;
+  return <SubscriptionsView state={state} actions={ROUTED_ACTIONS} />;
 }
 
-export function SubscriptionsView({ state }: { state: State }) {
+/**
+ * The list's ways to the form (Amendment 02 §3.2): creating, and editing a row. The routed screen supplies them; the
+ * view alone renders none, so it stands without a router. Shown to every member who lists: the interface does not
+ * know the caller's permissions, and a viewer's attempt is refused by the server with not_permitted.
+ */
+export interface ListActions {
+  create: () => ReactNode;
+  edit: (subscription: SubscriptionItem) => ReactNode;
+}
+
+function NewLink() {
+  const intl = useIntl();
+  return (
+    <Link to={`${LIST_PATH}/new`} className="btn">
+      {intl.formatMessage(form.newSubscription)}
+    </Link>
+  );
+}
+
+function EditLink({ subscription }: { subscription: SubscriptionItem }) {
+  const intl = useIntl();
+  return (
+    <Link
+      to={`${LIST_PATH}/${subscription.id}/edit`}
+      aria-label={intl.formatMessage(form.editLabel, { service: subscription.service_name })}
+    >
+      {intl.formatMessage(form.edit)}
+    </Link>
+  );
+}
+
+const ROUTED_ACTIONS: ListActions = {
+  create: () => <NewLink />,
+  edit: (subscription) => <EditLink subscription={subscription} />,
+};
+
+export function SubscriptionsView({ state, actions }: { state: State; actions?: ListActions }) {
   const intl = useIntl();
   return (
     <main className="subscriptions">
-      <h1>{intl.formatMessage(messages.title)}</h1>
+      <div className="heading">
+        <h1>{intl.formatMessage(messages.title)}</h1>
+        {state.status === 'ready' && actions?.create()}
+      </div>
       {state.status === 'loading' && <p>{intl.formatMessage(messages.loading)}</p>}
       {state.status === 'error' && <p role="alert">{intl.formatMessage(errorMessage(state.code))}</p>}
-      {state.status === 'ready' && <SubscriptionsTable data={state.data} />}
+      {state.status === 'ready' && <SubscriptionsTable data={state.data} actions={actions} />}
     </main>
   );
 }
 
-function SubscriptionsTable({ data: { subscriptions, clients } }: { data: SubscriptionsData }) {
+function SubscriptionsTable({ data: { subscriptions, clients }, actions }: { data: SubscriptionsData; actions?: ListActions }) {
   const intl = useIntl();
   const names = new Map(clients.items.map((c) => [c.id, c.name]));
   const today = localDay(new Date());
@@ -98,6 +140,7 @@ function SubscriptionsTable({ data: { subscriptions, clients } }: { data: Subscr
             <th scope="col">{intl.formatMessage(messages.columnClient)}</th>
             <th scope="col">{intl.formatMessage(messages.columnEndsOn)}</th>
             <th scope="col">{intl.formatMessage(messages.columnStatus)}</th>
+            {actions && <th scope="col">{intl.formatMessage(form.columnActions)}</th>}
           </tr>
         </thead>
         <tbody>
@@ -117,6 +160,7 @@ function SubscriptionsTable({ data: { subscriptions, clients } }: { data: Subscr
                 <td>
                   <StatusBadge status={subscriptionStatus(s.ends_on, today)} />
                 </td>
+                {actions && <td>{actions.edit(s)}</td>}
               </tr>
             );
           })}

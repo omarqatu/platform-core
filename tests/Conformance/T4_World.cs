@@ -92,7 +92,8 @@ public sealed class World : IDisposable
     {
         foreach (var date in endsOn)
             await ExecuteAsMigratorAsync(
-                "INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at) VALUES (@id, @t, @c, 'unified', @d, now())",
+                "INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at, reminder_type, category_id, billing_cycle, auto_renew) " +
+                "VALUES (@id, @t, @c, 'unified', @d, now(), 'subscription', (SELECT id FROM categories WHERE code = 'other'), 'yearly', false)",
                 ("id", Guid.CreateVersion7()), ("t", TenantId), ("c", client), ("d", date));
     }
 

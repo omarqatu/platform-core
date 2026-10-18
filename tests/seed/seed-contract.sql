@@ -106,9 +106,14 @@ BEGIN
     (client_a, t_alamin, client_a, 'A', now()), (client_b, t_alamin, client_b, 'B', now()),
     (client_c, t_alamin, client_c, 'C', now()), (client_d, t_alamin, client_d, 'D', now()),
     (client_x, t_maan, client_x, 'X', now()), (client_y, t_maan, client_y, 'Y', now());
-  INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at)
-    SELECT uuidv7(), c.tenant_id, c.id, c.name || ' service ' || n, DATE '2027-01-01' + n, now()
-    FROM clients c CROSS JOIN LATERAL generate_series(1, CASE WHEN c.tenant_id = t_maan THEN 3 ELSE 5 END) n;
+  -- (Amendment 02 §3.2) Each carries its kind, a category of the platform's catalog — the n-th of five, so the
+  -- screens show more than one — a yearly cycle and no automatic renewal; the optional fields stay empty.
+  INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at,
+                             reminder_type, category_id, billing_cycle, auto_renew)
+    SELECT uuidv7(), c.tenant_id, c.id, c.name || ' service ' || n, DATE '2027-01-01' + n, now(),
+           'subscription', cat.id, 'yearly', false
+    FROM clients c CROSS JOIN LATERAL generate_series(1, CASE WHEN c.tenant_id = t_maan THEN 3 ELSE 5 END) n
+    JOIN categories cat ON cat.code = (ARRAY['domains', 'hosting', 'security', 'software', 'other'])[n];
 
   -- Row-count confirmation (§3.4, condition 2).
   IF (SELECT count(*) FROM tenants) <> 3

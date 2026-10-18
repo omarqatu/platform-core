@@ -23,8 +23,10 @@ a {
   color: var(--brand);
 }
 
-/* Buttons (the reference's .btn): primary by default; .secondary and .ghost for the lesser actions. 44px targets. */
-button {
+/* Buttons (the reference's .btn): primary by default; .secondary and .ghost for the lesser actions. 44px targets.
+   A link that navigates looks the same when it is the action (a.btn). */
+button,
+a.btn {
   min-block-size: 44px;
   display: inline-flex;
   align-items: center;
@@ -56,6 +58,11 @@ button {
 .btn.ghost:hover {
   background: var(--surface-soft);
   color: var(--text);
+}
+
+a.btn {
+  box-sizing: border-box;
+  text-decoration: none;
 }
 
 button:disabled {

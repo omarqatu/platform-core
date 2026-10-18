@@ -29,8 +29,8 @@ public class T5_ModuleModelTests(WhiteBoxFixture fixture)
 
         var entities = db.Model.GetEntityTypes().ToList();
         // 23 since A3: SubscriptionsDbContext derives from CoreDbContext, so the core's ProviderAccount
-        // is in this model too (Amendment 01 §2.6).
-        Assert.Equal(23, entities.Count);
+        // is in this model too (Amendment 01 §2.6). 25 since Amendment 02 stage (a): Category and Subcategory (§3.1).
+        Assert.Equal(25, entities.Count);
         Assert.Contains(entities, e => e.GetTableName() == "clients");
         Assert.Contains(entities, e => e.GetTableName() == "subscriptions");
         Assert.Empty(entities.SelectMany(e => e.GetProperties()).Where(p => p.ValueGenerated != ValueGenerated.Never));
@@ -51,7 +51,8 @@ public class T5_ModuleModelTests(WhiteBoxFixture fixture)
         db.Subscriptions.Add(new Subscription
         {
             Id = Guid.CreateVersion7(), TenantId = fixture.W1, ScopeRefId = client, ServiceName = "wb", EndsOn = new DateOnly(2027, 6, 1),
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow, ReminderType = Subscription.Kind, CategoryId = await db.Categories.Where(c => c.Code == "other").Select(c => c.Id).SingleAsync(),
+            BillingCycle = "yearly", AutoRenew = false,
         });
         await db.SaveChangesAsync();
         var audited = await db.AuditLog.Where(a => a.TenantId == fixture.W1 && (a.EntityType == "clients" || a.EntityType == "subscriptions"))

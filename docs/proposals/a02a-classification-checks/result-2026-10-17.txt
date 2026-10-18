@@ -1,0 +1,19 @@
+ok   A. categories_read dropped → Check 3
+       Check 3: required policy categories_read on categories does not exist
+ok   B. subcategories_read dropped → Check 3
+       Check 3: required policy subcategories_read on subcategories does not exist
+ok   C. categories_read narrowed to app_user → Check 2
+       Check 2: categories.categories_read roles drifted
+ok   D. subcategories_read USING changed → Check 2
+       Check 2: subcategories.subcategories_read USING drifted from the document
+ok   E. an extra write policy on categories → Check 2
+       Check 2: categories has extra permissive policy rogue (not in the manifest)
+ok   F. app_user granted INSERT on categories → Check 6
+       Check 6: unexpected INSERT on categories for app_user
+ok   G. provisioner's SELECT on subcategories revoked → Check 6
+       Check 6: missing SELECT on subcategories for provisioner
+ok   I. job_runner granted SELECT on categories (deferred, OPEN_ITEMS 76) → Check 6
+       Check 6: unexpected SELECT on categories for job_runner
+ok   H. RLS no longer forced on categories → Check 5
+       Check 5: categories in public without RLS ENABLE + FORCE, and not exempt
+PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit

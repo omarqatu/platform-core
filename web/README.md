@@ -28,7 +28,7 @@ web/
       invitations/           accepting an invitation: a new account, or signed in
       password/              forgot, reset (from the e-mail's link), and changing one's own password
       status/                loading, not permitted, not found
-      subscriptions/         the T8 screen
+      subscriptions/         the T8 list, and creating and editing a subscription (subscriptionForm: its rules)
   e2e/                       Playwright [B] against a real Api (npm run e2e)
   locales/en.json            generated: npm run i18n:extract — never edited by hand
   locales/ar.json            edited by hand
@@ -55,7 +55,8 @@ after Conformance, against the Api container. Locally: an Api with `Web__Root` p
 ## Routing and the session
 
 - **react-router** (library mode: `BrowserRouter`, `Routes`): the simplest router that gives deep links and history.
-- **Paths:** `/login`, `/organizations`, and the organization's screens under `/app/` (`/app/subscriptions`) — and
+- **Paths:** `/login`, `/organizations`, and the organization's screens under `/app/` (`/app/subscriptions`,
+  `/app/subscriptions/new`, `/app/subscriptions/:id/edit`) — and
   `/app/invitations/accept`, `/app/password/forgot` and `/app/password/reset`, open signed in or not and inside no
   organization, plus `/app/password/change`, which needs a session and no organization. The API
   is under `/api` only; the one other server route is the original T8 screen, `/subscriptions/screen`, which the
