@@ -301,7 +301,12 @@ docker exec -i platform-core-postgres-1 psql -X -v ON_ERROR_STOP=1 -U migrator -
   "INSERT INTO provider_accounts (id, tenant_id, channel, provider_code, sender_id, credential_ref, is_active, created_at)
    VALUES (uuidv7(), NULL, 'email', 'smtp', '<the Gmail address>', 'platform-email', true, now());"
 ```
-→ `INSERT 0 1`. Nothing can send an e-mail to test it yet: the senders are invitations and password reset, and
+→ `INSERT 0 1`. Then check that Api's network reaches Gmail — some hosting providers block outbound port 587:
+```bash
+docker run --rm --network platform-core_egress busybox:1.36 nc -v -w 5 smtp.gmail.com 587 < /dev/null
+```
+→ a line starting `220` from Google. A timeout means the port is blocked on the way out, and no e-mail will
+leave until it is opened (ask the provider). Nothing can send an e-mail to test it end to end yet: the senders are invitations and password reset, and
 there are no users until step 5.
 
 **Redeploy:** run the workflow again. **Rollback:** run it with an older commit of `main` in the SHA field — this
