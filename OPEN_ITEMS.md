@@ -941,10 +941,21 @@ Closed by the password-rule PR:
 ### 84. An unidentified intermittent failure in Conformance — and CI's failure path destroys the evidence
 
 - **Origin:** the stage (b) PR, 2026-10-18. Two items in one, because the second is why the first is still open.
-- **What happened:** CI's `proof` job went red on the Conformance step at `0fd48fa`, and green on `138f55e` —
-  **two commits whose only difference is `OPEN_ITEMS.md`.** The code is identical, so the suite is intermittently
-  failing. Locally, on a clean migrated-and-seeded database running CI's exact sequence, **six rounds were green,
-  237/237 each**. Rate: 1 in 2 CI runs, 0 in 6 local rounds. No test was ever named.
+- **What happened:** CI's `proof` job went red on the Conformance step at `0fd48fa` and green on the runs either
+  side of it. **Four CI runs — `f3788f0`, `0fd48fa`, `138f55e`, `ed1b0de` — ran code that is byte-identical**;
+  every one of those commits differs from the stage's build commit `7e0a748` in `OPEN_ITEMS.md` and nothing else
+  (verified with `git diff --name-only`). So the suite is intermittently failing, and the denominator is four,
+  not two:
+
+  | run | commit | `proof` |
+  |---|---|---|
+  | 90 | `f3788f0` | success |
+  | 91 | `0fd48fa` | **failure — Conformance** |
+  | 92 | `138f55e` | success |
+  | 93 | `ed1b0de` | success |
+
+  Locally, on a clean migrated-and-seeded database running CI's exact sequence, **nine rounds green, 237/237
+  each** and counting. **Rate: 1 red in 4 CI runs, 0 in 9 local rounds.** No test was ever named.
 - **Why no test was named — and this is the part to fix.** CI's own failure path buries the failure it exists to
   report:
   - `Api logs on failure` runs `docker logs api` with **no `--tail`**. After 237 tests at EF `Information` level
