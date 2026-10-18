@@ -1015,6 +1015,50 @@ Closed by the password-rule PR:
   one. Until it has a name nobody can say whether it is a racing assertion or a real defect in what this stage
   built, and the suite it is in is the one that proves the tenant-isolation contract.
 
+### 85. Api sees nginx as every client's address — the per-IP limit becomes one shared limit
+
+- **Origin:** the test-server deployment PR, 2026-10-18. Found while designing it; not fixed there, because the fix
+  is application code and that PR is infrastructure only.
+- **The finding:** Api reads the client's address from `HttpContext.Connection.RemoteIpAddress` (the login and
+  forgot paths, `UnitOfWorkMiddleware`, provisioning, subscriptions) and does not use `ForwardedHeaders`. Behind
+  nginx — and Cloudflare before it — every request arrives from the same address, Docker's gateway. So:
+  1. the per-IP ceiling of the attempt limiter (`Identity:LoginLimits:PerIpCeiling`, 50 per 15 minutes) is **one
+     ceiling shared by every user**: 50 failed sign-ins by anyone lock out everyone, from anywhere;
+  2. `auth_attempts` and `audit_log` record that gateway as every client's address.
+- **The fix, for its own PR:** `UseForwardedHeaders` with `KnownProxies` limited to the gateway nginx connects from,
+  and nginx passing the client's address — behind Cloudflare that is `CF-Connecting-IP`, trusted only from
+  Cloudflare's published ranges (`set_real_ip_from` + `real_ip_header`). Never trust `X-Forwarded-For` from anyone
+  else: it is written by the client.
+- **Why the test server can run without it for now:** its only user is the project owner. It must be fixed before
+  anyone else signs in there.
+
+### 86. `src/Ops` is not built — a deployed server has no first user
+
+- **Origin:** the test-server deployment PR, 2026-10-18. The decision is item 43's (Amendment 01 §5.4); this item is
+  that it is still unbuilt, and that a deployment now waits on it.
+- **The finding:** in Production nothing can create a tenant or a user. The bootstrap route exists in Development and
+  CI only (§4.4; `MapBootstrap`), the migrations write no tenant and no user, and the seed contract must never be
+  applied outside a test (its passwords are public). So the test server deploys, serves the sign-in screen, and
+  nobody can sign in — written as the expected day-one state in `docs/operations.md`, step 5 marked blocked.
+- **What closes it:** `src/Ops` with `create-tenant` (item 43 states what it does), run on the server as a one-shot
+  container from the Api image — its own entry point beside Api's, with the `provisioner` and `job_runner` strings
+  only, never as a running service — and the runbook's step 5 written for it. The Api `Dockerfile` will then publish
+  Ops into the same image; T0.3 keeps scanning it. Its owner invitation has no e-mail yet (item 60), so the command
+  must print the acceptance link.
+
+### 87. The test server's Api runs as root, and its Data Protection keys sit unencrypted on a volume
+
+- **Origin:** the test-server deployment PR, 2026-10-18.
+- **The finding:** Api persists nothing of ASP.NET's Data Protection keys (no `AddDataProtection`), so in a
+  container they are lost on every redeploy and every session with them. The deployment mounts a volume at the
+  default location, `/root/.aspnet/DataProtection-Keys`, which keeps sessions across redeploys without a code
+  change. Two consequences: the path is root's, because the images run as root (the .NET images' `app` user is not
+  used); and the keys are stored unencrypted (ASP.NET logs a warning saying so) — anyone with Docker access to the
+  server can read them and forge a session cookie. On that server Docker access is root anyway.
+- **For its own PR:** run the images as the non-root `app` user (`USER $APP_UID`), with the keys' path set in code
+  (`PersistKeysToFileSystem`) on a volume that user owns; whether to encrypt them at rest is the project owner's
+  decision.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12

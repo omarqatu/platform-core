@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# The ONLY thing the GitHub deploy key can do on the test server (docs/operations.md, "The test server").
+#
+# Installed by hand, after reading it, as root-owned and not writable by deployer:
+#   sudo install -o root -g root -m 755 /opt/platform-core/deploy/platform-core-deploy /usr/local/sbin/
+# and named by the key's line in ~deployer/.ssh/authorized_keys:
+#   restrict,command="/usr/local/sbin/platform-core-deploy" ssh-ed25519 AAAA... github-deploy
+# A merged PR that changes this file changes nothing on the server until it is installed again, by hand.
+#
+# What it accepts: NOTHING from the command line. SSH_ORIGINAL_COMMAND (whatever the caller asked to run) is never
+# read. Its one input is the first line of stdin: a full commit SHA, 40 lowercase hex characters, which must be on
+# origin/main's history. Anything else is refused before it is used. So the key can do one thing: deploy a commit
+# that is already merged — including an older one, which is how a rollback is done.
+#
+# What it does, in order; any failure stops it with a non-zero exit, and the workflow fails with it:
+#   1. reads and validates the SHA
+#   2. checks deploy/.env: present, owned by deployer, mode 600
+#   3. fetches main; checks the SHA is on main; refuses a working tree someone edited; checks the commit out
+#   4. pulls the three images built from that commit (and postgres:18)
+#   5. T0.3 on the pulled Api image, with the real migrator password (ci/check-api-has-no-migrator.sh)
+#   6. starts PostgreSQL and waits until it is healthy
+#   7. runs the migrations as a one-shot container, removed when it exits
+#   8. starts Api, and waits for GET /api/tenants to answer 401 on 127.0.0.1:5100
+#   9. checks what is published: Api exactly 127.0.0.1:5100, PostgreSQL nothing; and that Api's environment holds no
+#      migrator string
+#  10. removes our older images, keeping the two newest of each
+# Its output goes to the GitHub Actions log, which is PUBLIC for this repository: it prints no secret and no
+# container log. On a failure, read the logs on the server (docs/operations.md, step 4).
+set -euo pipefail
+umask 077
+
+repo=/opt/platform-core
+env_file="$repo/deploy/.env"
+compose_file="$repo/deploy/docker-compose.prod.yml"
+images=(ghcr.io/omarqatu/platform-core-api ghcr.io/omarqatu/platform-core-migrations ghcr.io/omarqatu/platform-core-worker)
+api_url=http://127.0.0.1:5100
+
+log() { printf '%s  %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
+fail() { printf '%s  DEPLOY FAILED: %s\n' "$(date -u +%H:%M:%SZ)" "$*" >&2; exit 1; }
+trap 'fail "step failed at line $LINENO (exit $?) — read the logs on the server"' ERR
+
+# --- 1. The one input: a commit SHA on the first line of stdin. Nothing else is read from the caller. ---
+sha=""
+IFS= read -r -t 30 sha || true
+exec < /dev/null
+[[ "$sha" =~ ^[0-9a-f]{40}$ ]] || fail "stdin must be one full commit SHA (40 lowercase hex characters)."
+log "deploy $sha"
+
+# --- 2. The settings file. ---
+[ -f "$env_file" ] || fail "$env_file is missing (docs/operations.md, step 2)."
+[ "$(stat -c %u "$env_file")" = "$(id -u)" ] || fail "$env_file must be owned by $(id -un)."
+[ "$(stat -c %a "$env_file")" = 600 ] || fail "$env_file must be mode 600 (chmod 600)."
+
+# --- 3. The commit: on main, checked out cleanly. ---
+cd "$repo"
+[ -z "$(git status --porcelain --untracked-files=no)" ] || fail "$repo has local changes; the deploy does not overwrite them."
+git fetch --quiet origin main
+git cat-file -e "$sha^{commit}" 2> /dev/null || fail "commit $sha is not in the repository."
+git merge-base --is-ancestor "$sha" origin/main || fail "commit $sha is not on main."
+git checkout --quiet --detach "$sha"
+log "checked out $(git log -1 --format='%h %s')"
+
+export IMAGE_TAG="$sha"
+compose=(docker compose --project-directory "$repo/deploy" -f "$compose_file" --env-file "$env_file")
+
+# --- 4. The images built from this commit. ---
+log "pull"
+"${compose[@]}" --profile ops --profile jobs pull --quiet
+
+# --- 5. T0.3 on the image about to run, with the real password. ---
+log "T0.3: Api image holds no migrator connection string"
+migrator_password="$(sed -n 's/^MIGRATOR_PASSWORD=//p' "$env_file" | tail -n 1)"
+[ -n "$migrator_password" ] || fail "MIGRATOR_PASSWORD is empty in $env_file."
+MIGRATOR_PASSWORD="$migrator_password" API_CONFIG_DIR="$repo/src/Api" \
+  bash "$repo/ci/check-api-has-no-migrator.sh" "${images[0]}:$sha"
+unset migrator_password
+
+# --- 6. PostgreSQL. ---
+log "postgres"
+"${compose[@]}" up --detach --wait --wait-timeout 180 postgres
+
+# --- 7. Migrations, as a one-shot container that is removed when it exits. ---
+log "migrate"
+"${compose[@]}" --profile ops run --rm --no-deps migrate
+
+# --- 8. Api. ---
+log "api"
+"${compose[@]}" up --detach --no-deps api
+code=""
+for _ in $(seq 1 90); do
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$api_url/api/tenants" || true)"
+  [ "$code" = 401 ] && break
+  sleep 1
+done
+[ "$code" = 401 ] || fail "Api did not answer 401 on $api_url/api/tenants within 90 s (last: '${code:-none}')."
+
+# --- 9. What is published, and what Api holds. ---
+api_container="$("${compose[@]}" ps --quiet api)"
+pg_container="$("${compose[@]}" ps --quiet postgres)"
+api_ports="$(docker port "$api_container")"
+[ "$api_ports" = "8080/tcp -> 127.0.0.1:5100" ] || fail "Api must be published on 127.0.0.1:5100 alone; it is: $api_ports"
+[ -z "$(docker port "$pg_container")" ] || fail "PostgreSQL must not be published at all."
+if docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$api_container" | grep -qi migrator; then
+  fail "Api's environment holds a migrator string."
+fi
+log "published: Api on 127.0.0.1:5100 only; PostgreSQL nowhere. Api holds no migrator string."
+
+# --- 10. Our older images: keep the two newest of each. ---
+for image in "${images[@]}"; do
+  docker image ls "$image" --format '{{.ID}}' | awk '!seen[$0]++' | tail -n +3 | xargs -r docker image rm > /dev/null 2>&1 || true
+done
+
+log "deployed $sha"
