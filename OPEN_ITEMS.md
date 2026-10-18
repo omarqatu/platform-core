@@ -624,7 +624,7 @@ Closed by the password-rule PR:
 | Test | What it asserts, and why it races | Seen as |
 |---|---|---|
 | `T3_ForgotPasswordTests.TheAnswerTakesTheSameTime_…` [W] | each answer took **at least** the floor, exactly. `UniformTiming.HoldAsync` awaits `Task.Delay(remaining)`; `Task.Delay` sits on a timer whose due time is rounded and can return a fraction of a millisecond early relative to `Stopwatch`, and the work before the handler's `Stopwatch.GetTimestamp()` does not always cover it. An exact comparison against an inexact sleep. | `answered in 00:00:00.3999202, below the floor 00:00:00.4000000` — **79.8 µs** — then passed on a re-run of the **same commit** |
-| `T3_LoginLimiterTests.TheDelayEscalates…` [W] | the first failure waited **under** 500 ms, on a path that derives a password hash (210,000 PBKDF2 iterations). A fixed threshold against work whose cost depends on the machine. | `the first failure waited 585 ms`, reproduced identically on clean `main` (`629 ms`), and again at `657 ms` in the stage (b) session (item 82) |
+| `T3_LoginLimiterTests.TheDelayEscalates…` [W] | the first failure waited **under** 500 ms, on a path that derives a password hash (210,000 PBKDF2 iterations). A fixed threshold against work whose cost depends on the machine. | `the first failure waited 585 ms`, reproduced identically on clean `main` (`629 ms`), again at `657 ms` in the stage (b) session (item 82), and at **`802 ms` under load** there — a Conformance run on the same machine — which is the clearest evidence yet that the threshold races the machine and not the clock |
 | `App.test.tsx > a 401 during the session` (and its siblings asserting `probe.location`) | awaits `findByText(…)`, then reads `probe.location` **synchronously**. The probe is written by a render-time effect, so the message appearing and the redirect being observed are two different commits; between them the assertion reads the old path. | `expected '/app/subscriptions' to be '/login?next=%2Fapp%2Fsubscriptions'`; 20 runs gave **2/20** failures on the PR branch and **1/20** on clean `main` |
 
 - **How often it bites, measured (item 82, 2026-10-18):** the limiter test alone accounted for an intermittent
@@ -896,13 +896,25 @@ Closed by the password-rule PR:
   nothing to find a violation in. **It reports success.** Every one of these is green in exactly the case it
   exists to catch, and the greenness is what hides it: nobody investigates a passing check.
 
+- **The fourth sighting is first here, because it hides every sighting after it.** The others are in the code;
+  this one was in the **diagnostic**. `Api logs on failure` ran `docker logs api` unbounded, which after 237
+  tests at EF `Information` level appended tens of thousands of lines **after** the test output and pushed it
+  past what the logs API will return — so a CI failure could not be read at all, and the step reported success
+  while destroying the evidence it existed to preserve (OPEN_ITEMS 84). A verifier that silently verifies
+  nothing costs you one bug. **A diagnostic that silently reports nothing costs you every bug it was supposed to
+  describe**, including the three below. Fixed in `.github/workflows/ci.yml`: both dumps bounded to
+  `--tail 200`, and a `.trx` uploaded on failure so a failing run names its test. That is a defect fix, not an
+  improvement.
+
 | Sighting | What it was given | Why it found nothing | What it reported |
 |---|---|---|---|
 | **Item 61** — `Test28c_EveryEntityTypeInsert_SendsNoReturning` | a hand-written list of entity types | a new entity is absent from **both** sides of `Assert.Equal(19, …)`, so it cannot move the count | passing, at 19 of 21, across two PRs |
 | **Item 68** — Check 8 | the tables carrying `scope_ref_id` | a table meant to be scoped that named its column `client_id` is not in the set at all | passing, on a table whose own prose claimed `client_scope` |
 | **Item 82** — the `[W]` capture loop (this session) | twenty runs of the suite | the Docker daemon had died, so every run was a no-op and produced no summary line; the `grep` matched nothing and the loop read empty as "not failed" | **"20 runs, all green"** — having run the suite zero times |
+| **Item 84** — `Api logs on failure` in CI | the Api container's log, unbounded | the dump buried the test output past the logs API's ~103 KB tail, so the failing test could not be named | the step **succeeded**, and the CI failure it was reporting on became unreadable |
 
-- **The rule: a verifier must fail when it verifies nothing.** Not warn, not report zero — fail. Passing is a
+- **The rule: a verifier must fail when it verifies nothing, and a diagnostic must not destroy what it reports
+  on.** Not warn, not report zero — fail. Passing is a
   claim about the thing under test, and a verifier that found nothing to test has no grounds to make it. Three
   ways to hold it, in the order they are worth reaching for:
   1. **Assert on the set, not on a count.** `Assert.Empty(expected - covered - declared)` fails on a new member;
@@ -948,11 +960,21 @@ Closed by the password-rule PR:
      stack, as an artefact rather than as scrollback.
   2. `docker logs --tail 200 api` instead of unbounded, and the same for `docker compose logs postgres`. A
      diagnostic step that destroys the diagnosis is worse than no step.
+  **Both were approved by the project owner and are in `.github/workflows/ci.yml` as of this PR**, scoped to
+  those steps and nothing else.
 - **What is ruled out so far:** not the seed state (reproduced attempts were on a clean migrated-and-seeded
   database, CI's own); not the extra tenants this PR's tests create seen by a cross-tenant assertion
   (`T7_BackgroundJobTests` asserts per-seed-tenant counts and is robust to them — read and checked). Not ruled
   out: anything else, including whether the step **failed an assertion or aborted** — CI's Conformance step ran
   71 s against 82–105 s locally, which is short enough to raise the question and not enough to answer it.
+- **What a missing `.trx` artefact will mean — read this before concluding anything from the next red run.** An
+  **abort** and a **failed assertion** are different problems with different causes, and the artefact
+  distinguishes them: a run that failed an assertion uploads a complete `.trx` naming the test; a run that
+  aborted — test host crash, the Api container dying, the runner losing the process — uploads a **truncated
+  `.trx`, or none at all**, because the logger never got to write it. **So the absence of the artefact is not a
+  gap in the evidence; it is the evidence**, and it points at the 71 s gap above rather than at any test. Do not
+  read "no artefact" as "nothing to see" — that would be this list's own item 83 all over again, at the level of
+  reading the report.
 - **Why it is not dismissed as a flake:** "flake" is a conclusion about a named test, not a substitute for naming
   one. Until it has a name nobody can say whether it is a racing assertion or a real defect in what this stage
   built, and the suite it is in is the one that proves the tenant-isolation contract.
