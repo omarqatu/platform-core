@@ -82,7 +82,10 @@ public sealed class World : IDisposable
     public async Task<Guid> ClientAsync(string name)
     {
         var id = Guid.CreateVersion7();
-        await ExecuteAsMigratorAsync("INSERT INTO clients (id, tenant_id, scope_ref_id, name, created_at) VALUES (@id, @t, @id, @n, now())",
+        // (Amendment 01 §2.8) is_active is NOT NULL with no DEFAULT, so every writer names it — this fixture too.
+        await ExecuteAsMigratorAsync(
+            "INSERT INTO clients (id, tenant_id, scope_ref_id, name, created_at, email, phone_e164, telegram_chat_id, is_active) " +
+            "VALUES (@id, @t, @id, @n, now(), NULL, NULL, NULL, true)",
             ("id", id), ("t", TenantId), ("n", name));
         return id;
     }
@@ -92,8 +95,10 @@ public sealed class World : IDisposable
     {
         foreach (var date in endsOn)
             await ExecuteAsMigratorAsync(
-                "INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at, reminder_type, category_id, billing_cycle, auto_renew) " +
-                "VALUES (@id, @t, @c, 'unified', @d, now(), 'subscription', (SELECT id FROM categories WHERE code = 'other'), 'yearly', false)",
+                "INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at, reminder_type, category_id, " +
+                "billing_cycle, auto_renew, status, renewed_from_id) " +
+                "VALUES (@id, @t, @c, 'unified', @d, now(), 'subscription', (SELECT id FROM categories WHERE code = 'other'), " +
+                "'yearly', false, 'active', NULL)",
                 ("id", Guid.CreateVersion7()), ("t", TenantId), ("c", client), ("d", date));
     }
 

@@ -3,18 +3,20 @@ import { expect, test, type Page } from '@playwright/test';
 import { asMigrator, BASE_URL, inEnglish, ownOrganization, signIn } from './fixtures';
 
 // Creating and editing a subscription with its category (PLATFORM_CORE Amendment 02 §3.1, §3.2) [B], against the
-// real Api: an organization of the test's own (the module has no client screen yet, so its one client is the
-// fixture's, as migrator), its owner entering it directly. Nothing of the seed contract is written.
+// real Api: an organization of the test's own, its owner entering it directly. Its one client is the fixture's, as
+// migrator — the client screen is proven in clients.spec.ts, and setting up through it here would make these tests
+// fail for its reasons. Nothing of the seed contract is written.
 
 async function organizationWithClient(label: string) {
   const owner = await ownOrganization(label);
   const client = randomUUID();
   await asMigrator((db) =>
-    db.query('INSERT INTO clients (id, tenant_id, scope_ref_id, name, created_at) VALUES ($1::uuid, $2, $1::uuid, $3, now())', [
-      client,
-      owner.tenantId,
-      'شركة النور',
-    ]),
+    // (Amendment 01 §2.8) is_active is NOT NULL with no DEFAULT, so this fixture names it as every writer must.
+    db.query(
+      'INSERT INTO clients (id, tenant_id, scope_ref_id, name, created_at, email, phone_e164, telegram_chat_id, is_active) ' +
+        'VALUES ($1::uuid, $2, $1::uuid, $3, now(), NULL, NULL, NULL, true)',
+      [client, owner.tenantId, 'شركة النور'],
+    ),
   );
   return { owner, client };
 }

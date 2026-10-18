@@ -536,6 +536,8 @@ Closed by the password-rule PR:
 
 ### 61. `Test28c_EveryEntityTypeInsert_SendsNoReturning` covers 19 of 21 entity types — and the real hole is A1's
 
+- **The shape it belongs to: item 83** — a verifier that verifies nothing reports success. This is sighting one
+  of three; read 83 before fixing this, because the fix below (assert on the set, not on a count) is 83's first rule.
 - **Origin:** A3, found while reading why the entity-count tripwires failed. **The gap itself is A1's**, merged
   2026-10-17 in PR #22: A1 added `password_reset_tokens` and the application inserts into it, and this test has
   never covered that insert. A3 found it; A3 did not cause it, and did not fix it (below).
@@ -622,8 +624,13 @@ Closed by the password-rule PR:
 | Test | What it asserts, and why it races | Seen as |
 |---|---|---|
 | `T3_ForgotPasswordTests.TheAnswerTakesTheSameTime_…` [W] | each answer took **at least** the floor, exactly. `UniformTiming.HoldAsync` awaits `Task.Delay(remaining)`; `Task.Delay` sits on a timer whose due time is rounded and can return a fraction of a millisecond early relative to `Stopwatch`, and the work before the handler's `Stopwatch.GetTimestamp()` does not always cover it. An exact comparison against an inexact sleep. | `answered in 00:00:00.3999202, below the floor 00:00:00.4000000` — **79.8 µs** — then passed on a re-run of the **same commit** |
-| `T3_LoginLimiterTests.TheDelayEscalates…` [W] | the first failure waited **under** 500 ms, on a path that derives a password hash (210,000 PBKDF2 iterations). A fixed threshold against work whose cost depends on the machine. | `the first failure waited 585 ms`, reproduced identically on clean `main` (`629 ms`) |
+| `T3_LoginLimiterTests.TheDelayEscalates…` [W] | the first failure waited **under** 500 ms, on a path that derives a password hash (210,000 PBKDF2 iterations). A fixed threshold against work whose cost depends on the machine. | `the first failure waited 585 ms`, reproduced identically on clean `main` (`629 ms`), again at `657 ms` in the stage (b) session (item 82), and at **`802 ms` under load** there — a Conformance run on the same machine — which is the clearest evidence yet that the threshold races the machine and not the clock |
 | `App.test.tsx > a 401 during the session` (and its siblings asserting `probe.location`) | awaits `findByText(…)`, then reads `probe.location` **synchronously**. The probe is written by a render-time effect, so the message appearing and the redirect being observed are two different commits; between them the assertion reads the old path. | `expected '/app/subscriptions' to be '/login?next=%2Fapp%2Fsubscriptions'`; 20 runs gave **2/20** failures on the PR branch and **1/20** on clean `main` |
+
+- **How often it bites, measured (item 82, 2026-10-18):** the limiter test alone accounted for an intermittent
+  `[W]` failure at roughly **one run in seven** on one machine, and was caught on run 1 of a 20-run capture. That
+  is the first rate anyone has recorded for any of the three, and it is high enough that leaving it is already
+  costing red CI runs that mean nothing.
 
 - **Whoever takes `T3_ForgotPasswordTests` reads item 51 first.** That is not a courtesy reference. The floor
   this test measures (`Identity:ForgotPassword:MinimumResponseTime`) is what stops the forgot-password
@@ -659,6 +666,9 @@ Closed by the password-rule PR:
 
 ### 68. Check 8 passes silently on a table that declares `client_scope` but lacks `scope_ref_id`
 
+- **The shape it belongs to: item 83** — a verifier that verifies nothing reports success. This is sighting two
+  of three; 83's second rule (derive the set from the system, never by hand) is what an eleventh check would have
+  to satisfy.
 - **Origin:** Amendment 02, found in the first review of its draft (Amendment 02 §0, §3.3).
 - **The gap:** Check 8 requires the `client_scope` template on every table **carrying** `scope_ref_id`. A table that
   is meant to be scoped but names its column something else — the draft's `client_notification_settings(client_id)`,
@@ -799,6 +809,211 @@ Closed by the password-rule PR:
   with its example under it, a check that the day exists, and Arabic-Indic digits converted as they are typed.
 - **What would close it:** a picker the interface draws itself, in `ar-u-nu-latn`, with Gregorian month names — a
   component decision for the design system, not for this form alone.
+
+### 79. `subscriptions.clients.write` is narrowed at creation by the second axis, not by the permission
+
+- **Origin:** the stage (b) PR, 2026-10-18. Proven on PostgreSQL 18.6 **before** the stage was designed around it.
+- **The finding:** a client is its own scoped entity (`scope_ref_id = id`), so a **new** row has no
+  `scope_assignments` row by virtue of being new, and `client_scope`'s `WITH CHECK` refuses its `INSERT` from a
+  member whose scope mode is `assigned` — `42501`, which `ErrorResponses` already answers as `403 not_permitted`.
+  Amendment 01 §4.2 gives `subscriptions.clients.write` to `operator`, and every seeded operator is `assigned`, so
+  in practice an operator creates a client only when their mode is `all`. The same member **edits** the clients
+  assigned to them with no trouble: the narrowing is at creation and only there.
+- **The decision (2026-10-18, the project owner):** accept it and describe it — a **one-line clarification beside
+  the permission in Amendment 01 §4.2**, in both languages, because the amendment is the thing people read and a
+  permission row that reads broader than it is will mislead the next reader. No `§0` row was added for it: §0 lists
+  what an amendment **amends**, and this describes behaviour v1.16 §3.1 already has rather than changing any
+  paragraph. Proven in `T5_ClientLifecycleTests`.
+- **Rejected, and why:** writing a `scope_assignments` row for the creating member in the same transaction would
+  let a member widen their own scope without `core.scope.manage` — a hole, not a convenience.
+- **What it does not affect:** the manual entry of M3 is done by the owner, whose mode is `all`.
+
+### 80. The subscription's status gate is the database's; the renewal's "once" is a UNIQUE
+
+- **Origin:** the stage (b) PR, 2026-10-18.
+- **What was built:** `subscriptions_status_gate` (Amendment 02 §5.1) — `AS RESTRICTIVE FOR UPDATE TO app_user
+  USING (status = 'active') WITH CHECK (true)`. No `UPDATE` reaches a row that has left `active`, so a cancelled or
+  renewed subscription is not edited, not revived and not renewed again, whatever the code does. Beside it,
+  `UNIQUE (tenant_id, renewed_from_id)` means one subscription is renewed **once**.
+- **The engine finding, which changed the policy's text:** PostgreSQL uses the `USING` expression as the
+  `WITH CHECK` expression when the latter is omitted. The policy as first dictated carried no `WITH CHECK`, which
+  would have required the **new** row to be active too and refused the cancellation itself (`42501`) — the very
+  thing the gate exists for. Proven on PostgreSQL 18.6, then `WITH CHECK (true)` was written out, with the reason
+  beside it in the amendment, in the migration and in `DATABASE.md` §7.7.
+- **The consequence for the API:** a failing `USING` reaches no row rather than erroring, so the endpoints read
+  `status` first and answer `409 subscription_not_active`; without that the caller would see `403 not_permitted`
+  on a row they can plainly read. `PUT /api/subscriptions/{id}` answers the same code for the same reason — a
+  change to stage (a)'s endpoint that the gate made necessary.
+
+### 81. `ExpiringSubscriptionsJob` counts cancelled subscriptions — for stage (د) to settle
+
+- **Origin:** the stage (b) PR, 2026-10-18, by the project owner's decision not to touch it now.
+- **What is true:** the job counts every subscription ending within 30 days regardless of `status`, so a cancelled
+  one is still counted — and, when stage (د) sends, would still be reminded about.
+- **Why it was not changed here:** PROOF_SPEC v1.3 T7 defines the count as "subscriptions ending within 30 days",
+  and narrowing it would change a definition from inside a PR that is not about the job. The filter belongs with
+  the sender.
+- **For stage (د):** the sender reads `clients.is_active` (the project owner's decision of 2026-10-17) **and**
+  `subscriptions.status`; whether T7's own count narrows with it is a PROOF_SPEC decision to take at the same time.
+
+### 82. ~~An unidentified intermittent failure in `[W]`~~ — **identified: it is item 66's limiter test. Closed into 66.**
+
+- **Origin:** the stage (b) PR, 2026-10-18. Opened when `tests/Core.WhiteBoxTests` reported `Failed: 1,
+  Passed: 111` twice in about fifteen runs — once after Conformance, once on a clean migrated-and-seeded database,
+  which is CI's own starting state — with no test named in the console summary.
+- **Captured, by the project owner's condition (2026-10-18): the name, or a run configured to take it.** `[W]`
+  alone, in a loop on a clean seeded database, every run keeping its own `trx`. It failed on **run 1 of 20**:
+
+  ```
+  FAILED TEST: T3_LoginLimiterTests.TheDelayEscalatesWithTheFailures_TheCeilingRefusesBeforeThePassword_AndNoAccountIsLockedOut
+  MESSAGE:     the first failure waited 657 ms
+  STACK:       tests/Core.WhiteBoxTests/T3_LoginLimiterTests.cs:48
+  ```
+
+- **It is item 66's second row, verbatim** — the same test, the same assertion (`first < 500 ms` on a path that
+  derives a 210,000-iteration PBKDF2 hash), the same failure shape. Item 66 records it at `585 ms` and at `629 ms`
+  on clean `main`; this is a third sighting at `657 ms`. **The rate this item measured — about one run in seven,
+  and 1/20 in the capture — belongs to item 66 now**, and is the first number anyone has for how often it bites.
+- **What this closes, and what it does not.** It closes the question this item existed to ask: there is no unknown
+  intermittent failure in `[W]`. It does **not** close item 66, whose fix — a threshold that does not race
+  PBKDF2 on a loaded machine — is still owed and is still "the fix is in the test, never in production code".
+- **Not caused by the stage (b) PR**, and nothing in that PR touches it: item 66 already records this test failing
+  on clean `main`. It was not fixed inside that PR either, because the fix is item 66's and widening a threshold
+  from inside an unrelated change is how a test quietly stops testing.
+- **For whoever takes item 66:** the capture recipe is worth keeping. `[W]` alone, clean seeded database, each run
+  `--logger "trx;LogFileName=<run>.trx"`, every `trx` kept, read the `UnitTestResult` with `outcome="Failed"`. And
+  the harness lesson: **a loop that reports green must prove it ran.** Twenty "green" runs here proved nothing
+  until a run with no `Passed!`/`Failed!` summary line was made to fail the loop — the Docker daemon had died
+  underneath it and every run was a no-op. That is sighting three of **item 83**, which names the shape these
+  share with items 61 and 68; the loop's fix is the pattern 83 points at.
+
+### 83. A verifier that verifies nothing must fail, not pass — one shape, three sightings in two days
+
+- **Origin:** named by the project owner on 2026-10-18, after the third sighting in two days. The three were
+  found separately, by different work, and read as three unrelated bugs. They are one.
+- **The shape.** A verifier — a test, a check, a loop — is given a set to look at. The set comes out empty, or
+  smaller than it should be, for a reason the verifier never examines. It finds no violation, because there was
+  nothing to find a violation in. **It reports success.** Every one of these is green in exactly the case it
+  exists to catch, and the greenness is what hides it: nobody investigates a passing check.
+
+- **The fourth sighting is first here, because it hides every sighting after it.** The others are in the code;
+  this one was in the **diagnostic**. `Api logs on failure` ran `docker logs api` unbounded, which after 237
+  tests at EF `Information` level appended tens of thousands of lines **after** the test output and pushed it
+  past what the logs API will return — so a CI failure could not be read at all, and the step reported success
+  while destroying the evidence it existed to preserve (OPEN_ITEMS 84). A verifier that silently verifies
+  nothing costs you one bug. **A diagnostic that silently reports nothing costs you every bug it was supposed to
+  describe**, including the three below. Fixed in `.github/workflows/ci.yml`: both dumps bounded to
+  `--tail 200`, and a `.trx` uploaded on failure so a failing run names its test. That is a defect fix, not an
+  improvement.
+
+| Sighting | What it was given | Why it found nothing | What it reported |
+|---|---|---|---|
+| **Item 61** — `Test28c_EveryEntityTypeInsert_SendsNoReturning` | a hand-written list of entity types | a new entity is absent from **both** sides of `Assert.Equal(19, …)`, so it cannot move the count | passing, at 19 of 21, across two PRs |
+| **Item 68** — Check 8 | the tables carrying `scope_ref_id` | a table meant to be scoped that named its column `client_id` is not in the set at all | passing, on a table whose own prose claimed `client_scope` |
+| **Item 82** — the `[W]` capture loop (this session) | twenty runs of the suite | the Docker daemon had died, so every run was a no-op and produced no summary line; the `grep` matched nothing and the loop read empty as "not failed" | **"20 runs, all green"** — having run the suite zero times |
+| **Item 84** — `Api logs on failure` in CI | the Api container's log, unbounded | the dump buried the test output past the logs API's ~103 KB tail, so the failing test could not be named | the step **succeeded**, and the CI failure it was reporting on became unreadable |
+
+- **The rule: a verifier must fail when it verifies nothing, and a diagnostic must not destroy what it reports
+  on.** Not warn, not report zero — fail. Passing is a
+  claim about the thing under test, and a verifier that found nothing to test has no grounds to make it. Three
+  ways to hold it, in the order they are worth reaching for:
+  1. **Assert on the set, not on a count.** `Assert.Empty(expected - covered - declared)` fails on a new member;
+     `Assert.Equal(19, covered)` cannot (item 61).
+  2. **Derive the set from the system, never by hand** — the model, the catalog, `pg_policy`. A hand-written list
+     goes stale silently; a derived one grows and the assertion notices (items 61, 68).
+  3. **Make "no evidence" an error.** A step that produces no output where output is the proof of work is a
+     failure of the harness, and must stop the run (item 82).
+- **The fix made this session, as the pattern to copy:** the capture loop now treats a run that emits no
+  `Passed!`/`Failed!` summary line as fatal — `if [ -z "$line" ]; then echo "FATAL: …"; exit 2; fi` — so a dead
+  daemon stops the loop instead of being counted twenty times as a pass. Three lines, and the difference between
+  a report and a lie.
+- **This item fixes nothing on its own.** Items 61 and 68 each hold their own fix and their own decision (68's is
+  a change to the check inputs, so it is the project owner's). This exists so that whoever picks up either one —
+  or writes the next check, or the next loop — finds the shape named in one place rather than meeting it a fourth
+  time as something new.
+- **Where it is worth looking next, unaudited:** any assertion in the suites of the form "count equals N" over a
+  set that can grow; any check whose input is a hand-maintained file (`grants.json`, `policy-chains.json`,
+  `rls-exemptions.json`, `scope-variable-writers.json`) and which reports nothing when a table is simply absent
+  from it; and the `--self-test` of each check, which is the one mechanism the project already has against this
+  shape — it proves the check fails on a planted violation, but not that the check *looked at anything* on a
+  clean run.
+
+### 84. An unidentified intermittent failure in Conformance — and CI's failure path destroys the evidence
+
+- **Origin:** the stage (b) PR, 2026-10-18. Two items in one, because the second is why the first is still open.
+- **What happened:** CI's `proof` job went red on the Conformance step at `0fd48fa` and green on the runs either
+  side of it. **Four CI runs — `f3788f0`, `0fd48fa`, `138f55e`, `ed1b0de` — ran code that is byte-identical**;
+  every one of those commits differs from the stage's build commit `7e0a748` in `OPEN_ITEMS.md` and nothing else
+  (verified with `git diff --name-only`). So the suite is intermittently failing, and the denominator is four,
+  not two:
+
+  | run | commit | `proof` | |
+  |---|---|---|---|
+  | 90 | `f3788f0` | success | |
+  | 91 | `0fd48fa` | **failure — Conformance** | unnamed; before the `.trx` artefact existed |
+  | 92 | `138f55e` | success | |
+  | 93 | `ed1b0de` | success | |
+  | 94 | `62f8032` | success | first run with the artefact and the bounded log dumps |
+  | 95 | `851d355` | success | |
+  | 96 | `63333cb` | success | |
+
+  **Precisely what "identical" means here:** runs 90–93 differ only in `OPEN_ITEMS.md`; run 94 also changed
+  `ci.yml`. **Nothing under `src/` or `tests/` changed across any of the seven**, so the code under test is
+  identical — which is the claim the rate rests on, and it is weaker than "byte-identical" would have been.
+
+  Locally, on a clean migrated-and-seeded database running CI's exact sequence, **twenty rounds, all green,
+  237/237 each** — twenty result lines, no `Failed!`, no aborted round, and the loop's own guard (a round
+  emitting no summary line is fatal) never fired, so the twenty is twenty runs that ran.
+
+- **The observed rate, as of 2026-10-18 08:08 UTC: 1 red in 7 CI runs, 0 in 20 local rounds.** Recorded
+  separately from the decision below on purpose: the project owner decided at **one in six**, which is what the
+  history showed at the moment of the call, and the seventh run landed green while the local rounds finished.
+  **The record carries the rate that was measured; the decision carries the rate it was taken on.** They are not
+  the same number and should not be collapsed. **No test was ever named.**
+- **Why no test was named — and this is the part to fix.** CI's own failure path buries the failure it exists to
+  report:
+  - `Api logs on failure` runs `docker logs api` with **no `--tail`**. After 237 tests at EF `Information` level
+    that is tens of thousands of lines, appended **after** the Conformance output.
+  - The logs API returns at most ~103 KB from the tail (confirmed: identical cap at 120 and 260 requested lines),
+    so the Conformance summary can never be reached by tailing.
+  - The full-log blob URL is refused by the development container's egress proxy, and its `gh` token is invalid.
+  **This is item 83's shape, in CI itself:** the step whose whole purpose is to preserve evidence of a failure
+  made that evidence unreadable, and reported success while doing it.
+- **The fix, which is a change to CI and therefore the project owner's decision:**
+  1. `--logger "trx;LogFileName=conformance.trx"` on the Conformance step (and on `White-box tests`), plus
+     `actions/upload-artifact` for the `.trx` on failure. Then a failing run names the test, its message and its
+     stack, as an artefact rather than as scrollback.
+  2. `docker logs --tail 200 api` instead of unbounded, and the same for `docker compose logs postgres`. A
+     diagnostic step that destroys the diagnosis is worse than no step.
+  **Both were approved by the project owner and are in `.github/workflows/ci.yml` as of this PR**, scoped to
+  those steps and nothing else.
+- **What is ruled out so far:** not the seed state (reproduced attempts were on a clean migrated-and-seeded
+  database, CI's own); not the extra tenants this PR's tests create seen by a cross-tenant assertion
+  (`T7_BackgroundJobTests` asserts per-seed-tenant counts and is robust to them — read and checked). Not ruled
+  out: anything else, including whether the step **failed an assertion or aborted** — CI's Conformance step ran
+  71 s against 82–105 s locally, which is short enough to raise the question and not enough to answer it.
+- **What a missing `.trx` artefact will mean — read this before concluding anything from the next red run.** An
+  **abort** and a **failed assertion** are different problems with different causes, and the artefact
+  distinguishes them: a run that failed an assertion uploads a complete `.trx` naming the test; a run that
+  aborted — test host crash, the Api container dying, the runner losing the process — uploads a **truncated
+  `.trx`, or none at all**, because the logger never got to write it. **So the absence of the artefact is not a
+  gap in the evidence; it is the evidence**, and it points at the 71 s gap above rather than at any test. Do not
+  read "no artefact" as "nothing to see" — that would be this list's own item 83 all over again, at the level of
+  reading the report.
+- **The merge is taken with this item OPEN, by the project owner's decision of 2026-10-18 — do not read the
+  merge as the item having been resolved.** The decision was recorded **before** the merge and conditional on the
+  two CI runs then in flight coming back green, on these terms: **one red in six runs** with the code under test
+  identical, zero in twenty local rounds, **no test ever named**, and the suite now configured to name it the
+  next time it bites. Those two runs (94, 95) and the head run (96) all came back green, and the rate as finally
+  measured was one in seven — see above. (A red run would have been the better outcome: it would have produced
+  the name, and both of us said so.) The reasoning is that waiting longer buys nothing — it samples the same code hoping
+  for a failure we have *made legible* rather than one we cannot read. What makes it acceptable is the CI change
+  in this PR and nothing else: before it a recurrence told us nothing. **This item is open because the failure is
+  unexplained, not because it was forgotten**, and the first red `proof` run after the merge should be brought
+  straight back here.
+- **Why it is not dismissed as a flake:** "flake" is a conclusion about a named test, not a substitute for naming
+  one. Until it has a name nobody can say whether it is a racing assertion or a real defect in what this stage
+  built, and the suite it is in is the one that proves the tenant-isolation contract.
 
 ## For the next version of the document — not for the code
 

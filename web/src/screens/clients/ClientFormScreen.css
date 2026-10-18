@@ -1,0 +1,65 @@
+/* Creating and editing a client, inside the shell. Logical properties only: the same rules lay the form out
+   right-to-left and left-to-right. */
+.client-form {
+  max-inline-size: 36rem;
+  margin-inline: auto;
+  padding: 1.5rem;
+}
+
+.client-form h1 {
+  margin-block: 0 var(--space-4);
+  font-size: var(--type-h1-size);
+  line-height: var(--type-h1-line-height);
+  font-weight: var(--type-h1-weight);
+}
+
+.client-form .field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block: 0 var(--space-4);
+}
+
+.client-form label {
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+}
+
+.client-form .optional {
+  color: var(--text-muted);
+  font-weight: normal;
+}
+
+.client-form input {
+  inline-size: 100%;
+}
+
+.client-form .field-hint {
+  color: var(--text-secondary);
+  font-size: var(--type-label-size);
+}
+
+.client-form .field-error {
+  color: var(--danger);
+  font-size: var(--type-label-size);
+}
+
+.client-form [aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+/* What the three channels are for, said once above them rather than three times. */
+.client-form .channels-note {
+  color: var(--text-secondary);
+  margin-block: 0 var(--space-4);
+}
+
+.client-form .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.client-form .alert {
+  border-radius: var(--radius-sm);
+}

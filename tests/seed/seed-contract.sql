@@ -102,16 +102,23 @@ BEGIN
 
   -- (T5) The module rows: Al-Amin's clients A–D, 5 subscriptions each; Maan's X, Y, 3 each (§7). A client's
   -- scope_ref_id is its own id (the synonym, 0008_subscriptions.sql).
-  INSERT INTO clients (id, tenant_id, scope_ref_id, name, created_at) VALUES
-    (client_a, t_alamin, client_a, 'A', now()), (client_b, t_alamin, client_b, 'B', now()),
-    (client_c, t_alamin, client_c, 'C', now()), (client_d, t_alamin, client_d, 'D', now()),
-    (client_x, t_maan, client_x, 'X', now()), (client_y, t_maan, client_y, 'Y', now());
+  -- (Amendment 01 §2.8) Every client is active, and reachable by no channel: the three contact columns are
+  -- optional, and a seed that filled them would make every scope test depend on a value it does not test.
+  INSERT INTO clients (id, tenant_id, scope_ref_id, name, created_at, email, phone_e164, telegram_chat_id, is_active) VALUES
+    (client_a, t_alamin, client_a, 'A', now(), NULL, NULL, NULL, true),
+    (client_b, t_alamin, client_b, 'B', now(), NULL, NULL, NULL, true),
+    (client_c, t_alamin, client_c, 'C', now(), NULL, NULL, NULL, true),
+    (client_d, t_alamin, client_d, 'D', now(), NULL, NULL, NULL, true),
+    (client_x, t_maan, client_x, 'X', now(), NULL, NULL, NULL, true),
+    (client_y, t_maan, client_y, 'Y', now(), NULL, NULL, NULL, true);
   -- (Amendment 02 §3.2) Each carries its kind, a category of the platform's catalog — the n-th of five, so the
   -- screens show more than one — a yearly cycle and no automatic renewal; the optional fields stay empty.
+  -- (Amendment 01 §2.9) Every seeded subscription is active and renews nothing: the lifecycle starts from a
+  -- clean sheet, so a test that renews or cancels states its own starting point.
   INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at,
-                             reminder_type, category_id, billing_cycle, auto_renew)
+                             reminder_type, category_id, billing_cycle, auto_renew, status, renewed_from_id)
     SELECT uuidv7(), c.tenant_id, c.id, c.name || ' service ' || n, DATE '2027-01-01' + n, now(),
-           'subscription', cat.id, 'yearly', false
+           'subscription', cat.id, 'yearly', false, 'active', NULL
     FROM clients c CROSS JOIN LATERAL generate_series(1, CASE WHEN c.tenant_id = t_maan THEN 3 ELSE 5 END) n
     JOIN categories cat ON cat.code = (ARRAY['domains', 'hosting', 'security', 'software', 'other'])[n];
 

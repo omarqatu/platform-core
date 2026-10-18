@@ -26,6 +26,7 @@
     "already_member",
     "role_templates_unavailable",
     "invalid_token",
-    "password_too_short"
+    "password_too_short",
+    "subscription_not_active"
   ]
 }

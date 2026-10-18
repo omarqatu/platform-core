@@ -14,6 +14,17 @@ public sealed class Client
     public Guid ScopeRefId { get; set; }
     public string Name { get; set; } = "";
     public DateTime CreatedAt { get; set; }
+    /// <summary>Where a reminder reaches this client (Amendment 01 §2.8). All three optional, all three held by a CHECK.</summary>
+    public string? Email { get; set; }
+    /// <summary>E.164 and nothing else, so one line has one spelling across the tenant.</summary>
+    public string? PhoneE164 { get; set; }
+    /// <summary>A signed integer in text: a Telegram group's chat id is negative.</summary>
+    public string? TelegramChatId { get; set; }
+    /// <summary>
+    /// Disabled, never deleted (Amendment 01 §2.8). Disabling stops the client's reminders from stage (d) on and
+    /// touches no subscription: their status, dates and history stay exactly as they are.
+    /// </summary>
+    public bool IsActive { get; set; }
 }
 
 public sealed class Subscription
@@ -37,8 +48,22 @@ public sealed class Subscription
     public string BillingCycle { get; set; } = "";
     public bool AutoRenew { get; set; }
     public string? LoginUrl { get; set; }
+    /// <summary>
+    /// <c>active</c>, <c>cancelled</c> or <c>renewed</c> (Amendment 01 §2.9) — a closed catalog held by a CHECK, and
+    /// by <c>subscriptions_status_gate</c>, which lets no UPDATE reach a row that is not active.
+    /// </summary>
+    public string Status { get; set; } = "";
+    /// <summary>
+    /// The subscription this one renews, when it renews one. A renewal is a NEW row pointing at the old one, never
+    /// an extension of it; the composite FK is on (tenant_id, renewed_from_id), and a UNIQUE on the same pair means
+    /// one subscription is renewed once.
+    /// </summary>
+    public Guid? RenewedFromId { get; set; }
 
     public const string Kind = "subscription";
+    public const string Active = "active";
+    public const string Cancelled = "cancelled";
+    public const string Renewed = "renewed";
 }
 
 /// <summary>

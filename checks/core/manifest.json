@@ -126,6 +126,11 @@
     ],
     "subcategories": [
       "CREATE POLICY subcategories_read ON subcategories\n  FOR SELECT TO app_user, provisioner, job_runner\n  USING (true);"
+    ],
+    "subscriptions": [
+      "CREATE POLICY tenant_isolation ON subscriptions\n  FOR ALL TO app_user\n  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))\n  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));",
+      "CREATE POLICY client_scope ON subscriptions\n  AS RESTRICTIVE FOR ALL TO app_user\n  USING (\n    COALESCE((SELECT NULLIF(current_setting('app.scope_all', true), '')::boolean), false)\n    OR EXISTS (\n      SELECT 1 FROM scope_assignments sa\n      WHERE sa.tenant_id     = subscriptions.tenant_id\n        AND sa.scope_ref_id  = subscriptions.scope_ref_id\n        AND sa.membership_id = (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)\n        AND sa.active))\n  WITH CHECK (\n    COALESCE((SELECT NULLIF(current_setting('app.scope_all', true), '')::boolean), false)\n    OR EXISTS (\n      SELECT 1 FROM scope_assignments sa\n      WHERE sa.tenant_id     = subscriptions.tenant_id\n        AND sa.scope_ref_id  = subscriptions.scope_ref_id\n        AND sa.membership_id = (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)\n        AND sa.active));",
+      "CREATE POLICY subscriptions_status_gate ON subscriptions\n  AS RESTRICTIVE FOR UPDATE TO app_user\n  USING (status = 'active')\n  WITH CHECK (true);   -- the gate is on the row as it stands before the write; the new value is held by the column's CHECK"
     ]
   }
 }

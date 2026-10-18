@@ -2,12 +2,15 @@ import { Navigate, Route, Routes } from 'react-router';
 import { ACCEPT_PATH } from './invitations/pendingInvitation';
 import { RESET_PATH } from './password/pendingResetToken';
 import { LoginScreen } from './screens/auth/LoginScreen';
+import { ClientFormScreen, EDIT_PATH as CLIENT_EDIT_PATH, NEW_PATH as CLIENT_NEW_PATH } from './screens/clients/ClientFormScreen';
+import { ClientsScreen, LIST_PATH as CLIENTS_PATH } from './screens/clients/ClientsScreen';
 import { AcceptInvitationScreen } from './screens/invitations/AcceptInvitationScreen';
 import { ChangePasswordScreen, CHANGE_PATH } from './screens/password/ChangePasswordScreen';
 import { ForgotPasswordScreen, FORGOT_PATH } from './screens/password/ForgotPasswordScreen';
 import { ResetPasswordScreen } from './screens/password/ResetPasswordScreen';
 import { NotFoundScreen } from './screens/status/StatusScreens';
 import { EDIT_PATH, NEW_PATH, SubscriptionFormScreen } from './screens/subscriptions/SubscriptionFormScreen';
+import { RENEW_PATH, RenewSubscriptionScreen } from './screens/subscriptions/RenewSubscriptionScreen';
 import { SubscriptionsScreen } from './screens/subscriptions/SubscriptionsScreen';
 import { TenantSelectScreen } from './screens/tenants/TenantSelectScreen';
 import { RequireAuth, RequireTenant } from './session/guards';
@@ -42,6 +45,13 @@ export function App() {
               fields. */}
           <Route path={NEW_PATH} element={<SubscriptionFormScreen key="create" mode="create" />} />
           <Route path={EDIT_PATH} element={<SubscriptionFormScreen key="edit" mode="edit" />} />
+          {/* Renewing one (Amendment 01 §2.9): a screen of its own, because it writes a new row rather than
+              editing this one, and it takes one field. */}
+          <Route path={RENEW_PATH} element={<RenewSubscriptionScreen />} />
+          {/* The clients (Amendment 01 §2.8): the list, and the form, keyed by its mode. */}
+          <Route path={CLIENTS_PATH} element={<ClientsScreen />} />
+          <Route path={CLIENT_NEW_PATH} element={<ClientFormScreen key="create" mode="create" />} />
+          <Route path={CLIENT_EDIT_PATH} element={<ClientFormScreen key="edit" mode="edit" />} />
         </Route>
       </Route>
       <Route path="*" element={<NotFoundScreen />} />

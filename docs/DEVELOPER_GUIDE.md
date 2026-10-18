@@ -864,12 +864,12 @@ conscious decision.
 
 | Piece | File | Notes |
 |---|---|---|
-| Tables | `src/Migrations/Sql/0008_subscriptions.sql`, `0012_classification.sql` | `clients` (scoped entity, `scope_ref_id = id`), `subscriptions` (`scope_ref_id` = its client). Both templates, grants, composite FK, indexes, permissions, template upgrades. Then (Amendment 02 §3) the global catalog `categories`/`subcategories` — no `tenant_id`, seeded, read under `categories_read`/`subcategories_read` — and the subscription's own fields, four of them `NOT NULL` with a backfill each. |
+| Tables | `src/Migrations/Sql/0008_subscriptions.sql`, `0012_classification.sql`, `0013_clients_and_lifecycle.sql` | `clients` (scoped entity, `scope_ref_id = id`), `subscriptions` (`scope_ref_id` = its client). Both templates, grants, composite FK, indexes, permissions, template upgrades. Then (Amendment 02 §3) the global catalog `categories`/`subcategories` — no `tenant_id`, seeded, read under `categories_read`/`subcategories_read` — and the subscription's own fields, four of them `NOT NULL` with a backfill each. Then (Amendment 01 §2.8, §2.9) the client's three channels and `is_active`, the subscription's `status` and `renewed_from_id` with their composite FK and the UNIQUE that renews a subscription once, `subscriptions_status_gate`, and the two client permissions — **each to its own template set**, in two statements, because one `IN` list would have handed `operator` the power to disable a client. |
 | Entities + context | `SubscriptionsDbContext.cs` | `Client`, `Subscription`; `SubscriptionsDbContext : CoreDbContext`. `OnModelCreating` maps its tables, then calls `base` **last** (the base names every column and marks every property `ValueGenerated.Never`). |
 | Endpoints | `SubscriptionEndpoints.cs` | A route group marked `OwnUnitsOfWorkAttribute`; each handler runs `UnitOfWork.RunAsync` on the module context. |
 | Registration | `src/Api/Program.cs` | `AddDbContext<SubscriptionsDbContext>(… UseCoreDataAccess(the app_user data source))` and `api.MapSubscriptionEndpoints()` |
 | Job | `ExpiringSubscriptionsJob.cs` + `src/Worker/Program.cs` | See §12 |
-| Seed rows | `tests/seed/seed-contract.sql` | Clients A–D, X, Y and their subscriptions |
+| Seed rows | `tests/seed/seed-contract.sql` | Clients A–D, X, Y (all active, with no channel) and their subscriptions (all `active`, renewing nothing) |
 
 ### A module endpoint, annotated
 
@@ -943,8 +943,12 @@ module.MapPost("", (CreateSubscriptionRequest body, SubscriptionsDbContext db, I
 
 ### Add an endpoint to an existing module (example: rename a client)
 
-1. Add a permission if none fits — a migration inserting it into `permissions`, templates, and existing roles. Here
-   `subscriptions.write` fits.
+This example is now built, as `PUT /api/subscriptions/clients/{id}` under `subscriptions.clients.write`
+(Amendment 01 §5.1) — read `SubscriptionEndpoints.cs` for the finished shape. The steps below are the recipe it
+followed, and the permission it needed did **not** already exist, which is why step 1 comes first.
+
+1. Add a permission if none fits — a migration inserting it into `permissions`, templates, and existing roles. For a
+   rename, `subscriptions.clients.write` is the one; `subscriptions.write` covers the subscription, not the client.
 2. The handler:
    ```csharp
    module.MapPut("/clients/{id:guid}", (Guid id, RenameClientRequest body, SubscriptionsDbContext db,
@@ -962,7 +966,8 @@ module.MapPost("", (CreateSubscriptionRequest body, SubscriptionsDbContext db, I
        }, ct));
    ```
 3. Grants: `clients` already grants `UPDATE` to `app_user` — nothing to do. If you need a column-level grant, it is a
-   migration plus `grants.json`.
+   migration plus `grants.json`. **A new permission is not a grant**: it is seeded data in `permissions` and
+   `role_template_permissions`, so `grants.json` does not change for it.
 4. Tests: a Conformance test for "an assigned member renames an unassigned client → 403 and the name is unchanged", and
    "the change appears in the audit log".
 5. The interface, if it has a screen for it (§15).
@@ -1164,7 +1169,13 @@ and a mapping here — do not return 500s for expected situations.
 | `GET /api/subscriptions` | module | `subscriptions.read` |
 | `POST /api/subscriptions` | module | `subscriptions.write` |
 | `GET /api/subscriptions/{id}` | module | `subscriptions.read` — an invisible one is `403 not_permitted` |
-| `PUT /api/subscriptions/{id}` | module | `subscriptions.write` — every field but the client |
+| `PUT /api/subscriptions/{id}` | module | `subscriptions.write` — every field but the client; `409 subscription_not_active` once the row is cancelled or renewed |
+| `POST /api/subscriptions/{id}/renew` | module | `subscriptions.write` — takes `ends_on` and nothing else; a body naming a client is `400 invalid_value` |
+| `POST /api/subscriptions/{id}/cancel` | module | `subscriptions.write` — a status change, never a delete |
+| `GET /api/subscriptions/clients/{id}` | module | `subscriptions.read` — an invisible one is `403 not_permitted` |
+| `POST /api/subscriptions/clients` | module | `subscriptions.clients.write` — an `assigned` member is refused by `client_scope` (§8) |
+| `PUT /api/subscriptions/clients/{id}` | module | `subscriptions.clients.write` — the name and the three channels, never `is_active` |
+| `PUT /api/subscriptions/clients/{id}/status` | module | `subscriptions.clients.manage` — disable and enable again |
 | `GET /api/subscriptions/categories` | module | `subscriptions.read` — the global catalog, no scope declaration |
 | `GET /api/unified/subscriptions` | fan-out | `subscriptions.read` per tenant |
 
@@ -1190,9 +1201,9 @@ essentials:
 - **Logical CSS only** (`margin-inline-start`, `text-align: start`) — `check-logical-css` and ESLint refuse physical
   sides.
 - Screens: login, organization selection, invitation acceptance (new account or signed in), the three screens of
-  password recovery and change, status screens, the subscriptions screen, and creating and editing a subscription.
-  Screenshots of every state, in both languages, are in `docs/screens/` — made by hand, and not yet made for the
-  password screens.
+  password recovery and change, status screens, the subscriptions screen, creating and editing a subscription,
+  renewing one, and the client list with its form. Screenshots of every state, in both languages, are in
+  `docs/screens/` — made by hand, and not yet made for the password or the client screens.
 - **The subscription form** (Amendment 02 §3.2): `/app/subscriptions/new` and `/app/subscriptions/:id/edit`, reached
   from the list's "New subscription" and each row's "Edit". The category is chosen from the platform's catalog,
   named in the interface's language from the catalog's own `name_ar`/`name_en` (data, not messages); the
@@ -1207,6 +1218,23 @@ essentials:
   (`subscriptionForm.westernDigits`) — a native date picker would show the browser's own digits (OPEN_ITEMS 78).
   The list shows both actions to every member, because the interface does not know the caller's permissions: a
   viewer's attempt is refused by the server (OPEN_ITEMS 77).
+- **The client screens** (Amendment 01 §2.8, §5.1): `/app/clients`, `/app/clients/new` and `/app/clients/:id/edit`,
+  reached from the sidebar. The list carries its scope declaration like the subscription list, and a **disabled
+  client stays in it with a badge** — disabling is not deleting, and the interface never hides what the server
+  shows. Disabling asks first and says what it does not change ("its subscriptions are not changed"); enabling asks
+  nothing, because resuming the reminders catches nothing up. The form holds the name and the three channels, each
+  optional and each held to the shape the database holds (E.164 for the phone, a signed integer for the Telegram
+  chat id), with Arabic-Indic digits converted as they are typed. `is_active` is **not a field of the form**:
+  disabling is a different permission on a different endpoint, so an operator who may edit a client cannot disable
+  one by sending a field.
+- **Renewing and cancelling** (Amendment 01 §2.9): the list offers "Renew" and "Cancel subscription" on an active
+  row and neither on one that has left `active` — the database refuses the write either way, so the screen does not
+  offer what it knows will be refused. Renewing is a screen of its own, `/app/subscriptions/:id/renew`, with **one
+  field**: the new end date. There is no client to choose, and none is sent — a renewal keeps the client of the row
+  it renews, and a request that names one is refused (`400 invalid_value`), the same door stage (a) closed on the
+  edit. Cancelling asks first and says the row is kept. The status column shows the lifecycle (`Cancelled`,
+  `Renewed`) in place of the date-derived status once the row has left `active`: a cancelled subscription's
+  remaining days say nothing worth saying.
 - **The password screens** (Amendment 01 §5.1, OPEN_ITEMS 59): `/app/password/forgot` and `/app/password/reset` are
   open; `/app/password/change` needs a session and no organization (`PUT /me/password` runs its own units of work
   with `app.user_id` alone). The e-mail's link is `/app/password/reset#token=<token>` and its token is handled as

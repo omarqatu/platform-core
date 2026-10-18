@@ -318,6 +318,8 @@ CREATE POLICY notification_log_status_forward ON notification_log
 | `subscriptions.clients.manage` | subscriptions | Disabling a client and enabling it again | owner, admin |
 | `subscriptions.notifications.read` | subscriptions | Reading the delivery log | owner, admin, operator, viewer |
 
+**On `subscriptions.clients.write`:** the second axis narrows it at creation alone — a client is its own scoped entity, and a new row has no assignment by virtue of being new, so `client_scope` (v1.16 §3.1) refuses its insert from a member in mode `assigned`. An `operator` in mode `assigned` therefore edits a client assigned to them but creates none; in mode `all` they create. A description of behaviour v1.16 already has, not a change to it.
+
 Inserted by the same recipe as the guide's §11: the permission, the templates, upgrading the existing tenants' roles, a row-count check — in one migration.
 
 ### 4.3 What stays without a new permission

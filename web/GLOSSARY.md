@@ -17,6 +17,13 @@ Every text of the interface uses these terms — the English `defaultMessage` in
 | invitation | الدعوة | Invitation |
 | accepting an invitation | قبول الدعوة | Accept the invitation |
 | account | الحساب | Account |
+| client | العميل | Client |
+| subscription | الاشتراك | Subscription |
+| a disabled client | معطَّل | Disabled |
+| renewing a subscription | تجديد | Renew |
+| cancelling a subscription | إلغاء الاشتراك | Cancel subscription |
+| a cancelled subscription | ملغى | Cancelled |
+| a renewed subscription | مجدَّد | Renewed |
 
 The original T8 screen rendered by Api (`src/Modules.Subscriptions/SubscriptionScreen.cs`) keeps "المستأجر": it is
 part of a merged proof and is not edited (OPEN_ITEMS 29).

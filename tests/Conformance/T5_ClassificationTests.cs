@@ -232,6 +232,8 @@ public class T5_ClassificationTests
         {
             ["reminder_type"] = "'subscription'", ["category_id"] = "(SELECT id FROM categories WHERE code = 'other')",
             ["billing_cycle"] = "'yearly'", ["auto_renew"] = "false", ["cost"] = "NULL", ["currency"] = "NULL", ["subcategory_id"] = "NULL",
+            // (Amendment 01 §2.9) NOT NULL with no DEFAULT, so this insert names it as every other writer does.
+            ["status"] = "'active'",
         };
         values[column] = value;
 

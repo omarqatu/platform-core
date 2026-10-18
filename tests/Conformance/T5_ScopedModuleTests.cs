@@ -373,9 +373,10 @@ public class T5_ScopedModuleTests
     // ---- helpers
 
     private const string InsertSubscription =
-        "INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at, reminder_type, category_id, billing_cycle, auto_renew) " +
+        "INSERT INTO subscriptions (id, tenant_id, scope_ref_id, service_name, ends_on, created_at, reminder_type, category_id, " +
+        "billing_cycle, auto_renew, status, renewed_from_id) " +
         "VALUES (uuidv7(), current_setting('app.tenant_id')::uuid, @c, 'conformance', DATE '2027-06-01', now(), 'subscription', " +
-        "(SELECT id FROM categories WHERE code = 'other'), 'yearly', false)";
+        "(SELECT id FROM categories WHERE code = 'other'), 'yearly', false, 'active', NULL)";
 
     // A complete creation body: the fields Amendment 02 §3.2 made required (category, cycle, renewal) besides the
     // three T5 wrote, so a refusal is the one the test is about and not invalid_value.

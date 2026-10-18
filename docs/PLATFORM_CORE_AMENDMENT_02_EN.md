@@ -239,7 +239,42 @@ CREATE POLICY client_scope ON client_notification_settings
         AND sa.scope_ref_id  = client_notification_settings.scope_ref_id
         AND sa.membership_id = (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
         AND sa.active));
+
+-- ===== the subscription's lifecycle (Amendment 01 §2.9) =====
+-- `subscriptions` enters the manifest with a policy outside the two templates, and a manifest table's policy set
+-- is checked whole (Amendment 01 §4.1), so it writes its templates here explicitly, as `notification_log` did.
+-- Their text is the templates' text, unchanged.
+CREATE POLICY tenant_isolation ON subscriptions
+  FOR ALL TO app_user
+  USING (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid))
+  WITH CHECK (tenant_id = (SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid));
+
+CREATE POLICY client_scope ON subscriptions
+  AS RESTRICTIVE FOR ALL TO app_user
+  USING (
+    COALESCE((SELECT NULLIF(current_setting('app.scope_all', true), '')::boolean), false)
+    OR EXISTS (
+      SELECT 1 FROM scope_assignments sa
+      WHERE sa.tenant_id     = subscriptions.tenant_id
+        AND sa.scope_ref_id  = subscriptions.scope_ref_id
+        AND sa.membership_id = (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+        AND sa.active))
+  WITH CHECK (
+    COALESCE((SELECT NULLIF(current_setting('app.scope_all', true), '')::boolean), false)
+    OR EXISTS (
+      SELECT 1 FROM scope_assignments sa
+      WHERE sa.tenant_id     = subscriptions.tenant_id
+        AND sa.scope_ref_id  = subscriptions.scope_ref_id
+        AND sa.membership_id = (SELECT NULLIF(current_setting('app.membership_id', true), '')::uuid)
+        AND sa.active));
+
+CREATE POLICY subscriptions_status_gate ON subscriptions
+  AS RESTRICTIVE FOR UPDATE TO app_user
+  USING (status = 'active')
+  WITH CHECK (true);   -- the gate is on the row as it stands before the write; the new value is held by the column's CHECK
 ```
+
+**Why `WITH CHECK` is written out in the status gate:** PostgreSQL uses the `USING` expression as the `WITH CHECK` expression when the latter is omitted — so `USING (status = 'active')` alone would require the **new** row to be active as well, refusing the cancellation itself (`42501`), which is the very thing the gate exists for. Proven on PostgreSQL 18.6 before this text was written. The gate therefore reads the row as it stands before the write and nothing else: from `active` to `active` (an ordinary edit), to `cancelled` or to `renewed`; and nothing leaves `cancelled` or `renewed` — neither an edit nor a revival. The three values are held by the column's `CHECK`, not by the policy.
 
 **Why `categories_read` is inside the template this time:** the first draft wrote a condition outside the template (`tenant_id IS NULL OR tenant_id = NULLIF(app.tenant_id)`), in the `provider_accounts_read` pattern. Once `tenant_id` fell from the table (§3.1) the condition became `USING (true)` literally, exactly as `plans_read` — a global catalog, with no exception and nothing to explain.
 
