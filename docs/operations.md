@@ -247,10 +247,43 @@ As your own administrator user, with `sudo`.
    sudo shred -u /home/deployer/github-deploy && sudo rm /home/deployer/github-deploy.pub
    ```
 
-**Check:** `ls -l /usr/local/sbin/platform-core-deploy` → `-rwxr-xr-x 1 root root`;
-`sudo -u deployer test -w /usr/local/sbin/platform-core-deploy && echo WRITABLE || echo ok` → `ok`;
-`sudo ls /home/deployer` → no `github-deploy`.
-**Report back:** the outputs of the prerequisites, of step 5, and of this check.
+**Check — a gate, not a report.** The deploy cannot work without the forced command: with none, `sshd` hands the
+commit the workflow sends to `deployer`'s shell, which runs it as a command and exits `127` (the first deploy's
+failure). And a key with no forced command is a shell for a member of the `docker` group — root. So this check looks
+at the key's line as well as the script, and **exits 1** on anything wrong:
+```bash
+sudo bash -c '
+S=/usr/local/sbin/platform-core-deploy; AK=/home/deployer/.ssh/authorized_keys; bad=0
+if [ ! -x "$S" ]; then echo "FAIL: $S does not exist — step 1, item 3"; bad=1
+elif [ "$(stat -c %U:%G:%a "$S")" != root:root:755 ]; then echo "FAIL: $S is $(stat -c %U:%G:%a "$S"), not root:root:755"; bad=1; fi
+sudo -u deployer test -w "$S" 2>/dev/null && { echo "FAIL: deployer can write $S"; bad=1; }
+n=$(grep -cE " github-deploy[[:space:]]*$" "$AK" || true)
+[ "$n" = 1 ] || { echo "FAIL: $n lines end in github-deploy in $AK, not 1"; bad=1; }
+grep -E " github-deploy[[:space:]]*$" "$AK" | grep -q "^restrict,command=\"$S\" " \
+  || { echo "FAIL: the github-deploy key has no forced command — a deploy would hand its SHA to a shell (exit 127)"; bad=1; }
+grep -vE "^restrict,command=" "$AK" | grep -qE "^(ssh-|ecdsa-|sk-)" \
+  && { echo "FAIL: $AK accepts a key with no forced command — a shell for a docker-group user, i.e. root"; bad=1; }
+[ "$bad" = 0 ] && echo "PASS: the forced command is in place" || exit 1'
+```
+→ `PASS: the forced command is in place`. Any `FAIL` line: fix it before step 2. And `sudo ls /home/deployer` → no
+`github-deploy` (item 7).
+
+**If the key's line was written without the forced command** — for example `no-agent-forwarding,no-X11-forwarding,
+no-pty ssh-ed25519 … github-deploy`, which also leaves **port forwarding open** (the key could tunnel to any port on
+the server's loopback, `127.0.0.1:5100` and the neighbours' services included) — rewrite it around the same key,
+keeping a backup; the key bytes never need retyping:
+```bash
+sudo bash -euo pipefail -c '
+AK=/home/deployer/.ssh/authorized_keys
+[ "$(grep -cE " github-deploy[[:space:]]*$" "$AK")" = 1 ] || { echo "STOP: not exactly one github-deploy line"; exit 1; }
+cp -a "$AK" "$AK.bak.$(date +%Y%m%d%H%M%S)"
+awk "/ github-deploy[[:space:]]*\$/ { print \"restrict,command=\\\"/usr/local/sbin/platform-core-deploy\\\" \" \$(NF-2) \" \" \$(NF-1) \" \" \$NF; next } { print }" "$AK" > "$AK.new"
+chown deployer:deployer "$AK.new"; chmod 600 "$AK.new"; mv "$AK.new" "$AK"'
+```
+`restrict` includes every `no-…` option the old line had and adds the rest (port forwarding among them). Then run the
+gate again.
+
+**Report back:** the outputs of the prerequisites, of item 5, and of the gate.
 
 ### Step 2 — `deploy/.env`
 
@@ -379,6 +412,10 @@ curl -sk -o /dev/null -w '%{http_code}\n' --resolve platform.ask-palestine.com:4
 — so the repository's copy can be corrected to match.
 
 ### Step 4 — deploy, redeploy, logs
+
+**Before the first Run workflow — and before any run after a change to `deployer` or its key — the gate of step 1
+must print `PASS`.** Run it again now. A deploy without the forced command does not fail safely: the commit goes to
+a shell, and the workflow reports `exit 127` after the fact.
 
 **First deploy.** On GitHub: Actions → *deploy (test server)* → Run workflow. Leave the SHA empty to deploy the tip
 of `main`. The commit must be on `main` and its `ci` run must have passed; the workflow refuses anything else.

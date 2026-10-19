@@ -161,12 +161,21 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           SHA: ${{ needs.images.outputs.sha }}
         run: |
-          set -euo pipefail
+          # Not -e: the steps run under bash -e, which would stop at a failed ssh before the check below can name it.
+          set +e -uo pipefail
           printf '%s\n' "$SHA" | ssh -T \
             -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
-            "$DEPLOY_USER@$DEPLOY_HOST"
+            "$DEPLOY_USER@$DEPLOY_HOST" 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          status=${PIPESTATUS[1]}
+          # The forced command's first line is always "<time>  deploy <sha>". Without it, the server did not run the
+          # forced command: the commit went to a shell (the first deploy's exit 127), or ssh never got that far.
+          if [ "$status" -ne 255 ] && ! grep -qE "^[0-9:]+Z  deploy $SHA\$" "$RUNNER_TEMP/deploy.log"; then
+            echo "::error::the server did not run its forced command — deployer's key has no command=\"/usr/local/sbin/platform-core-deploy\", or the script is missing. Run the gate in docs/operations.md, step 1."
+            exit 1
+          fi
+          exit "$status"
 
       - name: The public URL answers, through Cloudflare and nginx
         run: |
