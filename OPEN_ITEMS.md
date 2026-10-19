@@ -153,6 +153,20 @@ Closed by the password-rule PR:
   mismatch. It compares **six**, not the four this item first counted: the Arabic sentences in
   `web/locales/ar.json` carry the number too, and a drift there is wrong to Arabic users alone.
 
+Closed by the test-server deployment PR:
+- **85.** The client's address behind the proxy — raised and closed in the same PR, by the project owner's decision
+  that the nginx file is incomplete without it: the limiter keys on the address, so behind Cloudflare and nginx
+  every user would have shared one ceiling, and 50 failures by anyone would have refused every sign-in. Two links,
+  each believing only the one before it. nginx takes `CF-Connecting-IP` only from Cloudflare's published ranges
+  (`set_real_ip_from`, the list as of 2026-10-19) and **replaces** `X-Forwarded-For` with it. Api
+  (`ReverseProxy`, first in the pipeline) believes `X-Forwarded-For` only from `Network:TrustedProxies` — exact
+  addresses, never a network; the defaults' loopback trust cleared; one hop — and with none configured (development,
+  CI) reads no header at all; a malformed entry stops it from starting. On the server the proxy is the gateway of
+  Api's network, pinned to `10.213.47.0/29`. [W] `T3_ClientAddressTests` (trusted, untrusted, none, mapped IPv6,
+  one hop, the ceiling per client behind one proxy, the startup guard); [B] a client's own `X-Forwarded-For` is not
+  the recorded address. **Not proven until the runbook's step 4 is run on the server:** that nginx's connections
+  arrive from that gateway there — proven here on Docker 29 only.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -912,6 +926,8 @@ Closed by the password-rule PR:
 | **Item 68** — Check 8 | the tables carrying `scope_ref_id` | a table meant to be scoped that named its column `client_id` is not in the set at all | passing, on a table whose own prose claimed `client_scope` |
 | **Item 82** — the `[W]` capture loop (this session) | twenty runs of the suite | the Docker daemon had died, so every run was a no-op and produced no summary line; the `grep` matched nothing and the loop read empty as "not failed" | **"20 runs, all green"** — having run the suite zero times |
 | **Item 84** — `Api logs on failure` in CI | the Api container's log, unbounded | the dump buried the test output past the logs API's ~103 KB tail, so the failing test could not be named | the step **succeeded**, and the CI failure it was reporting on became unreadable |
+| **Fifth — caught before commit** (the test-server deployment PR): a `[W]` test, "`X-Forwarded-Host` is not honoured" | a request with a refused `Host` and an allowed `X-Forwarded-Host` | host filtering runs before the middleware it meant to test, so the 400 came from the filter whatever that middleware did | it would have **passed with `XForwardedHost` enabled** — seen by asking what would turn it red, and removed rather than committed |
+| **Item 88** — the documented local Conformance run, its own shape: **not a silent verifier but a baseline that is red by default** | the 238 tests, run as `DEVELOPER_GUIDE` §16 says | one test is red on `main` on every such run (`dev-up`'s Api has no interface to serve) | **"237/238 — the usual one"**: a real break in the local run looks exactly like every other run, and people who see red every day stop reading it |
 
 - **The rule: a verifier must fail when it verifies nothing, and a diagnostic must not destroy what it reports
   on.** Not warn, not report zero — fail. Passing is a
@@ -923,6 +939,9 @@ Closed by the password-rule PR:
      goes stale silently; a derived one grows and the assertion notices (items 61, 68).
   3. **Make "no evidence" an error.** A step that produces no output where output is the proof of work is a
      failure of the harness, and must stop the run (item 82).
+  4. **A documented baseline is green, or it is a defect.** A run that is red by default teaches its readers to
+     stop reading red; a known failure in the path the guide documents is fixed in the path (or the guide), never
+     left as "the usual one" (item 88).
 - **The fix made this session, as the pattern to copy:** the capture loop now treats a run that emits no
   `Passed!`/`Failed!` summary line as fatal — `if [ -z "$line" ]; then echo "FATAL: …"; exit 2; fi` — so a dead
   daemon stops the loop instead of being counted twenty times as a pass. Three lines, and the difference between
@@ -930,7 +949,8 @@ Closed by the password-rule PR:
 - **This item fixes nothing on its own.** Items 61 and 68 each hold their own fix and their own decision (68's is
   a change to the check inputs, so it is the project owner's). This exists so that whoever picks up either one —
   or writes the next check, or the next loop — finds the shape named in one place rather than meeting it a fourth
-  time as something new.
+  time as something new. **Count as of 2026-10-19: six sightings** — four in the code and CI (61, 68, 82, 84), one
+  caught before commit, and item 88.
 - **Where it is worth looking next, unaudited:** any assertion in the suites of the form "count equals N" over a
   set that can grow; any check whose input is a hand-maintained file (`grants.json`, `policy-chains.json`,
   `rls-exemptions.json`, `scope-variable-writers.json`) and which reports nothing when a table is simply absent
@@ -1014,6 +1034,50 @@ Closed by the password-rule PR:
 - **Why it is not dismissed as a flake:** "flake" is a conclusion about a named test, not a substitute for naming
   one. Until it has a name nobody can say whether it is a racing assertion or a real defect in what this stage
   built, and the suite it is in is the one that proves the tenant-isolation contract.
+
+### 86. `src/Ops` is not built — a deployed server has no first user
+
+- **Origin:** the test-server deployment PR, 2026-10-18. The decision is item 43's (Amendment 01 §5.4); this item is
+  that it is still unbuilt, and that a deployment now waits on it.
+- **The finding:** in Production nothing can create a tenant or a user. The bootstrap route exists in Development and
+  CI only (§4.4; `MapBootstrap`), the migrations write no tenant and no user, and the seed contract must never be
+  applied outside a test (its passwords are public). So the test server deploys, serves the sign-in screen, and
+  nobody can sign in — written as the expected day-one state in `docs/operations.md`, step 5 marked blocked.
+- **What closes it:** `src/Ops` with `create-tenant` (item 43 states what it does), run on the server as a one-shot
+  container from the Api image — its own entry point beside Api's, with the `provisioner` and `job_runner` strings
+  only, never as a running service — and the runbook's step 5 written for it. The Api `Dockerfile` will then publish
+  Ops into the same image; T0.3 keeps scanning it. Its owner invitation has no e-mail yet (item 60), so the command
+  must print the acceptance link.
+
+### 87. The test server's Api runs as root, and its Data Protection keys sit unencrypted on a volume
+
+- **Origin:** the test-server deployment PR, 2026-10-18.
+- **The finding:** Api persists nothing of ASP.NET's Data Protection keys (no `AddDataProtection`), so in a
+  container they are lost on every redeploy and every session with them. The deployment mounts a volume at the
+  default location, `/root/.aspnet/DataProtection-Keys`, which keeps sessions across redeploys without a code
+  change. Two consequences: the path is root's, because the images run as root (the .NET images' `app` user is not
+  used); and the keys are stored unencrypted (ASP.NET logs a warning saying so) — anyone with Docker access to the
+  server can read them and forge a session cookie. On that server Docker access is root anyway.
+- **For its own PR:** run the images as the non-root `app` user (`USER $APP_UID`), with the keys' path set in code
+  (`PersistKeysToFileSystem`) on a volume that user owns; whether to encrypt them at rest is the project owner's
+  decision.
+
+### 88. One Conformance test is red on every local run the guide documents — and so nobody would see it break
+
+- **The shape it belongs to: item 83** — this is its sixth sighting, in a shape of its own: not a verifier that
+  passes on nothing, but a documented baseline that is red by default. Read 83 (its fourth rule) before fixing it.
+- **Origin:** the test-server deployment PR, 2026-10-19, asked for by the project owner while reviewing it.
+- **The finding:** `Conformance.ApiPathTests.InterfacePath_Html_TheInterface` (`GET /app/anything` as HTML → the
+  interface, 200) **fails on `main` itself** (`f91ff65`, checked in a clean worktree) when Conformance runs the way
+  `docs/DEVELOPER_GUIDE.md` §16 says to — against the `scripts/dev-up.sh` stack. That stack runs Api with
+  `dotnet run`, where there is no `wwwroot` and no `Web:Root` (the interface is Vite's, on :5173), so Api answers
+  404. CI is green because CI's Api is the image, which holds the built interface. Measured locally: 237 of 238,
+  that one red, on `main` and on this PR alike.
+- **Why it matters more than one test:** everyone who runs the suite locally learns that one red is normal. The day
+  this test — or any other — breaks for real, the local run looks exactly as it always did, and only CI says so.
+- **What closes it (not done here):** the documented local path gives a green suite — for example `dev-up` building
+  the interface and starting Api with `Web__Root=web/dist` (the guide's Docker path already does this), or §16
+  naming the one step that makes it pass. Never by skipping or weakening the test.
 
 ## For the next version of the document — not for the code
 

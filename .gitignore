@@ -4,3 +4,6 @@ obj/
 *.user
 TestResults/
 .dev/
+
+# The test server's settings (deploy/.env.example is the template). Never committed.
+deploy/.env

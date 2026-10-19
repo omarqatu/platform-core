@@ -18,7 +18,7 @@ the short version to remember.
 | `OPEN_ITEMS.md` | Everything known to be unfinished, numbered and stable |
 | `checks/core/README.md`, `checks/local/README.md` | The CI checks |
 | `web/README.md`, `web/GLOSSARY.md` | The React interface |
-| `docs/operations.md` | Procedures that run outside the application |
+| `docs/operations.md` | Procedures that run outside the application; the test server's runbook |
 | `CLAUDE.md` | The rules in short, read automatically by Claude Code at the start of every session |
 | `.github/pull_request_template.md` | The PR checklist (§18), shown on every pull request |
 
@@ -198,11 +198,12 @@ platform-core/
 │   │   ├── WebInterface.cs        /api is the API; everything else is the React app
 │   │   └── Dockerfile             builds web/ and Api into one image
 │   │
-│   ├── Worker/                    runs one background job once, then exits (scheduled externally)
+│   ├── Worker/                    runs one background job once, then exits (scheduled externally); Dockerfile
 │   └── Migrations/                the migration tool — the only holder of migrator's connection
 │       ├── Sql/0001…0012_*.sql    THE SCHEMA, as SQL files, applied in order
 │       ├── Migrations/M000N_*.cs  one tiny class per SQL file
-│       └── Program.cs             refuses to run as anyone but migrator
+│       ├── Program.cs             refuses to run as anyone but migrator
+│       └── Dockerfile             the one-shot migration image (the deploy runs it, then removes it)
 │
 ├── checks/
 │   ├── core/                      PLATFORM_CORE's ten CI checks (numbered 1–10) + their inputs
@@ -212,6 +213,7 @@ platform-core/
 │   └── local/                     repository checks (named, never numbered)
 │
 ├── ci/                            the T0.3 scan: the Api image must not contain migrator's password
+├── deploy/                        the test server: compose file, .env template, nginx site, the deploy command
 ├── scripts/
 │   ├── dev-up.sh / dev-down.sh    the whole stack locally (PostgreSQL, migrations, seed, Api, Vite)
 │   └── dump-schema.sh             regenerates docs/schema.sql
@@ -365,6 +367,8 @@ docker exec -it platform-core-dev-postgres psql -U migrator -d platform
 `src/Api/Program.cs` registers, in this order:
 
 ```
+UseClientAddress      only with Network:TrustedProxies set: X-Forwarded-For from those proxies alone → the client's
+                      address (ReverseProxy, OPEN_ITEMS 85); with none, not installed and no header is read
 UseCsrfProtection     every unsafe request: Origin + X-Requested-With, or 403 csrf_rejected — before anything else
 UseRouting
 UseWebInterface       a request no route matched: index.html for a page, or a plain 404
@@ -1514,6 +1518,7 @@ Each of these was found by running code, and each changed the design. Knowing th
 | What is the seed data? | PROOF_SPEC §7; `tests/seed/seed-contract.sql` |
 | What's not done yet? | `OPEN_ITEMS.md` |
 | How do I run an ops procedure? | `docs/operations.md` |
+| How is the test server deployed? | `docs/operations.md`, "The test server" |
 | The interface's conventions | `web/README.md`, `web/GLOSSARY.md` |
 
 Welcome aboard. When something in here was unclear or wrong, the best first PR is fixing it.

@@ -1,0 +1,166 @@
+name: deploy (test server)
+
+# Deploys one commit of main to the test server (platform.ask-palestine.com). Run by hand only — nothing deploys on
+# merge. docs/operations.md, "The test server", is the runbook.
+#
+# images: refuses a commit that is not on main or whose CI did not pass; builds Api, Migrations and Worker from it on
+#         this runner (never on the server: a build there needs 2 GB+ beside production neighbours); scans the Api
+#         image for migrator connection-string shapes (T0.3, layer a — layer b, the real password, runs on the
+#         server); pushes the three images to GHCR, tagged with the commit.
+# deploy: sends the commit — and nothing else — over SSH to the server's forced command
+#         (deploy/platform-core-deploy), which pulls those images and deploys them; then checks the public URL.
+#
+# Secrets: DEPLOY_SSH_KEY, DEPLOY_HOST, DEPLOY_USER — never a connection string. Variable: DEPLOY_KNOWN_HOSTS, the
+# server's public host key (public, so not a secret; it is what keeps this from trusting whoever answers).
+# This log is PUBLIC for this repository: no step prints a secret or a container log.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Full commit SHA on main to deploy (empty: the tip of main)"
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: deploy-test-server
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/omarqatu
+  PUBLIC_URL: https://platform.ask-palestine.com
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: The commit — on main, and its CI passed
+        id: commit
+        env:
+          REQUESTED: ${{ inputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="${REQUESTED:-$(git rev-parse origin/main)}"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::'$sha' is not a full commit SHA"; exit 1; }
+          git merge-base --is-ancestor "$sha" origin/main || { echo "::error::$sha is not on main"; exit 1; }
+          # The image deployed is built from the commit CI tested: the ci workflow's push run on main for it.
+          conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${sha}&event=push&branch=main" \
+            --jq '[.workflow_runs[] | select(.status == "completed")] | first | .conclusion // "none"')"
+          [ "$conclusion" = success ] || { echo "::error::ci on main for $sha: '$conclusion' (needs success; still running counts as none)"; exit 1; }
+          git checkout --quiet --detach "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying $(git log -1 --format='%h %s')"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build Api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/Api/Dockerfile
+          tags: ${{ env.REGISTRY }}/platform-core-api:${{ steps.commit.outputs.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          load: true
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Build Migrations
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/Migrations/Dockerfile
+          tags: ${{ env.REGISTRY }}/platform-core-migrations:${{ steps.commit.outputs.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          load: true
+          cache-from: type=gha,scope=migrations
+          cache-to: type=gha,scope=migrations,mode=max
+
+      - name: Build Worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/Worker/Dockerfile
+          tags: ${{ env.REGISTRY }}/platform-core-worker:${{ steps.commit.outputs.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          load: true
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,scope=worker,mode=max
+
+      # Layer a only (the connection-string shapes): the real migrator password is on the server, never here, so
+      # layer b runs there, on the pulled image. A random value stands in for it on this runner.
+      - name: Api image holds no migrator connection string (T0.3, layer a)
+        run: |
+          MIGRATOR_PASSWORD="$(openssl rand -hex 32)" \
+            bash ci/check-api-has-no-migrator.sh "$REGISTRY/platform-core-api:${{ steps.commit.outputs.sha }}"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Push the three images
+        env:
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          set -euo pipefail
+          for name in api migrations worker; do
+            docker push --quiet "$REGISTRY/platform-core-$name:$SHA"
+          done
+
+  deploy:
+    needs: images
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: SSH key and the server's host key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          [ -n "$DEPLOY_SSH_KEY" ] || { echo "::error::secret DEPLOY_SSH_KEY is not set"; exit 1; }
+          [ -n "$DEPLOY_KNOWN_HOSTS" ] || { echo "::error::variable DEPLOY_KNOWN_HOSTS is not set"; exit 1; }
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      # The server runs its forced command whatever is asked; the commit on stdin is its only input.
+      - name: Deploy on the server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          SHA: ${{ needs.images.outputs.sha }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SHA" | ssh -T \
+            -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+            "$DEPLOY_USER@$DEPLOY_HOST"
+
+      - name: The public URL answers, through Cloudflare and nginx
+        run: |
+          set -euo pipefail
+          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$PUBLIC_URL/api/tenants")"
+          echo "$PUBLIC_URL/api/tenants -> $code"
+          [ "$code" = 401 ] || { echo "::error::expected 401 from $PUBLIC_URL/api/tenants, got $code"; exit 1; }
+
+      - name: Remove the key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

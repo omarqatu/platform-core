@@ -1,0 +1,143 @@
+# The test server (platform.ask-palestine.com): PostgreSQL 18, Api, and two one-shots — the migration tool and the
+# Worker. Run only through /usr/local/sbin/platform-core-deploy (deploy/platform-core-deploy) or the commands in
+# docs/operations.md, which pass IMAGE_TAG (the deployed commit) and deploy/.env.
+#
+# The rules this file holds (docs/operations.md, "The test server"):
+#   - Nothing is published to the host but Api, on 127.0.0.1:5100 — loopback, because Docker writes its own iptables
+#     rules below ufw, so a port published on 0.0.0.0 is open to the internet whatever ufw says. PostgreSQL has no
+#     `ports:` at all, and sits on an internal network with no route out.
+#   - No `env_file`: it would hand every service the whole .env, migrator's password included. Each service names the
+#     variables it gets. Api: app_user, authenticator, provisioner (T0.3). Worker: job_runner, app_user. The migrator
+#     string reaches the "migrate" one-shot alone, which is removed when it exits (`run --rm`).
+#     PostgreSQL holds all five role passwords: db/init/00-roles.sh reads them on first init, as in development.
+#   - Memory: a spike takes our containers down, not the neighbours. mem_limit keeps it inside our own cgroup;
+#     memswap_limit = mem_limit keeps us out of the host's swap; oom_score_adj makes the kernel pick ours first when
+#     the whole host runs out (PostgreSQL last among ours: it recovers from WAL, but losing it costs more).
+#   - Logs are capped: the disk is shared with production.
+name: platform-core
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in deploy/.env}
+      PLATFORM_DB: platform
+      MIGRATOR_PASSWORD: ${MIGRATOR_PASSWORD:?set in deploy/.env}
+      APP_USER_PASSWORD: ${APP_USER_PASSWORD:?set in deploy/.env}
+      AUTHENTICATOR_PASSWORD: ${AUTHENTICATOR_PASSWORD:?set in deploy/.env}
+      JOB_RUNNER_PASSWORD: ${JOB_RUNNER_PASSWORD:?set in deploy/.env}
+      PROVISIONER_PASSWORD: ${PROVISIONER_PASSWORD:?set in deploy/.env}
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ../db/init:/docker-entrypoint-initdb.d:ro
+    networks: [db]
+    healthcheck:
+      # Over TCP: the temporary server that runs the init scripts listens on the socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 512m
+    memswap_limit: 512m
+    oom_score_adj: 500
+    cpus: 1.0
+    pids_limit: 200
+    logging: *logging
+
+  api:
+    image: ghcr.io/omarqatu/platform-core-api:${IMAGE_TAG:?the deploy passes the commit as IMAGE_TAG}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: "8080"
+      AllowedHosts: ${PUBLIC_HOST:?set in deploy/.env}
+      ConnectionStrings__app_user: Host=postgres;Port=5432;Database=platform;Username=app_user;Password=${APP_USER_PASSWORD:?set in deploy/.env}
+      ConnectionStrings__authenticator: Host=postgres;Port=5432;Database=platform;Username=authenticator;Password=${AUTHENTICATOR_PASSWORD:?set in deploy/.env}
+      ConnectionStrings__provisioner: Host=postgres;Port=5432;Database=platform;Username=provisioner;Password=${PROVISIONER_PASSWORD:?set in deploy/.env}
+      Security__AllowedOrigins__0: https://${PUBLIC_HOST}
+      # nginx's connections arrive from the egress gateway (below): X-Forwarded-For is believed from there alone.
+      Network__TrustedProxies__0: 10.213.47.1
+      # Absolute: the link goes out in an e-mail (the default is relative).
+      Identity__ForgotPassword__ResetLinkTemplate: https://${PUBLIC_HOST}/app/password/reset#token={token}
+      # The platform's e-mail account: the provider_accounts row names "platform-email" (docs/operations.md).
+      Notifications__Email__Providers__platform-email__Host: ${SMTP_HOST:?set in deploy/.env}
+      Notifications__Email__Providers__platform-email__Port: ${SMTP_PORT:?set in deploy/.env}
+      Notifications__Email__Providers__platform-email__UseStartTls: ${SMTP_USE_STARTTLS:?set in deploy/.env}
+      Notifications__Email__Providers__platform-email__Username: ${SMTP_USERNAME:?set in deploy/.env}
+      Notifications__Email__Providers__platform-email__Password: ${SMTP_PASSWORD:?set in deploy/.env}
+    ports:
+      - "127.0.0.1:5100:8080"
+    volumes:
+      # The cookie's Data Protection keys: without them every redeploy signs everyone out.
+      - dataprotection:/root/.aspnet/DataProtection-Keys
+    # db: PostgreSQL. egress: the published port, and SMTP.
+    networks: [db, egress]
+    mem_limit: 512m
+    memswap_limit: 512m
+    oom_score_adj: 800
+    cpus: 1.0
+    pids_limit: 200
+    logging: *logging
+
+  # One-shot: `docker compose run --rm migrate`. The only holder of migrator's connection string.
+  migrate:
+    image: ghcr.io/omarqatu/platform-core-migrations:${IMAGE_TAG:?the deploy passes the commit as IMAGE_TAG}
+    profiles: [ops]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__migrator: Host=postgres;Port=5432;Database=platform;Username=migrator;Password=${MIGRATOR_PASSWORD:?set in deploy/.env}
+    networks: [db]
+    mem_limit: 256m
+    memswap_limit: 256m
+    oom_score_adj: 900
+    cpus: 0.5
+    logging: *logging
+
+  # One-shot: `docker compose run --rm worker expiring-subscriptions` (scheduled by cron, optional).
+  worker:
+    image: ghcr.io/omarqatu/platform-core-worker:${IMAGE_TAG:?the deploy passes the commit as IMAGE_TAG}
+    profiles: [jobs]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__job_runner: Host=postgres;Port=5432;Database=platform;Username=job_runner;Password=${JOB_RUNNER_PASSWORD:?set in deploy/.env}
+      ConnectionStrings__app_user: Host=postgres;Port=5432;Database=platform;Username=app_user;Password=${APP_USER_PASSWORD:?set in deploy/.env}
+    networks: [db]
+    mem_limit: 256m
+    memswap_limit: 256m
+    oom_score_adj: 900
+    cpus: 0.5
+    logging: *logging
+
+networks:
+  # No route out, nothing published: PostgreSQL lives here alone with its clients.
+  db:
+    internal: true
+  # A fixed subnet, so the address nginx reaches Api from is known: host connections to a published port arrive
+  # from this network's gateway, which Api trusts as its proxy (Network:TrustedProxies, OPEN_ITEMS 85). If it
+  # collides with a network already on the server, `up` fails loudly ("Pool overlaps") — the runbook checks first.
+  egress:
+    ipam:
+      config:
+        - subnet: 10.213.47.0/29
+          gateway: 10.213.47.1
+
+volumes:
+  pgdata:
+  dataprotection:

@@ -46,6 +46,10 @@ if (!requireHttps && !plainHttpEnvironments.Contains(builder.Environment.Environ
 // to start, rather than refuse every write.
 var allowedOrigins = CsrfProtection.AllowedOrigins(builder.Configuration);
 
+// Behind a reverse proxy, the client's address comes from the proxies configured here and no one else (ReverseProxy).
+// A malformed entry: Api refuses to start.
+var trustedProxies = ReverseProxy.TrustedProxies(builder.Configuration);
+
 builder.Services.AddCoreDataAccess(builder.Configuration.GetConnectionString("app_user")!);
 // The subscriptions module (PROOF_SPEC T5): its own context, on the same app_user data source and transaction layer.
 builder.Services.AddDbContext<SubscriptionsDbContext>((services, options) =>
@@ -109,7 +113,9 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 var app = builder.Build();
 
-// CSRF on every path, before routing; then the interface for what no route matches (WebInterface).
+// The client's address first, so everything after it sees it; then CSRF on every path, before routing; then the
+// interface for what no route matches (WebInterface).
+app.UseClientAddress(trustedProxies);
 app.UseCsrfProtection(allowedOrigins);
 app.UseRouting();
 app.UseWebInterface();
