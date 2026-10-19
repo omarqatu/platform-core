@@ -79,10 +79,10 @@ back** line: send those results, and anything that differed, before going on to 
 > **After a successful deploy, nobody can sign in.** The database is created empty: the migrations write the
 > catalog and the templates, and no tenant and no user. The seed contract (`tests/seed/seed-contract.sql`) is
 > **never** applied there — its users' passwords are published in this public repository. The only way to create
-> the first tenant and its owner is `src/Ops create-tenant` (Amendment 01 §5.4), **which is not built yet**
-> (OPEN_ITEMS 86); the bootstrap route exists in Development and CI only (§4.4). So on day one
+> the first tenant and its owner is `src/Ops create-tenant` (Amendment 01 §5.4) — step 5; the bootstrap route exists
+> in Development and CI only (§4.4). So until step 5 has been run and its invitation accepted,
 > `https://platform.ask-palestine.com` shows the sign-in screen, and every sign-in fails. That is the expected
-> result of this stage: it proves the infrastructure — nginx, Cloudflare, the memory limits, the networks, beside
+> result of the deploy alone: it proves the infrastructure — nginx, Cloudflare, the memory limits, the networks, beside
 > the eight containers already on the server — not the product.
 
 ### What runs there
@@ -93,6 +93,7 @@ back** line: send those results, and anything that differed, before going on to 
 | `platform-core-api-1` | `ghcr.io/omarqatu/platform-core-api:<commit>` | `127.0.0.1:5100` only | 512 MB | 800 | 1.0 |
 | `migrate` (one-shot, removed on exit) | `…/platform-core-migrations:<commit>` | nothing | 256 MB | 900 | 0.5 |
 | `worker` (one-shot, removed on exit) | `…/platform-core-worker:<commit>` | nothing | 256 MB | 900 | 0.5 |
+| `ops` (one-shot, removed on exit) | `…/platform-core-api:<commit>`, entry point `ops/Ops.dll` | nothing | 256 MB | 900 | 0.5 |
 
 - **Memory: our containers die first, never a neighbour.** The server has 8 GB with about 4.3 GB free, a Metabase
   holding 1 GB, and Ask Palestine containers already reporting SIGKILL. `mem_limit` makes a spike in one of ours
@@ -499,7 +500,7 @@ docker run --rm --network platform-core_egress busybox:1.36 nc -v -w 5 smtp.gmai
 ```
 → a line starting `220` from Google. A timeout means the port is blocked on the way out, and no e-mail will
 leave until it is opened (ask the provider). Nothing can send an e-mail to test it end to end yet: the senders are invitations and password reset, and
-there are no users until step 5.
+there are no users until step 5 has been accepted.
 
 **Redeploy:** run the workflow again. **Rollback:** run it with an older commit of `main` in the SHA field — this
 works only if no migration was added in between: migrations are forward-only, and an older Api against a newer
@@ -517,13 +518,77 @@ fails, its last line names the step, and the reason is here.
 **Restart without deploying:** `docker restart platform-core-api-1`. **Which commit is running:**
 `git -C /opt/platform-core rev-parse HEAD`.
 
-### Step 5 — the first tenant — BLOCKED
+### Step 5 — the first tenant and its owner
 
-> **Blocked on `src/Ops`, which is not built (OPEN_ITEMS 86).** When it exists, this step will be:
-> `create-tenant --name "<name>" --owner-email <address>` as a one-shot container from the Api image, with the
-> `provisioner` and `job_runner` strings only, never baked into a running service (Amendment 01 §5.4). Its owner
-> invitation is not e-mailed yet (OPEN_ITEMS 60), so the command will have to print the link for you to open. Until
-> then the server has no users (see "day one").
+`create-tenant` (Amendment 01 §5.4) creates one tenant from the role templates and an `owner` invitation for one
+e-mail address — no person, no user, no membership. The owner then opens the printed link and accepts in person,
+on the ordinary acceptance screen, which creates their account. Until that acceptance the tenant has no owner.
+
+**First:** the deployed commit must contain it — migration `0014` and the Api image's `ops/Ops.dll`. If the server
+was deployed before this PR was merged, run the deploy workflow again first. Then, on the server:
+
+```bash
+cd /opt/platform-core && sudo -u deployer env IMAGE_TAG=$(git rev-parse HEAD) \
+  docker compose --project-directory deploy -f deploy/docker-compose.prod.yml --env-file deploy/.env \
+  --profile ops run --rm --no-deps ops create-tenant --name "<the organization's name>" --owner-email <the owner's address>
+```
+
+It runs the `ops` service: the Api image with Ops's own entry point, the `provisioner` string only, and
+`Ops__PublicOrigin=https://$PUBLIC_HOST` — so the printed link is the server's own. It refuses to run if it is given
+a `migrator` string, or no origin.
+
+**Check:** it prints four lines and exits 0:
+```
+tenant_id: <uuid>
+owner invitation for <address>, single use, expires <date> UTC:
+https://platform.ask-palestine.com/app/invitations/accept#tenant=<uuid>&token=<token>
+This link is shown once and stored nowhere. If it is lost, run create-tenant again.
+```
+A line about `libgssapi_krb5.so.2` on stderr may come before them: it is the database driver looking for Kerberos,
+which the image does not carry and the platform does not use. It is not an error.
+
+> **The link is the only copy of a one-use secret, and it lives only in this terminal.** The token is in the
+> container's output and nowhere else: the database holds its hash alone, and nothing e-mails it (OPEN_ITEMS 60).
+> `--rm` deletes the container when it exits, and its log with it — there is no `docker logs` to go back to. Copy
+> the link before you close the terminal. **If it is lost, do not hunt for it: run `create-tenant` again.** That
+> creates a second tenant with a new link; the first stays behind with no member and an invitation no one can
+> accept, and nothing removes it yet (OPEN_ITEMS 90). Keep the link out of chat messages and screenshots: whoever
+> opens it first, with the invited address, becomes the owner.
+
+**If it has been run twice, this is what you see — and it is expected, not a fault.** The owner, signed in, sees
+**one** organization: the one whose link they accepted. The database holds **two** tenants, usually with the same
+name; the earlier one has no member and one invitation, still `pending` until it turns `expired` after 7 days:
+```bash
+docker exec -i platform-core-postgres-1 psql -X -U migrator -d platform -c \
+  "SELECT t.name, t.created_at, (SELECT count(*) FROM memberships m WHERE m.tenant_id = t.id) AS members,
+          (SELECT string_agg(i.status, ',') FROM invitations i WHERE i.tenant_id = t.id) AS invitations
+   FROM tenants t ORDER BY t.created_at;"
+```
+→ the first row `0` members and `pending` (or `expired`); the second `1` member and `accepted`. Leave the first
+row as it is: nobody can see it or enter it, and removing it or re-issuing its invitation are decisions not yet
+taken (OPEN_ITEMS 90). Do not try to fix it by hand in `psql`.
+
+Then open the link in a browser, as the owner. The acceptance screen asks for the invited address (spaces and case
+do not matter), a full name, a username and a password, and creates the account; then sign in.
+
+**Check, after the acceptance:** sign in at `https://platform.ask-palestine.com` with the new username and password;
+the organization is in the list and opens. As `migrator`:
+```bash
+docker exec -i platform-core-postgres-1 psql -X -U migrator -d platform -c \
+  "SELECT t.name, m.status, r.code, s.scope_mode, i.status AS invitation
+   FROM tenants t JOIN memberships m ON m.tenant_id = t.id
+   JOIN membership_roles mr ON mr.tenant_id = m.tenant_id AND mr.membership_id = m.id
+   JOIN roles r ON r.tenant_id = mr.tenant_id AND r.id = mr.role_id
+   JOIN membership_scope s ON s.tenant_id = m.tenant_id AND s.membership_id = m.id
+   JOIN invitations i ON i.tenant_id = t.id;"
+```
+→ one row: the name, `active`, `owner`, `all`, `accepted`.
+
+**Not done by this step yet (OPEN_ITEMS 89):** §5.4 also gives the new tenant its platform subscription and its
+default notification settings. Neither table exists yet; the migrations that create them will write them for this
+tenant. Nothing on the screens depends on them today.
+
+**Report back:** the four lines with the token removed, and the row from the check.
 
 ### Step 6 — backups (optional, and OFF until you enable them)
 

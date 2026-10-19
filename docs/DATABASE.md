@@ -430,11 +430,11 @@ many tenants. These tables are global because identity is shared, and login happ
 #### `invitations`
 | | |
 |---|---|
-| **Holds** | A pending offer of membership: `email`, `role_id`, `intended_scope_mode`, `token_hash` (SHA-256 of the random token — the token itself is never stored), `status` (`pending`/`accepted`/`revoked`/`expired`), `invited_by`, `expires_at` (7 days). |
+| **Holds** | A pending offer of membership: `email`, `role_id`, `intended_scope_mode`, `token_hash` (SHA-256 of the random token — the token itself is never stored), `status` (`pending`/`accepted`/`revoked`/`expired`), `invited_by`, `expires_at` (7 days). Since `0014_bootstrap_invitation.sql` (Amendment 01 §2.11) `invited_by` is nullable: `NULL` means a **bootstrap invitation** — the `owner` invitation `src/Ops create-tenant` writes for a tenant that has no user yet, with no human inviter. Code that reads `invited_by` must handle `NULL`. |
 | **FKs** | `(tenant_id, role_id) → roles` — composite, so an invitation can't carry another tenant's role. |
-| **Policies** | `invitations_tenant_read` (app); `invitations_insert` (app: needs `can_manage_members`, `invited_by` must be you, status must be `pending`, and an `all` invitation additionally needs `can_manage_scope`); `invitations_tenant_update` (app: only `pending` → `revoked`); `invitations_provisioner_select` / `_update` (acceptance). |
-| **Grants** | app `SELECT, INSERT` + `UPDATE (status)`; prov `SELECT` + `UPDATE (status)`. |
-| **Notes** | An invitation creates nothing until accepted. Acceptance is single-use: the update is `WHERE status = 'pending'` (an EF concurrency token), so two concurrent acceptances can't both succeed. The invitee's email must match (normalized). `token_hash` is masked in the audit log. |
+| **Policies** | `invitations_tenant_read` (app); `invitations_insert` (app: needs `can_manage_members`, `invited_by` must be you, status must be `pending`, and an `all` invitation additionally needs `can_manage_scope`); `invitations_tenant_update` (app: only `pending` → `revoked`); `invitations_provisioner_select` / `_update` (acceptance); `invitations_provisioner_insert` (create-tenant, since `0014`: its own tenant, `pending`, and `invited_by IS NULL` — the provisioner forges no inviter). |
+| **Grants** | app `SELECT, INSERT` + `UPDATE (status)`; prov `SELECT, INSERT` + `UPDATE (status)`. |
+| **Notes** | An invitation creates nothing until accepted. Acceptance is single-use: the update is `WHERE status = 'pending'` (an EF concurrency token), so two concurrent acceptances can't both succeed. The invitee's email must match (normalized). `token_hash` is masked in the audit log. **Why a nullable `invited_by` opens nothing to `app_user`:** `invitations_insert` requires `invited_by = app.user_id`, and `NULL = <anything>` is `NULL` — not true — so its `WITH CHECK` refuses the row, with every session variable set (`T4_BootstrapInvitationTests.AppUser_CannotWriteANullInviter_EvenWithEveryVariableSet`, beside a control that writes the same row with an inviter). The only writer of a `NULL` inviter is `invitations_provisioner_insert`, which requires one. |
 
 ### 6.3 The second axis
 
@@ -643,6 +643,11 @@ Every `*_provisioner_*` policy is `TO provisioner` and, for tenant tables, condi
 `tenant_id = app.tenant_id`. The provisioner sets `app.tenant_id` to its one target tenant before its first read, so
 even this privileged role works inside one tenant per transaction.
 
+It has three paths (Amendment 01 §5.4 amends v1.16 §4.4/3 and §4.4/5, which said two): bootstrap
+(`POST /api/provision/tenants`, Development and CI only), invitation acceptance, and the operations procedure
+`src/Ops` — so far its `create-tenant` alone, which writes the tenant, its roles from the templates and one
+bootstrap invitation (`invitations_provisioner_insert`, above).
+
 ### 7.9 Fail-safe summary
 
 | Context missing | Result for `app_user` |
@@ -673,7 +678,7 @@ policies say. Column lists in parentheses are column-level grants — `UPDATE` e
 | `membership_auth` | SELECT | INSERT | SELECT | — |
 | `membership_scope` | SELECT, UPDATE (scope_mode) | SELECT, INSERT, UPDATE (scope_mode) | — | — |
 | `scope_assignments` | SELECT, INSERT, UPDATE (active) | SELECT, UPDATE (active) | — | — |
-| `invitations` | SELECT, INSERT, UPDATE (status) | SELECT, UPDATE (status) | — | — |
+| `invitations` | SELECT, INSERT, UPDATE (status) | SELECT, INSERT, UPDATE (status) | — | — |
 | `modules` | SELECT | SELECT | — | — |
 | `permissions` | SELECT | SELECT | — | — |
 | `role_templates` | — | SELECT | — | — |
@@ -839,4 +844,5 @@ These are deliberate and tracked. Do not "fix" them in passing — each needs a 
 | Login attempt limiting | Built (Amendment 01 §5.2): an escalating delay per (username + ip) and a ceiling per ip, no lockout. The deployed numbers are still open, and the dev/CI numbers are deliberately lenient. | OPEN_ITEMS 16, 54 |
 | No audit trail for a password change | `user_password_credentials`, `users.security_stamp` and `password_reset_tokens` are all outside automatic auditing. | OPEN_ITEMS 52 |
 | `job_runner` has no grant on the catalog its policies name | Amendment 02 §5 grants it `SELECT` on `categories` and `subcategories`; `grants.json` lags that by one role until a job needs it, because v1.16 §8 and T7.4 hold `job_runner` to the active tenants. | OPEN_ITEMS 76 — the question for stage (d). |
+| A tenant from `create-tenant` has no platform subscription and no notification settings | Amendment 01 §5.4 writes both at creation; neither table exists yet. The migrations that create them backfill the existing tenants, as `0013` did for the roles. | OPEN_ITEMS 89 |
 | `POST /api/auth/password/forgot` is not built | A token can be consumed but nothing mints one: the path needs an address, and `authenticator` has no read on `persons`. | OPEN_ITEMS 53 |

@@ -32,6 +32,27 @@ public static class Bootstrap
         var tenantId = Guid.CreateVersion7();
         await ProvisionerUnitOfWork.EnterTenantAsync(db, tenantId, null, "provisioner", ct);
 
+        var ownerRole = await TenantFromTemplatesAsync(db, tenantId, request.TenantName, now, ct);
+
+        var userId = await Identities.CreateAsync(db, request.FullName, request.Email, request.Username, request.Password, now, ct);
+
+        var membershipId = Guid.CreateVersion7();
+        db.Memberships.Add(new Membership { Id = membershipId, TenantId = tenantId, UserId = userId, Status = "active", CreatedAt = now });
+        await CriticalWrite.SaveAsync(db, "memberships", ct);
+
+        MembershipParts.Add(db, tenantId, membershipId, ownerRole, "all");
+        await CriticalWrite.SaveAsync(db, "membership parts", ct);
+
+        return new BootstrapResult(tenantId, userId, membershipId);
+    }
+
+    /// <summary>
+    /// The part both tenant-creating paths share — this one and create-tenant (Amendment 01 §5.4): the tenant row, then
+    /// its roles and role permissions from the templates, each a critical write of an exact count (T4.9). Runs after
+    /// <see cref="ProvisionerUnitOfWork.EnterTenantAsync"/> named the new tenant. Returns the id of its owner role.
+    /// </summary>
+    internal static async Task<Guid> TenantFromTemplatesAsync(CoreDbContext db, Guid tenantId, string name, DateTime now, CancellationToken ct)
+    {
         // The templates — read before any write. Zero rows is the policy's silent answer to a reader it does not
         // admit: loud here (T4.9), never a tenant with no roles.
         var templates = await db.RoleTemplates.AsNoTracking().OrderBy(t => t.Code).ToListAsync(ct);
@@ -43,7 +64,7 @@ public static class Bootstrap
         if (templates.All(t => t.Code != OwnerTemplate))
             throw new RoleTemplatesUnavailableException("no owner template");
 
-        db.Tenants.Add(new Tenant { Id = tenantId, Name = request.TenantName, Status = "active", CreatedAt = now });
+        db.Tenants.Add(new Tenant { Id = tenantId, Name = name, Status = "active", CreatedAt = now });
         await CriticalWrite.SaveAsync(db, "tenants", ct);
 
         // Template-derived inserts are critical writes: rows written = templates (T4.9).
@@ -63,17 +84,7 @@ public static class Bootstrap
         await CriticalWrite.ExpectRowsAsync(CriticalWrite.SaveAsync(db, "role permissions from templates", ct), rolePermissions.Count,
             "role permissions from templates");
 
-        var userId = await Identities.CreateAsync(db, request.FullName, request.Email, request.Username, request.Password, now, ct);
-
-        var membershipId = Guid.CreateVersion7();
-        db.Memberships.Add(new Membership { Id = membershipId, TenantId = tenantId, UserId = userId, Status = "active", CreatedAt = now });
-        await CriticalWrite.SaveAsync(db, "memberships", ct);
-
-        var ownerRole = roles[templates.Single(t => t.Code == OwnerTemplate).Id].Id;
-        MembershipParts.Add(db, tenantId, membershipId, ownerRole, "all");
-        await CriticalWrite.SaveAsync(db, "membership parts", ct);
-
-        return new BootstrapResult(tenantId, userId, membershipId);
+        return roles[templates.Single(t => t.Code == OwnerTemplate).Id].Id;
     }
 }
 

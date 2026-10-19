@@ -69,7 +69,8 @@ public sealed class Invitation
     public Guid RoleId { get; set; }
     public string TokenHash { get; set; } = "";
     public string Status { get; set; } = "";
-    public Guid InvitedBy { get; set; }
+    /// <summary>The inviting user; NULL for a bootstrap invitation, which has no human inviter (Amendment 01 §2.11).</summary>
+    public Guid? InvitedBy { get; set; }
     public DateTime ExpiresAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public string IntendedScopeMode { get; set; } = "";

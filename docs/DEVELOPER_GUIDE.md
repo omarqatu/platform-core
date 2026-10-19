@@ -155,7 +155,7 @@ The code uses the platform's terms; the interface shows the glossary's terms (`w
 
 ```
 platform-core/
-├── PlatformCore.slnx              the .NET solution (5 src projects, 3 test projects)
+├── PlatformCore.slnx              the .NET solution (6 src projects, 3 test projects)
 ├── global.json                    .NET SDK 10.0.100 (rollForward: latestFeature)
 ├── docker-compose.yml             PostgreSQL 18 for CI and local runs (development passwords)
 ├── OPEN_ITEMS.md                  unfinished work, numbered; an item is removed only by the PR that closes it
@@ -181,7 +181,7 @@ platform-core/
 │   │   │   └── CoreEntities.cs               entity classes for the core tables
 │   │   ├── Http/                  UnitOfWorkMiddleware, the session cookie, endpoint metadata attributes
 │   │   ├── Identity/              Authenticator (login), PasswordHashing, EmailAddress normalization
-│   │   └── Provisioning/          Bootstrap, Acceptance, ProvisionerUnitOfWork
+│   │   └── Provisioning/          Bootstrap, Acceptance, CreateTenant, ProvisionerUnitOfWork
 │   │
 │   ├── Modules.Subscriptions/     the first module (clients + subscriptions)
 │   │   ├── SubscriptionsDbContext.cs    extends CoreDbContext with the module's two tables
@@ -199,8 +199,10 @@ platform-core/
 │   │   └── Dockerfile             builds web/ and Api into one image
 │   │
 │   ├── Worker/                    runs one background job once, then exits (scheduled externally); Dockerfile
+│   ├── Ops/                       the operations procedure (Amendment 01 §5.4): create-tenant; provisioner (+ job_runner)
+│   │                              strings only; published into the Api image under /app/ops, run as a one-shot
 │   └── Migrations/                the migration tool — the only holder of migrator's connection
-│       ├── Sql/0001…0012_*.sql    THE SCHEMA, as SQL files, applied in order
+│       ├── Sql/0001…0014_*.sql    THE SCHEMA, as SQL files, applied in order
 │       ├── Migrations/M000N_*.cs  one tiny class per SQL file
 │       ├── Program.cs             refuses to run as anyone but migrator
 │       └── Dockerfile             the one-shot migration image (the deploy runs it, then removes it)
@@ -248,9 +250,11 @@ flowchart BT
   Api --> Mod
   Worker --> Core
   Worker --> Mod
+  Ops --> Core
   Migrations --> Core
   WB[Core.WhiteBoxTests] --> Core
   WB --> Api
+  WB --> Ops
   Meas[Measurement] --> Mod
   Conf[Conformance] -. "SQL + HTTP only,<br/>no project reference" .-> Api
 ```
@@ -817,9 +821,9 @@ Effects are immediate: the member's **next request** reflects the change, becaus
 
 ## 9. Provisioning: creating tenants and accepting invitations
 
-The provisioner is the only role that writes into a tenant the caller is not a member of. It has exactly two paths,
-each one transaction, each setting `app.tenant_id` to its one target tenant before touching anything
-(`ProvisionerUnitOfWork.EnterTenantAsync`).
+The provisioner is the only role that writes into a tenant the caller is not a member of. It has three paths —
+bootstrap, acceptance, and since Amendment 01 §5.4 the operations procedure (`src/Ops`) — each one transaction, each
+setting `app.tenant_id` to its one target tenant before touching anything (`ProvisionerUnitOfWork.EnterTenantAsync`).
 
 ### Bootstrap — `POST /api/provision/tenants`
 
@@ -829,6 +833,22 @@ expected count), creates the person, user and password credential, then the memb
 
 **This route exists only in the `Development` and `CI` environments.** In any other environment it is not registered
 at all (404, T4.17). Public self-registration is outside the proof.
+
+### Create-tenant — `src/Ops` (Amendment 01 §5.4), the way in for production
+
+`Ops create-tenant --name <name> --owner-email <address>` (`Core.Provisioning.CreateTenant`): the tenant and its
+roles from the templates — the same code as bootstrap's (`Bootstrap.TenantFromTemplatesAsync`) — and **one
+invitation**: role `owner`, scope `all`, `invited_by` **NULL** (a bootstrap invitation, Amendment 01 §2.11). No
+person, user or membership: the owner accepts through the ordinary acceptance path below, which creates them, so
+consent (§0) has no exception for bootstrap. Until then the tenant has no active owner. Audited as bootstrap is:
+`actor_type` `provisioner`, no `actor_id`.
+
+The command prints the acceptance link, `<Ops:PublicOrigin>/app/invitations/accept#tenant=…&token=…` — there is no
+e-mail for it yet (OPEN_ITEMS 60) — and refuses to run without `Ops:PublicOrigin`, or with any connection string but
+`provisioner` and `job_runner`, or with one that signs in as `migrator`. `--plan` (in §5.4's signature) is refused by
+name: `plans` and `platform_subscriptions` do not exist yet, and neither does `tenant_notification_settings`, so §5.4
+is built **in part** (OPEN_ITEMS 89). `mark-paid` and `suspend-unpaid` wait for the same tables. On the server: the
+`ops` service of `deploy/docker-compose.prod.yml`, `docs/operations.md` step 5.
 
 ### Acceptance — `POST /api/invitations/accept`
 

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The operations procedure (PLATFORM_CORE Amendment 01 §5.4, D2): the provisioner's third path, with no HTTP
+       surface. It may hold two connection strings — provisioner and job_runner — and refuses to run with any other,
+       migrator's above all. Published into the Api image, under /app/ops, and run as a one-shot container
+       (docs/operations.md, step 5); never as a service. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The white-box tests run the command in-process: its guards, and create-tenant end to end. -->
+    <InternalsVisibleTo Include="Core.WhiteBoxTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Core\Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.12" />
+  </ItemGroup>
+
+</Project>

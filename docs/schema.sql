@@ -166,7 +166,7 @@ CREATE TABLE public.invitations (
     role_id uuid NOT NULL,
     token_hash text NOT NULL,
     status text NOT NULL,
-    invited_by uuid NOT NULL,
+    invited_by uuid,
     expires_at public.app_ts NOT NULL,
     created_at public.app_ts NOT NULL,
     intended_scope_mode text NOT NULL,
@@ -1222,6 +1222,13 @@ CREATE POLICY invitations_insert ON public.invitations FOR INSERT TO app_user WI
 
 
 --
+-- Name: invitations invitations_provisioner_insert; Type: POLICY; Schema: public; Owner: migrator
+--
+
+CREATE POLICY invitations_provisioner_insert ON public.invitations FOR INSERT TO provisioner WITH CHECK (((tenant_id = ( SELECT (NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid AS "nullif")) AND (status = 'pending'::text) AND (invited_by IS NULL)));
+
+
+--
 -- Name: invitations invitations_provisioner_select; Type: POLICY; Schema: public; Owner: migrator
 --
 
@@ -1925,7 +1932,7 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.clients TO app_user;
 --
 
 GRANT SELECT,INSERT ON TABLE public.invitations TO app_user;
-GRANT SELECT ON TABLE public.invitations TO provisioner;
+GRANT SELECT,INSERT ON TABLE public.invitations TO provisioner;
 
 
 --
