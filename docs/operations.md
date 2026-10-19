@@ -128,6 +128,9 @@ back** line: send those results, and anything that differed, before going on to 
   `CF-Connecting-IP` is ignored, because they are not Cloudflare. **Getting either link wrong breaks nothing you
   would notice** — the platform runs, and every user shares one address and one ceiling. Only the `auth_attempts`
   query in step 4 shows it, and its table says which link is wrong.
+  **Both this chain and the certificate depend on the same orange cloud.** The `platform` DNS record must stay
+  proxied: switched to grey (DNS only), browsers reach this server directly and reject the Cloudflare Origin
+  certificate at once — it is valid only behind Cloudflare's proxy — and nginx would see clients directly.
   **The boundary that remains:** any process on the host itself can connect to `127.0.0.1:5100` and claim an
   address — accepted, because the host is the trust boundary (its `docker` group is root anyway). And never set
   `ASPNETCORE_FORWARDEDHEADERS_ENABLED`: it trusts every peer, so Api refuses to start with it.
@@ -250,19 +253,62 @@ cd /opt/platform-core && sudo -u deployer env IMAGE_TAG=check docker compose -f 
 
 ### Step 3 — nginx
 
-1. **Compare with the existing sites first.** This repository's file is a draft whose certificate paths are
-   placeholders:
+1. **The certificate: the server's existing Cloudflare Origin certificate, nothing new.** It is a wildcard, so it
+   already covers `platform.ask-palestine.com` — no issuance, no certbot, no HTTP-01 challenge. The site file names
+   it where it is today:
+   `/home/supersetadmin/ssl/cloudflare/ask-palestine-cert.pem` and `…/ask-palestine-key.pem`. Check, rather than
+   assume, that it is the wildcard and that the key is its key:
+   ```bash
+   C=/home/supersetadmin/ssl/cloudflare
+   sudo openssl x509 -noout -subject -enddate -ext subjectAltName -in $C/ask-palestine-cert.pem
+   [ "$(sudo openssl x509 -noout -pubkey -in $C/ask-palestine-cert.pem | sha256sum)" = \
+     "$(sudo openssl pkey -pubout -in $C/ask-palestine-key.pem | sha256sum)" ] && echo "key matches"
+   ```
+   → `DNS:*.ask-palestine.com, DNS:ask-palestine.com`, an end date in the future, and `key matches`.
+
+   **Who has to read these files.** nginx's **master** process runs as root and loads every `ssl_certificate` and
+   `ssl_certificate_key` when it reads its configuration (on start and on every reload); the workers, which run as
+   `www-data`, never open them. So `www-data` does **not** need to read the key, and must not be given it. Proven
+   on nginx 1.18 (Ubuntu 22.04's) for this PR: key and certificate mode 600, owned by another user, in 700
+   directories inside a home directory, `www-data` unable to read the key — `nginx -t` passed, TLS answered, and a
+   reload worked. (The one exception is a path containing variables, loaded by the workers during the handshake;
+   ours has none.) The check that matters is therefore `nginx -t` **as root**, which is exactly what the reload
+   runs:
+   ```bash
+   sudo stat -c '%U:%G %a %n' /home/supersetadmin /home/supersetadmin/ssl $C $C/ask-palestine-cert.pem $C/ask-palestine-key.pem
+   sudo -u www-data test -r $C/ask-palestine-key.pem && echo "www-data CAN read the key" || echo "www-data cannot read the key"
+   sudo nginx -t
+   ```
+   → `nginx -t` successful. If it fails with `cannot load certificate` / `Permission denied`, root cannot read the
+   file — that happens on a home directory mounted over NFS or with `root_squash`, or under an AppArmor profile for
+   nginx; report the exact error before changing anything.
+
+   **What a home directory costs.** The key is the key of **every** `*.ask-palestine.com` site, production
+   Ask Palestine included. In a user's home it is as safe as that account: anyone who becomes `supersetadmin`, any
+   process running as it (a container started by it, a tool it runs), any backup or sync of that home directory,
+   and anyone at all if a `chmod` on the home directory ever goes wrong. If the first line above shows the key
+   readable by its group or by others (anything but `600`/`400`), or `www-data CAN read the key`, that is already
+   the exposure, today, for every site that uses it.
+
+   **The better end state — the project owner decides.** Both files in `/etc/ssl/cloudflare/`, owned by root,
+   **`600 root:root`** for the key (`644` for the certificate, which is public). Not `640 root:www-data`: since the
+   workers never read the key, giving `www-data` read access only widens who can — every site's worker, and any
+   PHP-FPM pool on this host that runs as `www-data`.
+   ```bash
+   sudo install -d -o root -g root -m 755 /etc/ssl/cloudflare
+   sudo install -o root -g root -m 644 $C/ask-palestine-cert.pem /etc/ssl/cloudflare/ask-palestine-cert.pem
+   sudo install -o root -g root -m 600 $C/ask-palestine-key.pem  /etc/ssl/cloudflare/ask-palestine-key.pem
+   ```
+   Then **every** site file that names the old paths changes to the new ones (`sudo grep -rln
+   /home/supersetadmin/ssl /etc/nginx/`), then `sudo nginx -t && sudo systemctl reload nginx`, and only after
+   every site answers, the copies in the home directory are removed (`sudo shred -u …`). Moving it for this site
+   alone leaves the key exactly as exposed as before, in two places instead of one.
+2. **Compare with the existing sites**, so this file matches them in everything but its name:
    ```bash
    ls /etc/nginx/sites-enabled/
    sudo grep -hE 'listen|ssl_certificate|include|proxy_set_header' /etc/nginx/sites-enabled/*
    ```
-   Find the Cloudflare Origin certificate the other `ask-palestine.com` sites use, and check it covers the new name:
-   ```bash
-   sudo openssl x509 -noout -ext subjectAltName -in <that certificate>
-   ```
-   It must list `*.ask-palestine.com` or `platform.ask-palestine.com`. If not, create an Origin certificate for it in
-   Cloudflare (SSL/TLS → Origin Server) and install it beside the others.
-2. **Install the site** with those paths, and anything else the existing files do differently:
+3. **Install the site**, with anything the existing files do differently:
    ```bash
    sudo cp /opt/platform-core/deploy/nginx/platform.ask-palestine.com.conf /etc/nginx/sites-available/
    sudo nano /etc/nginx/sites-available/platform.ask-palestine.com.conf
@@ -271,9 +317,9 @@ cd /opt/platform-core && sudo -u deployer env IMAGE_TAG=check docker compose -f 
    ```
    `nginx -t` must pass before the reload: a failed reload leaves the old configuration running, but a failed
    restart would take the four existing sites down with it — never `restart` here.
-3. **Cloudflare:** the `platform` DNS record proxied (orange cloud), and SSL/TLS mode "Full (strict)", as for the
+4. **Cloudflare:** the `platform` DNS record proxied (orange cloud), and SSL/TLS mode "Full (strict)", as for the
    other subdomains.
-4. **The real address** ("The client's real address" above) needs nginx's realip module, and the site file's list of
+5. **The real address** ("The client's real address" above) needs nginx's realip module, and the site file's list of
    Cloudflare ranges must be Cloudflare's current one:
    ```bash
    nginx -V 2>&1 | grep -o with-http_realip_module
@@ -360,7 +406,7 @@ never `10.213.47.1`, never a Cloudflare address.
 > |---|---|---|
 > | the phone's / laptop's own address | nothing | — |
 > | `10.213.47.1` for everyone | Api does not trust nginx: `Network__TrustedProxies__0` missing, or nginx's connections do not arrive from the network's gateway on this server | check the api container's environment (`docker inspect`), and report it — the gateway is the assumption proven only locally |
-> | a Cloudflare address (`104.…`, `172.6x.…`, `162.158.…`, `2606:4700:…`) | nginx's realip is not applied: the `set_real_ip_from` list or `real_ip_header` missing, the module absent, or the site file not the one installed | step 3, item 4 |
+> | a Cloudflare address (`104.…`, `172.6x.…`, `162.158.…`, `2606:4700:…`) | nginx's realip is not applied: the `set_real_ip_from` list or `real_ip_header` missing, the module absent, or the site file not the one installed | step 3, item 5 |
 > | `127.0.0.1` | nginx is passing its own peer — the site file's `X-Forwarded-For` line is not `$remote_addr`, or another site file answers this name | `sudo nginx -T \| grep -n -A3 'server_name platform'` |
 > | `203.0.113.99` for `spoof-test` | a client can choose its own address — the worst case | stop and report before anyone signs in |
 
