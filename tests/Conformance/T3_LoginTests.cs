@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using Npgsql;
 
 namespace Conformance;
@@ -61,6 +62,29 @@ public class T3_LoginTests
         Assert.Equal(HttpStatusCode.OK, status);
         var names = body.GetProperty("tenants").EnumerateArray().Select(t => t.GetProperty("name").GetString()).ToList();
         Assert.Equal([Seed.AlAmin, Seed.Maan], names.Order().ToList());
+    }
+
+    // OPEN_ITEMS 85: a client cannot choose the address recorded for its attempt — the limiter keys on that address
+    // (Amendment 01 §5.2). An X-Forwarded-For sent by a caller that is not a configured proxy is not believed.
+    [Fact]
+    public async Task Login_ForwardedForSentByTheClient_IsNotTheRecordedAddress()
+    {
+        const string claimed = "203.0.113.99";
+        var username = "conf-xff-" + Guid.CreateVersion7().ToString("N")[^12..];
+        using var browser = new Browser();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/auth/login")
+        {
+            Content = JsonContent.Create(new { username, password = "not-the-password" }),
+        };
+        request.Headers.Add("X-Forwarded-For", claimed);
+
+        var response = await browser.Client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(1, await Seed.CountAsMigratorAsync(
+            "SELECT count(*) FROM auth_attempts WHERE username_entered = @u", ("u", username)));
+        Assert.Equal(0, await Seed.CountAsMigratorAsync(
+            "SELECT count(*) FROM auth_attempts WHERE username_entered = @u AND ip_address = @ip", ("u", username), ("ip", claimed)));
     }
 
     // Tenant selection admits a member only: a tenant with no membership for this user → refused.

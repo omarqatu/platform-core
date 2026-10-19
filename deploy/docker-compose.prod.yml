@@ -66,6 +66,8 @@ services:
       ConnectionStrings__authenticator: Host=postgres;Port=5432;Database=platform;Username=authenticator;Password=${AUTHENTICATOR_PASSWORD:?set in deploy/.env}
       ConnectionStrings__provisioner: Host=postgres;Port=5432;Database=platform;Username=provisioner;Password=${PROVISIONER_PASSWORD:?set in deploy/.env}
       Security__AllowedOrigins__0: https://${PUBLIC_HOST}
+      # nginx's connections arrive from the egress gateway (below): X-Forwarded-For is believed from there alone.
+      Network__TrustedProxies__0: 10.213.47.1
       # Absolute: the link goes out in an e-mail (the default is relative).
       Identity__ForgotPassword__ResetLinkTemplate: https://${PUBLIC_HOST}/app/password/reset#token={token}
       # The platform's e-mail account: the provider_accounts row names "platform-email" (docs/operations.md).
@@ -127,7 +129,14 @@ networks:
   # No route out, nothing published: PostgreSQL lives here alone with its clients.
   db:
     internal: true
-  egress: {}
+  # A fixed subnet, so the address nginx reaches Api from is known: host connections to a published port arrive
+  # from this network's gateway, which Api trusts as its proxy (Network:TrustedProxies, OPEN_ITEMS 85). If it
+  # collides with a network already on the server, `up` fails loudly ("Pool overlaps") — the runbook checks first.
+  egress:
+    ipam:
+      config:
+        - subnet: 10.213.47.0/29
+          gateway: 10.213.47.1
 
 volumes:
   pgdata:

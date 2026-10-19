@@ -153,6 +153,20 @@ Closed by the password-rule PR:
   mismatch. It compares **six**, not the four this item first counted: the Arabic sentences in
   `web/locales/ar.json` carry the number too, and a drift there is wrong to Arabic users alone.
 
+Closed by the test-server deployment PR:
+- **85.** The client's address behind the proxy — raised and closed in the same PR, by the project owner's decision
+  that the nginx file is incomplete without it: the limiter keys on the address, so behind Cloudflare and nginx
+  every user would have shared one ceiling, and 50 failures by anyone would have refused every sign-in. Two links,
+  each believing only the one before it. nginx takes `CF-Connecting-IP` only from Cloudflare's published ranges
+  (`set_real_ip_from`, the list as of 2026-10-19) and **replaces** `X-Forwarded-For` with it. Api
+  (`ReverseProxy`, first in the pipeline) believes `X-Forwarded-For` only from `Network:TrustedProxies` — exact
+  addresses, never a network; the defaults' loopback trust cleared; one hop — and with none configured (development,
+  CI) reads no header at all; a malformed entry stops it from starting. On the server the proxy is the gateway of
+  Api's network, pinned to `10.213.47.0/29`. [W] `T3_ClientAddressTests` (trusted, untrusted, none, mapped IPv6,
+  one hop, the ceiling per client behind one proxy, the startup guard); [B] a client's own `X-Forwarded-For` is not
+  the recorded address. **Not proven until the runbook's step 4 is run on the server:** that nginx's connections
+  arrive from that gateway there — proven here on Docker 29 only.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -1014,23 +1028,6 @@ Closed by the password-rule PR:
 - **Why it is not dismissed as a flake:** "flake" is a conclusion about a named test, not a substitute for naming
   one. Until it has a name nobody can say whether it is a racing assertion or a real defect in what this stage
   built, and the suite it is in is the one that proves the tenant-isolation contract.
-
-### 85. Api sees nginx as every client's address — the per-IP limit becomes one shared limit
-
-- **Origin:** the test-server deployment PR, 2026-10-18. Found while designing it; not fixed there, because the fix
-  is application code and that PR is infrastructure only.
-- **The finding:** Api reads the client's address from `HttpContext.Connection.RemoteIpAddress` (the login and
-  forgot paths, `UnitOfWorkMiddleware`, provisioning, subscriptions) and does not use `ForwardedHeaders`. Behind
-  nginx — and Cloudflare before it — every request arrives from the same address, Docker's gateway. So:
-  1. the per-IP ceiling of the attempt limiter (`Identity:LoginLimits:PerIpCeiling`, 50 per 15 minutes) is **one
-     ceiling shared by every user**: 50 failed sign-ins by anyone lock out everyone, from anywhere;
-  2. `auth_attempts` and `audit_log` record that gateway as every client's address.
-- **The fix, for its own PR:** `UseForwardedHeaders` with `KnownProxies` limited to the gateway nginx connects from,
-  and nginx passing the client's address — behind Cloudflare that is `CF-Connecting-IP`, trusted only from
-  Cloudflare's published ranges (`set_real_ip_from` + `real_ip_header`). Never trust `X-Forwarded-For` from anyone
-  else: it is written by the client.
-- **Why the test server can run without it for now:** its only user is the project owner. It must be fixed before
-  anyone else signs in there.
 
 ### 86. `src/Ops` is not built — a deployed server has no first user
 

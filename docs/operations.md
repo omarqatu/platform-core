@@ -112,6 +112,20 @@ back** line: send those results, and anything that differed, before going on to 
   ufw's; a port published on `0.0.0.0` is reachable from the internet even with ufw denying it. What closes a port
   is the address it is bound to. That is why Api is published on `127.0.0.1:5100` and PostgreSQL on nothing — do
   not try to fix a published port with a ufw rule; it will look fixed and not be.
+- **The client's real address.** Api's attempt limiter keys on the client's address (Amendment 01 §5.2: a ceiling
+  per address, an escalating delay per username and address), and `auth_attempts` and `audit_log` record it.
+  Behind Cloudflare and nginx, every connection would otherwise come from one address — one ceiling for every user,
+  so 50 failures by anyone in 15 minutes would refuse every sign-in, a correct password included. So, two links,
+  each believing only the one before it:
+  1. **nginx** takes the client from `CF-Connecting-IP` **only when the connection comes from Cloudflare's
+     published ranges** (`set_real_ip_from` + `real_ip_header` in the site file), and passes it on in
+     `X-Forwarded-For`, **replacing** whatever the client sent there.
+  2. **Api** believes `X-Forwarded-For` only from the address nginx's connections arrive from — the gateway of its
+     fixed network, `10.213.47.1` (`Network:TrustedProxies`) — and reads one entry. A request from anywhere else
+     keeps its own connection's address, whatever headers it carries.
+
+  Someone reaching the server directly, past Cloudflare, is recorded under their own address: their
+  `CF-Connecting-IP` is ignored, because they are not Cloudflare. Step 4 proves the chain end to end.
 - **The `docker` group is root.** Any member of it can mount the host's filesystem into a container. `deployer` is
   in it, so the GitHub key is restricted to one forced command (step 1) — never a shell.
 - **Images are built on GitHub, never on the server.** A build there needs 2 GB+ beside production. The image
@@ -132,6 +146,15 @@ As your own administrator user, with `sudo`.
    ```
    **Check:** `docker compose version` prints v2 or later; the cgroup version is `2` (the memory limits depend on
    it). `binutils` provides `strings`, which the T0.3 scan uses.
+
+   Api's network has a fixed subnet, `10.213.47.0/29` (its gateway is the address Api trusts as nginx — "The
+   client's real address" below). Check nothing on the server uses it:
+   ```bash
+   ip route | grep -c '10\.213\.47\.'
+   docker network inspect $(docker network ls -q) --format '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}' | grep -c '10\.213\.47\.'
+   ```
+   → `0` and `0`. Anything else: report it before going on — the subnet is changed in the compose file and in
+   `Network__TrustedProxies__0` together.
 2. **The user, and the directory it owns.**
    ```bash
    sudo adduser --disabled-password --gecos "" deployer
@@ -245,6 +268,16 @@ cd /opt/platform-core && sudo -u deployer env IMAGE_TAG=check docker compose -f 
    restart would take the four existing sites down with it — never `restart` here.
 3. **Cloudflare:** the `platform` DNS record proxied (orange cloud), and SSL/TLS mode "Full (strict)", as for the
    other subdomains.
+4. **The real address** ("The client's real address" above) needs nginx's realip module, and the site file's list of
+   Cloudflare ranges must be Cloudflare's current one:
+   ```bash
+   nginx -V 2>&1 | grep -o with-http_realip_module
+   diff <( (curl -s https://www.cloudflare.com/ips-v4; echo; curl -s https://www.cloudflare.com/ips-v6; echo) | grep . | sort ) \
+        <( grep -oP 'set_real_ip_from \K[^;]+' /etc/nginx/sites-available/platform.ask-palestine.com.conf | sort ) && echo SAME
+   ```
+   → `with-http_realip_module`, then `SAME`. A difference means Cloudflare changed its list: update the site file
+   (and this repository's copy), `nginx -t`, reload. Repeat this check now and then — a range Cloudflare adds
+   later is one whose visitors would all share one address.
 
 **Check** (before the first deploy, so Api is not running yet):
 ```bash
@@ -292,6 +325,23 @@ curl -I --max-time 5 http://62.84.187.143:5100
 ```
 → refused or timed out — never an answer. And `https://platform.ask-palestine.com` in a browser shows the sign-in
 screen (and every sign-in fails: see "day one" above).
+**The client's real address, end to end.** From a phone on mobile data, open `https://platform.ask-palestine.com`,
+and sign in as `address-test` with any password (it fails: there are no users). Note the phone's public address
+(open `https://ifconfig.me` on it). Then, from a laptop, try to choose an address instead:
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://platform.ask-palestine.com/api/auth/login \
+  -H 'Origin: https://platform.ask-palestine.com' -H 'X-Requested-With: platform-web' -H 'Content-Type: application/json' \
+  -H 'X-Forwarded-For: 203.0.113.99' -H 'CF-Connecting-IP: 203.0.113.99' -d '{"username":"spoof-test","password":"x"}'
+```
+→ `401`. On the server:
+```bash
+docker exec -i platform-core-postgres-1 psql -X -At -U migrator -d platform -c \
+  "SELECT username_entered, ip_address FROM auth_attempts ORDER BY created_at DESC LIMIT 2"
+```
+→ `spoof-test` with the **laptop's** public address and `address-test` with the **phone's** — never `203.0.113.99`,
+never `10.213.47.1`, never a Cloudflare address. (`10.213.47.1` means Api is not trusting nginx — the network's
+gateway is not the address nginx arrives from; a Cloudflare address means nginx's realip is not applied.)
+
 **Report back:** all of the above, and the two durations.
 
 **The platform's e-mail account**, once, after the first deploy — the `provider_accounts` row described above,
