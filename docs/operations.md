@@ -555,6 +555,19 @@ which the image does not carry and the platform does not use. It is not an error
 > accept, and nothing removes it yet (OPEN_ITEMS 90). Keep the link out of chat messages and screenshots: whoever
 > opens it first, with the invited address, becomes the owner.
 
+**If it has been run twice, this is what you see — and it is expected, not a fault.** The owner, signed in, sees
+**one** organization: the one whose link they accepted. The database holds **two** tenants, usually with the same
+name; the earlier one has no member and one invitation, still `pending` until it turns `expired` after 7 days:
+```bash
+docker exec -i platform-core-postgres-1 psql -X -U migrator -d platform -c \
+  "SELECT t.name, t.created_at, (SELECT count(*) FROM memberships m WHERE m.tenant_id = t.id) AS members,
+          (SELECT string_agg(i.status, ',') FROM invitations i WHERE i.tenant_id = t.id) AS invitations
+   FROM tenants t ORDER BY t.created_at;"
+```
+→ the first row `0` members and `pending` (or `expired`); the second `1` member and `accepted`. Leave the first
+row as it is: nobody can see it or enter it, and removing it or re-issuing its invitation are decisions not yet
+taken (OPEN_ITEMS 90). Do not try to fix it by hand in `psql`.
+
 Then open the link in a browser, as the owner. The acceptance screen asks for the invited address (spaces and case
 do not matter), a full name, a username and a password, and creates the account; then sign in.
 

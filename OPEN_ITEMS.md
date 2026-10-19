@@ -1113,7 +1113,11 @@ Closed by the create-tenant PR:
   and the reminder job finds nothing in it.
 - **Not built:** a way to re-issue the owner invitation of an existing tenant, or to remove one that never had a
   member. Neither is in Amendment 01 §5.4; either needs a decision before it is built. Until then the runbook says
-  what is left behind (`docs/operations.md`, step 5).
+  what is left behind, and what the operator sees (`docs/operations.md`, step 5): two tenants, the first with no
+  member and a pending invitation.
+- **Left open by the project owner's decision (2026-10-19):** nothing is built for it now. A second tenant is
+  visible, recoverable by a later decision, and costs nothing while there is one user; re-issuing an invitation and
+  deleting a tenant are both new write paths the amendment does not describe.
 
 ## For the next version of the document — not for the code
 
