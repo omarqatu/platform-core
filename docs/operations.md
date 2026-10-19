@@ -204,19 +204,45 @@ As your own administrator user, with `sudo`.
    ```
    **Check:** it prints `DEPLOY FAILED: stdin must be one full commit SHA …` — not `uid=…`. The forced command ran,
    and `id` did not.
-6. **GitHub** (repository → Settings → Secrets and variables → Actions):
-   - Secret `DEPLOY_SSH_KEY`: the whole output of `sudo cat /home/deployer/github-deploy`, from
-     `-----BEGIN OPENSSH PRIVATE KEY-----` to `-----END OPENSSH PRIVATE KEY-----` inclusive.
-   - Secret `DEPLOY_HOST`: `62.84.187.143` — the IP, not the domain: the domain goes through Cloudflare's proxy,
-     which does not carry SSH. (The workflow uses port 22.)
-   - Secret `DEPLOY_USER`: `deployer`.
-   - **Variable** (the Variables tab, not Secrets) `DEPLOY_KNOWN_HOSTS`: the output of
-     ```bash
-     awk '{print "62.84.187.143", $1, $2}' /etc/ssh/ssh_host_ed25519_key.pub
-     ```
-     It is read from the server's own file, so nobody in between can substitute theirs. It is public, which is why
-     it is a variable.
-7. **Delete the private key from the server**, once the secret is saved:
+6. **GitHub — four entries: three Secrets and one Variable.** Repository → Settings → Secrets and variables →
+   Actions. The workflow reads exactly these four, and the tab matters: it reads the first three from **Secrets**
+   (`secrets.…`) and the fourth from **Variables** (`vars.…`). An entry on the wrong tab is, to the workflow, not
+   set at all.
+
+   | Name | Tab | Value |
+   |---|---|---|
+   | `DEPLOY_SSH_KEY` | **Secrets** | the whole output of `sudo cat /home/deployer/github-deploy`, from `-----BEGIN OPENSSH PRIVATE KEY-----` to `-----END OPENSSH PRIVATE KEY-----` inclusive |
+   | `DEPLOY_HOST` | **Secrets** | `62.84.187.143` — the IP, not the domain: the domain goes through Cloudflare's proxy, which does not carry SSH |
+   | `DEPLOY_USER` | **Secrets** | `deployer` |
+   | `DEPLOY_KNOWN_HOSTS` | **Variables** — not Secrets | the server's host key line, below |
+
+   **`DEPLOY_KNOWN_HOSTS`** pins the server's identity, so the workflow refuses to talk to anything else that
+   answers on that address. Produce it **on the server itself** — run there, nothing in between can substitute
+   its own key:
+   ```bash
+   ssh-keyscan -t ed25519 62.84.187.143 2>/dev/null
+   ```
+   → **one** line: `62.84.187.143 ssh-ed25519 AAAA…`. That line, and only that line, is the value.
+   `ssh-keyscan` also prints a comment line first — `# 62.84.187.143:22 SSH-2.0-OpenSSH_…` — on stderr, which
+   `2>/dev/null` drops; without it the terminal shows both, and **the comment line is not part of the value**.
+   The same line, read from the key file instead of over the network, is
+   `awk '{print "62.84.187.143", $1, $2}' /etc/ssh/ssh_host_ed25519_key.pub` (identical output, checked on
+   OpenSSH 8.9). It is a public key, which is why it is a Variable and not a Secret.
+
+   **If it was saved as a Secret** (the first deploy's failure: `variable DEPLOY_KNOWN_HOSTS is not set`): add
+   it under **Variables** with the same value, then delete the Secret of that name — a Secret named
+   `DEPLOY_KNOWN_HOSTS` is never read.
+
+   **Check:** Settings → Secrets and variables → Actions shows **three** repository secrets (`DEPLOY_HOST`,
+   `DEPLOY_SSH_KEY`, `DEPLOY_USER`) on the Secrets tab and **one** repository variable (`DEPLOY_KNOWN_HOSTS`) on the
+   Variables tab — nothing else, and nothing in the wrong tab.
+
+   **SSH from GitHub must reach the server.** The deploy connects from GitHub-hosted runners, whose addresses are
+   many and change. If port 22 is limited by source address — `sudo ufw status` listing `22` or `OpenSSH` with a
+   `from`, or a provider firewall in front of the server — the deploy fails at its SSH step with a timeout. And the
+   workflow uses port 22: `sudo sshd -T | grep -i '^port '` must say `port 22`. Report either if it differs; do
+   not open 22 wider without deciding it.
+7. **Delete the private key from the server**, once `DEPLOY_SSH_KEY` is saved:
    ```bash
    sudo shred -u /home/deployer/github-deploy && sudo rm /home/deployer/github-deploy.pub
    ```

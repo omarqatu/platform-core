@@ -131,10 +131,24 @@ jobs:
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          # Only whether a Secret of that name exists, never its value: the commonest mistake is the right value on
+          # the wrong tab, and "not set" alone does not say so.
+          KNOWN_HOSTS_SAVED_AS_SECRET: ${{ secrets.DEPLOY_KNOWN_HOSTS != '' }}
         run: |
           set -euo pipefail
           [ -n "$DEPLOY_SSH_KEY" ] || { echo "::error::secret DEPLOY_SSH_KEY is not set"; exit 1; }
-          [ -n "$DEPLOY_KNOWN_HOSTS" ] || { echo "::error::variable DEPLOY_KNOWN_HOSTS is not set"; exit 1; }
+          if [ -z "$DEPLOY_KNOWN_HOSTS" ]; then
+            if [ "$KNOWN_HOSTS_SAVED_AS_SECRET" = true ]; then
+              echo "::error::DEPLOY_KNOWN_HOSTS is saved as a Secret; this workflow reads it from Variables. Add it under Variables with the same value and delete the Secret (docs/operations.md, step 1, item 6)."
+            else
+              echo "::error::variable DEPLOY_KNOWN_HOSTS is not set (Variables tab, not Secrets; docs/operations.md, step 1, item 6)"
+            fi
+            exit 1
+          fi
+          if [ "$(grep -c . <<< "$DEPLOY_KNOWN_HOSTS")" != 1 ] || [[ "$DEPLOY_KNOWN_HOSTS" == '#'* ]]; then
+            echo "::error::DEPLOY_KNOWN_HOSTS must be the one key line ssh-keyscan prints on stdout, without its # comment line (docs/operations.md, step 1, item 6)"
+            exit 1
+          fi
           install -d -m 700 ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
