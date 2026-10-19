@@ -294,15 +294,26 @@ cd /opt/platform-core && sudo -u deployer env IMAGE_TAG=check docker compose -f 
    **`600 root:root`** for the key (`644` for the certificate, which is public). Not `640 root:www-data`: since the
    workers never read the key, giving `www-data` read access only widens who can — every site's worker, and any
    PHP-FPM pool on this host that runs as `www-data`.
+
+   > **All the sites, in one go — or not at all.** Moving the key means moving it for **every** site file that
+   > names `/home/supersetadmin/ssl/cloudflare/`, the neighbouring sites included, in one change: copy, repoint
+   > every site, `nginx -t`, reload, check every site answers, then delete the old copies. A half-move — this site
+   > repointed, the others still on the home directory — leaves the same wildcard key in **two** places with two
+   > sets of permissions to keep right, and the old copy keeps every exposure it had. That is **strictly worse**
+   > than leaving it where it is. If every site cannot be moved now, leave the key where it is.
+
+   List them first:
+   ```bash
+   sudo grep -rln /home/supersetadmin/ssl/cloudflare /etc/nginx/
+   ```
    ```bash
    sudo install -d -o root -g root -m 755 /etc/ssl/cloudflare
    sudo install -o root -g root -m 644 $C/ask-palestine-cert.pem /etc/ssl/cloudflare/ask-palestine-cert.pem
    sudo install -o root -g root -m 600 $C/ask-palestine-key.pem  /etc/ssl/cloudflare/ask-palestine-key.pem
    ```
-   Then **every** site file that names the old paths changes to the new ones (`sudo grep -rln
-   /home/supersetadmin/ssl /etc/nginx/`), then `sudo nginx -t && sudo systemctl reload nginx`, and only after
-   every site answers, the copies in the home directory are removed (`sudo shred -u …`). Moving it for this site
-   alone leaves the key exactly as exposed as before, in two places instead of one.
+   Then **every** site file in that list changes to the new paths, then `sudo nginx -t && sudo systemctl reload
+   nginx`, and only after every one of those sites answers, the copies in the home directory are removed
+   (`sudo shred -u …`).
 2. **Compare with the existing sites**, so this file matches them in everything but its name:
    ```bash
    ls /etc/nginx/sites-enabled/
