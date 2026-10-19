@@ -926,6 +926,8 @@ Closed by the test-server deployment PR:
 | **Item 68** — Check 8 | the tables carrying `scope_ref_id` | a table meant to be scoped that named its column `client_id` is not in the set at all | passing, on a table whose own prose claimed `client_scope` |
 | **Item 82** — the `[W]` capture loop (this session) | twenty runs of the suite | the Docker daemon had died, so every run was a no-op and produced no summary line; the `grep` matched nothing and the loop read empty as "not failed" | **"20 runs, all green"** — having run the suite zero times |
 | **Item 84** — `Api logs on failure` in CI | the Api container's log, unbounded | the dump buried the test output past the logs API's ~103 KB tail, so the failing test could not be named | the step **succeeded**, and the CI failure it was reporting on became unreadable |
+| **Fifth — caught before commit** (the test-server deployment PR): a `[W]` test, "`X-Forwarded-Host` is not honoured" | a request with a refused `Host` and an allowed `X-Forwarded-Host` | host filtering runs before the middleware it meant to test, so the 400 came from the filter whatever that middleware did | it would have **passed with `XForwardedHost` enabled** — seen by asking what would turn it red, and removed rather than committed |
+| **Item 88** — the documented local Conformance run, its own shape: **not a silent verifier but a baseline that is red by default** | the 238 tests, run as `DEVELOPER_GUIDE` §16 says | one test is red on `main` on every such run (`dev-up`'s Api has no interface to serve) | **"237/238 — the usual one"**: a real break in the local run looks exactly like every other run, and people who see red every day stop reading it |
 
 - **The rule: a verifier must fail when it verifies nothing, and a diagnostic must not destroy what it reports
   on.** Not warn, not report zero — fail. Passing is a
@@ -937,6 +939,9 @@ Closed by the test-server deployment PR:
      goes stale silently; a derived one grows and the assertion notices (items 61, 68).
   3. **Make "no evidence" an error.** A step that produces no output where output is the proof of work is a
      failure of the harness, and must stop the run (item 82).
+  4. **A documented baseline is green, or it is a defect.** A run that is red by default teaches its readers to
+     stop reading red; a known failure in the path the guide documents is fixed in the path (or the guide), never
+     left as "the usual one" (item 88).
 - **The fix made this session, as the pattern to copy:** the capture loop now treats a run that emits no
   `Passed!`/`Failed!` summary line as fatal — `if [ -z "$line" ]; then echo "FATAL: …"; exit 2; fi` — so a dead
   daemon stops the loop instead of being counted twenty times as a pass. Three lines, and the difference between
@@ -944,7 +949,8 @@ Closed by the test-server deployment PR:
 - **This item fixes nothing on its own.** Items 61 and 68 each hold their own fix and their own decision (68's is
   a change to the check inputs, so it is the project owner's). This exists so that whoever picks up either one —
   or writes the next check, or the next loop — finds the shape named in one place rather than meeting it a fourth
-  time as something new.
+  time as something new. **Count as of 2026-10-19: six sightings** — four in the code and CI (61, 68, 82, 84), one
+  caught before commit, and item 88.
 - **Where it is worth looking next, unaudited:** any assertion in the suites of the form "count equals N" over a
   set that can grow; any check whose input is a hand-maintained file (`grants.json`, `policy-chains.json`,
   `rls-exemptions.json`, `scope-variable-writers.json`) and which reports nothing when a table is simply absent
@@ -1058,6 +1064,8 @@ Closed by the test-server deployment PR:
 
 ### 88. One Conformance test is red on every local run the guide documents — and so nobody would see it break
 
+- **The shape it belongs to: item 83** — this is its sixth sighting, in a shape of its own: not a verifier that
+  passes on nothing, but a documented baseline that is red by default. Read 83 (its fourth rule) before fixing it.
 - **Origin:** the test-server deployment PR, 2026-10-19, asked for by the project owner while reviewing it.
 - **The finding:** `Conformance.ApiPathTests.InterfacePath_Html_TheInterface` (`GET /app/anything` as HTML → the
   interface, 200) **fails on `main` itself** (`f91ff65`, checked in a clean worktree) when Conformance runs the way
