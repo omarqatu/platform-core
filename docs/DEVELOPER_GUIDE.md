@@ -367,6 +367,8 @@ docker exec -it platform-core-dev-postgres psql -U migrator -d platform
 `src/Api/Program.cs` registers, in this order:
 
 ```
+UseClientAddress      only with Network:TrustedProxies set: X-Forwarded-For from those proxies alone → the client's
+                      address (ReverseProxy, OPEN_ITEMS 85); with none, not installed and no header is read
 UseCsrfProtection     every unsafe request: Origin + X-Requested-With, or 403 csrf_rejected — before anything else
 UseRouting
 UseWebInterface       a request no route matched: index.html for a page, or a plain 404

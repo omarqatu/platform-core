@@ -40,6 +40,38 @@ public class T3_ClientAddressTests(WhiteBoxFixture fixture)
                 e.Message.Contains(entry));
         });
 
+    // The framework's own switch installs the middleware trusting every peer: refused, not merely discouraged.
+    [Fact]
+    public Task FrameworkForwardedHeadersSwitch_ApiRefusesToStart() =>
+        InProcessApi.WithoutMigratorVariableAsync(async () =>
+        {
+            await using var api = InProcessApi.Create(null, ("FORWARDEDHEADERS_ENABLED", "true"));
+
+            var error = Assert.ThrowsAny<Exception>(() => api.Services);
+
+            Assert.Contains(Chain(error), e => e is InvalidOperationException && e.Message.Contains("FORWARDEDHEADERS_ENABLED"));
+        });
+
+    // Ordering: a trusted proxy's request is still a request — CSRF refuses it without Origin, as any other.
+    [Fact]
+    public Task FromTheProxy_CsrfStillApplies() =>
+        WithApiAsync(Proxy, async client =>
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
+            {
+                Content = JsonContent.Create(new { username = NewUsername(), password = "wrong" }),
+            };
+            request.Headers.Add(ConnectionAddress.Header, Proxy);
+            request.Headers.Add("X-Forwarded-For", Client);
+            request.Headers.Remove("Origin");
+            client.DefaultRequestHeaders.Remove("Origin");
+
+            var response = await client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.Equal("""{"error":"csrf_rejected"}""", await response.Content.ReadAsStringAsync());
+        });
+
     // No proxy configured (development, CI): the header is ignored — a client cannot choose its own address.
     [Fact]
     public Task NoProxyConfigured_TheHeaderIsIgnored() =>

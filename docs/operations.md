@@ -126,6 +126,9 @@ back** line: send those results, and anything that differed, before going on to 
 
   Someone reaching the server directly, past Cloudflare, is recorded under their own address: their
   `CF-Connecting-IP` is ignored, because they are not Cloudflare. Step 4 proves the chain end to end.
+  **The boundary that remains:** any process on the host itself can connect to `127.0.0.1:5100` and claim an
+  address — accepted, because the host is the trust boundary (its `docker` group is root anyway). And never set
+  `ASPNETCORE_FORWARDEDHEADERS_ENABLED`: it trusts every peer, so Api refuses to start with it.
 - **The `docker` group is root.** Any member of it can mount the host's filesystem into a container. `deployer` is
   in it, so the GitHub key is restricted to one forced command (step 1) — never a shell.
 - **Images are built on GitHub, never on the server.** A build there needs 2 GB+ beside production. The image
@@ -275,7 +278,10 @@ cd /opt/platform-core && sudo -u deployer env IMAGE_TAG=check docker compose -f 
    diff <( (curl -s https://www.cloudflare.com/ips-v4; echo; curl -s https://www.cloudflare.com/ips-v6; echo) | grep . | sort ) \
         <( grep -oP 'set_real_ip_from \K[^;]+' /etc/nginx/sites-available/platform.ask-palestine.com.conf | sort ) && echo SAME
    ```
-   → `with-http_realip_module`, then `SAME`. A difference means Cloudflare changed its list: update the site file
+   → `with-http_realip_module`, then `SAME`. If the server already lists Cloudflare's ranges at the `http` level
+   (`sudo grep -rn set_real_ip_from /etc/nginx/nginx.conf /etc/nginx/conf.d/`), this site's own list **replaces**
+   it for this site rather than adding to it — harmless while both are Cloudflare's full list, which is what the
+   check above proves for this one. A difference means Cloudflare changed its list: update the site file
    (and this repository's copy), `nginx -t`, reload. Repeat this check now and then — a range Cloudflare adds
    later is one whose visitors would all share one address.
 

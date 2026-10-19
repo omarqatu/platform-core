@@ -21,9 +21,20 @@ public static class ReverseProxy
 {
     public const string TrustedProxiesKey = "Network:TrustedProxies";
 
-    /// <summary>The configured proxies, checked at startup: each one IP address, written as it parses.</summary>
+    /// <summary>The framework's own switch, as ASPNETCORE_FORWARDEDHEADERS_ENABLED lands in configuration.</summary>
+    private const string FrameworkSwitchKey = "FORWARDEDHEADERS_ENABLED";
+
+    /// <summary>
+    /// The configured proxies, checked at startup: each one IP address, written as it parses. And the framework's own
+    /// switch (ASPNETCORE_FORWARDEDHEADERS_ENABLED) refused: it installs the same middleware with both trust lists
+    /// empty, which trusts every peer — any client could then choose its address.
+    /// </summary>
     public static IPAddress[] TrustedProxies(IConfiguration configuration)
     {
+        if (string.Equals(configuration[FrameworkSwitchKey], "true", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"ASPNETCORE_{FrameworkSwitchKey}=true trusts X-Forwarded-For from every peer; name the proxies in {TrustedProxiesKey} instead.");
+
         var entries = configuration.GetSection(TrustedProxiesKey).Get<string[]>()?
             .Where(e => !string.IsNullOrEmpty(e)).ToArray() ?? [];
         return entries.Select(entry =>
