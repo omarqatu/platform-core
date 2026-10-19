@@ -125,7 +125,9 @@ back** line: send those results, and anything that differed, before going on to 
      keeps its own connection's address, whatever headers it carries.
 
   Someone reaching the server directly, past Cloudflare, is recorded under their own address: their
-  `CF-Connecting-IP` is ignored, because they are not Cloudflare. Step 4 proves the chain end to end.
+  `CF-Connecting-IP` is ignored, because they are not Cloudflare. **Getting either link wrong breaks nothing you
+  would notice** — the platform runs, and every user shares one address and one ceiling. Only the `auth_attempts`
+  query in step 4 shows it, and its table says which link is wrong.
   **The boundary that remains:** any process on the host itself can connect to `127.0.0.1:5100` and claim an
   address — accepted, because the host is the trust boundary (its `docker` group is root anyway). And never set
   `ASPNETCORE_FORWARDEDHEADERS_ENABLED`: it trusts every peer, so Api refuses to start with it.
@@ -345,8 +347,22 @@ docker exec -i platform-core-postgres-1 psql -X -At -U migrator -d platform -c \
   "SELECT username_entered, ip_address FROM auth_attempts ORDER BY created_at DESC LIMIT 2"
 ```
 → `spoof-test` with the **laptop's** public address and `address-test` with the **phone's** — never `203.0.113.99`,
-never `10.213.47.1`, never a Cloudflare address. (`10.213.47.1` means Api is not trusting nginx — the network's
-gateway is not the address nginx arrives from; a Cloudflare address means nginx's realip is not applied.)
+never `10.213.47.1`, never a Cloudflare address.
+
+> **Run this query after the first deploy, every time — it is the one check that proves the whole chain.** A
+> misconfiguration here does not stop anything: the platform deploys, serves, and signs people in, while every
+> request appears to come from one place. The limiter's per-address ceiling (`Identity:LoginLimits:PerIpCeiling`,
+> 50 failures in 15 minutes) then becomes **one ceiling for every user**: once anyone's failures reach it, every
+> sign-in is refused with 429, a correct password included, and the refusals keep it there — anyone can lock
+> everyone out on purpose. What the query shows tells you which link is broken:
+>
+> | `ip_address` shows | Broken link | Fix |
+> |---|---|---|
+> | the phone's / laptop's own address | nothing | — |
+> | `10.213.47.1` for everyone | Api does not trust nginx: `Network__TrustedProxies__0` missing, or nginx's connections do not arrive from the network's gateway on this server | check the api container's environment (`docker inspect`), and report it — the gateway is the assumption proven only locally |
+> | a Cloudflare address (`104.…`, `172.6x.…`, `162.158.…`, `2606:4700:…`) | nginx's realip is not applied: the `set_real_ip_from` list or `real_ip_header` missing, the module absent, or the site file not the one installed | step 3, item 4 |
+> | `127.0.0.1` | nginx is passing its own peer — the site file's `X-Forwarded-For` line is not `$remote_addr`, or another site file answers this name | `sudo nginx -T \| grep -n -A3 'server_name platform'` |
+> | `203.0.113.99` for `spoof-test` | a client can choose its own address — the worst case | stop and report before anyone signs in |
 
 **Report back:** all of the above, and the two durations.
 

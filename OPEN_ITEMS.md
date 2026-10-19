@@ -1056,6 +1056,21 @@ Closed by the test-server deployment PR:
   (`PersistKeysToFileSystem`) on a volume that user owns; whether to encrypt them at rest is the project owner's
   decision.
 
+### 88. One Conformance test is red on every local run the guide documents — and so nobody would see it break
+
+- **Origin:** the test-server deployment PR, 2026-10-19, asked for by the project owner while reviewing it.
+- **The finding:** `Conformance.ApiPathTests.InterfacePath_Html_TheInterface` (`GET /app/anything` as HTML → the
+  interface, 200) **fails on `main` itself** (`f91ff65`, checked in a clean worktree) when Conformance runs the way
+  `docs/DEVELOPER_GUIDE.md` §16 says to — against the `scripts/dev-up.sh` stack. That stack runs Api with
+  `dotnet run`, where there is no `wwwroot` and no `Web:Root` (the interface is Vite's, on :5173), so Api answers
+  404. CI is green because CI's Api is the image, which holds the built interface. Measured locally: 237 of 238,
+  that one red, on `main` and on this PR alike.
+- **Why it matters more than one test:** everyone who runs the suite locally learns that one red is normal. The day
+  this test — or any other — breaks for real, the local run looks exactly as it always did, and only CI says so.
+- **What closes it (not done here):** the documented local path gives a green suite — for example `dev-up` building
+  the interface and starting Api with `Web__Root=web/dist` (the guide's Docker path already does this), or §16
+  naming the one step that makes it pass. Never by skipping or weakening the test.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12
