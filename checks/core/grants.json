@@ -11,7 +11,7 @@
     "membership_auth":           { "app_user": ["SELECT"], "authenticator": ["SELECT"], "provisioner": ["INSERT"] },
     "membership_scope":          { "app_user": ["SELECT"], "provisioner": ["SELECT", "INSERT"] },
     "scope_assignments":         { "app_user": ["SELECT", "INSERT"], "provisioner": ["SELECT"] },
-    "invitations":               { "app_user": ["SELECT", "INSERT"], "provisioner": ["SELECT"] },
+    "invitations":               { "app_user": ["SELECT", "INSERT"], "provisioner": ["SELECT", "INSERT"] },
     "auth_attempts":             { "authenticator": ["SELECT", "INSERT"] },
     "password_reset_tokens":     { "authenticator": ["SELECT", "INSERT"] },
     "provider_accounts":         { "app_user": ["SELECT"], "authenticator": ["SELECT"] },

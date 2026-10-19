@@ -167,6 +167,16 @@ Closed by the test-server deployment PR:
   the recorded address. **Not proven until the runbook's step 4 is run on the server:** that nginx's connections
   arrive from that gateway there — proven here on Docker 29 only.
 
+Closed by the create-tenant PR:
+- **86.** `src/Ops` is built, with `create-tenant`: a deployed server gets its first tenant and owner. The command
+  writes the tenant, its roles from the templates and one `owner` invitation with `invited_by` NULL (Amendment 01
+  §2.11, migration `0014`); the owner accepts in person through the existing path, which creates the account. It
+  runs as a one-shot container from the Api image (`/app/ops`, its own entry point; T0.3 scans all of `/app`), as
+  the `ops` service of `deploy/docker-compose.prod.yml`, with the `provisioner` string alone, and prints the
+  acceptance link on `Ops:PublicOrigin`, which it refuses to run without. The runbook's step 5 is written for it,
+  including that the link lives only in the container's output, that `--rm` destroys it, and that a lost link
+  means running the command again. **In part:** item 89.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -400,6 +410,12 @@ Closed by the test-server deployment PR:
   still requires `invited_by = app.user_id` for `app_user`. The tenant has no active owner until the invitation is
   accepted: this **amends** v1.16 §3.10 item a. Both are declared in the amendment's §0.
 - **For the migration PR, not the amendment:** any code that reads `invited_by` (display, audit) must handle `NULL`.
+- **As built (the create-tenant PR, 2026-10-19):** the owner invitation — migration `0014` (`invited_by` nullable,
+  `INSERT` for `provisioner`, `invitations_provisioner_insert` verbatim) — and `create-tenant` (item 86, closed).
+  `Invitation.InvitedBy` is `Guid?`; no code displays it, and the acceptance path reads the entity, which a
+  non-nullable property would have refused to materialize. **Still open under this item:** `mark-paid` and
+  `suspend-unpaid`, which need `platform_subscriptions` (item 89), and with them `provisioner`'s `SELECT` and
+  `UPDATE (status)` on `tenants` (Amendment 01 §3), which no built command needs yet.
 
 ### 44. Delivery channels (D3)
 
@@ -656,6 +672,8 @@ Closed by the test-server deployment PR:
 - **Also seen (the stage (a) PR, 2026-10-17):** `App.test.tsx > changing one's own password > a reload after the
   password changed elsewhere still says why` — under the full suite only, **1/20 on clean `main` and 1/20 on the
   branch**, never in 25 isolated runs of the file on either. The same pattern; reported, not changed.
+- **Also seen (the create-tenant PR, 2026-10-19):** the limiter test at `the first failure waited 2504 ms`, and
+  `2390 ms` on clean `main` in a worktree, the same run — the SDK in a container on a slow machine. Not changed.
 - **Scope:** A3's tests and the web suite, not the PR that found them. The password-rule PR reported all three
   with their provenance and changed none of them, which is why this item exists.
 
@@ -1035,20 +1053,6 @@ Closed by the test-server deployment PR:
   one. Until it has a name nobody can say whether it is a racing assertion or a real defect in what this stage
   built, and the suite it is in is the one that proves the tenant-isolation contract.
 
-### 86. `src/Ops` is not built — a deployed server has no first user
-
-- **Origin:** the test-server deployment PR, 2026-10-18. The decision is item 43's (Amendment 01 §5.4); this item is
-  that it is still unbuilt, and that a deployment now waits on it.
-- **The finding:** in Production nothing can create a tenant or a user. The bootstrap route exists in Development and
-  CI only (§4.4; `MapBootstrap`), the migrations write no tenant and no user, and the seed contract must never be
-  applied outside a test (its passwords are public). So the test server deploys, serves the sign-in screen, and
-  nobody can sign in — written as the expected day-one state in `docs/operations.md`, step 5 marked blocked.
-- **What closes it:** `src/Ops` with `create-tenant` (item 43 states what it does), run on the server as a one-shot
-  container from the Api image — its own entry point beside Api's, with the `provisioner` and `job_runner` strings
-  only, never as a running service — and the runbook's step 5 written for it. The Api `Dockerfile` will then publish
-  Ops into the same image; T0.3 keeps scanning it. Its owner invitation has no e-mail yet (item 60), so the command
-  must print the acceptance link.
-
 ### 87. The test server's Api runs as root, and its Data Protection keys sit unencrypted on a volume
 
 - **Origin:** the test-server deployment PR, 2026-10-18.
@@ -1078,6 +1082,38 @@ Closed by the test-server deployment PR:
 - **What closes it (not done here):** the documented local path gives a green suite — for example `dev-up` building
   the interface and starting Api with `Web__Root=web/dist` (the guide's Docker path already does this), or §16
   naming the one step that makes it pass. Never by skipping or weakening the test.
+
+### 89. `create-tenant` implements Amendment 01 §5.4 in part — no platform subscription, no notification settings
+
+- **Origin:** the create-tenant PR, 2026-10-19, by the project owner's decision in that PR: build the command now,
+  without the two tables it was to write, rather than widen the PR and delay the first real tenant.
+- **What §5.4 says:** `create-tenant` = bootstrap from the templates **+ `platform_subscriptions` + the default
+  `tenant_notification_settings`** + an `owner` invitation; and `[--plan trial]` in its signature.
+- **What is built:** the templates and the invitation. **What is not:** the `platform_subscriptions` row (plan
+  `trial`, `paid_until` = today + 30 — Amendment 01 §2.4), the default `tenant_notification_settings` rows
+  (Amendment 02 §4.4's numbers), and `--plan`, which the command refuses by name. None of the three tables exists
+  (`plans`, `platform_subscriptions` — M2/d; `tenant_notification_settings` — Amendment 02 stage (c)).
+- **The amendment and the code deliberately disagree until then.** This is not a reading of §5.4; it is a
+  recorded gap, and the amendment's text stands.
+- **How it closes:** the migration that creates each table **backfills every existing tenant** — the tenants
+  `create-tenant` made before it — the way `0013` gave existing tenants' roles the new permissions: the rows in the
+  same migration, then a row-count check (`DO $$ … RAISE EXCEPTION`). And in the same PR `CreateTenant` starts
+  writing the table for new tenants (with `provisioner`'s grants and policies from Amendment 01 §3, §4.1), and
+  `--plan` stops being refused. `mark-paid` and `suspend-unpaid` come with `platform_subscriptions` (item 43).
+- **What depends on it today:** nothing on the screens. `GET /api/tenant/subscription` and the settings screens are
+  not built either.
+
+### 90. A lost invitation link leaves a tenant behind with no member
+
+- **Origin:** the create-tenant PR, 2026-10-19. The runbook's instruction for a lost link, decided by the project
+  owner: run `create-tenant` again rather than hunt for the token — it is in the container's output alone, and
+  `--rm` destroys it.
+- **The consequence:** the first tenant stays: its roles, and a pending invitation no one holds the token for,
+  which expires after 7 days. It has no member, so no one sees it; `job_runner` lists it among the active tenants,
+  and the reminder job finds nothing in it.
+- **Not built:** a way to re-issue the owner invitation of an existing tenant, or to remove one that never had a
+  member. Neither is in Amendment 01 §5.4; either needs a decision before it is built. Until then the runbook says
+  what is left behind (`docs/operations.md`, step 5).
 
 ## For the next version of the document — not for the code
 

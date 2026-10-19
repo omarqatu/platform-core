@@ -24,8 +24,8 @@ public sealed record CreatedInvitation(Guid InvitationId, string Token, DateTime
 /// </summary>
 public static class MemberAdministration
 {
-    /// <summary>How long an invitation stays acceptable. Not set by the document; declared in the PR.</summary>
-    public static readonly TimeSpan InvitationLifetime = TimeSpan.FromDays(7);
+    /// <summary>How long an invitation stays acceptable: the one value both writers of an invitation use.</summary>
+    public static readonly TimeSpan InvitationLifetime = InvitationToken.Lifetime;
 
     /// <summary>The first layer: the resolved permission, checked before any command.</summary>
     public static ResolvedScope RequireManage(CoreDbContext db)

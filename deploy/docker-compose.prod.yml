@@ -1,5 +1,5 @@
-# The test server (platform.ask-palestine.com): PostgreSQL 18, Api, and two one-shots — the migration tool and the
-# Worker. Run only through /usr/local/sbin/platform-core-deploy (deploy/platform-core-deploy) or the commands in
+# The test server (platform.ask-palestine.com): PostgreSQL 18, Api, and three one-shots — the migration tool, the
+# Worker, and the operations procedure (Ops). Run only through /usr/local/sbin/platform-core-deploy (deploy/platform-core-deploy) or the commands in
 # docs/operations.md, which pass IMAGE_TAG (the deployed commit) and deploy/.env.
 #
 # The rules this file holds (docs/operations.md, "The test server"):
@@ -7,7 +7,8 @@
 #     rules below ufw, so a port published on 0.0.0.0 is open to the internet whatever ufw says. PostgreSQL has no
 #     `ports:` at all, and sits on an internal network with no route out.
 #   - No `env_file`: it would hand every service the whole .env, migrator's password included. Each service names the
-#     variables it gets. Api: app_user, authenticator, provisioner (T0.3). Worker: job_runner, app_user. The migrator
+#     variables it gets. Api: app_user, authenticator, provisioner (T0.3). Worker: job_runner, app_user. Ops:
+#     provisioner alone — §5.4 allows it job_runner too, which no built command needs yet. The migrator
 #     string reaches the "migrate" one-shot alone, which is removed when it exits (`run --rm`).
 #     PostgreSQL holds all five role passwords: db/init/00-roles.sh reads them on first init, as in development.
 #   - Memory: a spike takes our containers down, not the neighbours. mem_limit keeps it inside our own cgroup;
@@ -118,6 +119,29 @@ services:
     environment:
       ConnectionStrings__job_runner: Host=postgres;Port=5432;Database=platform;Username=job_runner;Password=${JOB_RUNNER_PASSWORD:?set in deploy/.env}
       ConnectionStrings__app_user: Host=postgres;Port=5432;Database=platform;Username=app_user;Password=${APP_USER_PASSWORD:?set in deploy/.env}
+    networks: [db]
+    mem_limit: 256m
+    memswap_limit: 256m
+    oom_score_adj: 900
+    cpus: 0.5
+    logging: *logging
+
+  # One-shot: `docker compose run --rm ops create-tenant --name … --owner-email …` (docs/operations.md, step 5).
+  # The operations procedure (Amendment 01 §5.4), from the Api image's own /app/ops — the image T0.3 already scans —
+  # with its own entry point; never a service. Its output carries the owner invitation's one-use link, and `--rm`
+  # destroys it with the container: the runbook says so.
+  ops:
+    image: ghcr.io/omarqatu/platform-core-api:${IMAGE_TAG:?the deploy passes the commit as IMAGE_TAG}
+    profiles: [ops]
+    restart: "no"
+    entrypoint: ["dotnet", "ops/Ops.dll"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__provisioner: Host=postgres;Port=5432;Database=platform;Username=provisioner;Password=${PROVISIONER_PASSWORD:?set in deploy/.env}
+      # The origin the printed link starts with; Ops refuses to run without one.
+      Ops__PublicOrigin: https://${PUBLIC_HOST:?set in deploy/.env}
     networks: [db]
     mem_limit: 256m
     memswap_limit: 256m

@@ -4,7 +4,8 @@ This project proves the tests marked **[W]** in PROOF_SPEC. When another
 implementation is evaluated against the spec, this project is not run; an
 equivalent proof is submitted in its place, as §6 describes.
 
-It references `Core` directly, and since T3 `Api` (hosted in-process for T3.6, and in T4 for T4.15 and T4.17). That is a conscious exception
+It references `Core` directly, and since T3 `Api` (hosted in-process for T3.6, and in T4 for T4.15 and T4.17), and
+`Ops` (run in-process for `create-tenant`, Amendment 01 §5.4). That is a conscious exception
 `Conformance` stays independent of `Core` (PROOF_SPEC §0 and §6), and it applies
 to this project only. `Conformance` still reaches the system through SQL and HTTP
 alone, and it still holds every [B] test.
@@ -26,6 +27,7 @@ alone, and it still holds every [B] test.
 | `T4_10_*` | T4.10 — Test 28c on the full path: bootstrap, a new-account acceptance, a departure and a return through the real EF commands → every table written, zero commands containing `RETURNING` |
 | `T4_13_*` | T4.13, the [W] half (the owner's decision): every member-management operation refused for lack of `core.members.manage` with no command sent after the unit of work's own |
 | `T4_17_*` | T4.17: `POST /provision/tenants` absent in Production and Staging (404, no route), present in Development and CI; the same detector finds the route when the guard is replaced by one that admits everything |
+| `T4_CreateTenantTests` | Amendment 01 §5.4, §2.11 — `create-tenant`, the provisioner's third path: the tenant, roles = templates with their permissions, and one pending `owner` invitation with `invited_by` NULL in scope `all` — no person, user or membership — audited as bootstrap (`provisioner`, no actor id); zero templates → loud, nothing created; the invitation accepted through the existing path → an active owner in scope `all`, with no `RETURNING` on the whole path (and read back as an entity with a NULL inviter); `src/Ops` in-process: the printed link on `Ops:PublicOrigin`, refusal with a connection string it may not hold (the `migrator` key, a foreign key, or `migrator` as the user under an allowed key), refusal without an origin, `--plan` refused by name. Seen failing: with `InvitedBy` non-nullable, and with the guard's user check removed |
 | `T4_AutomaticAuditTests` | T4.15 (v1.16 §7): every tracked write audited in its own transaction (read back before commit, rolled back with it, no audit of the audit); a write with no tenant to audit under → loud before any command; login's `last_login_at` exempt (no error, no entry); `user_password_credentials` never audited; `token_hash` kept, valued `"[masked]"` |
 | `T5_ModuleModelTests` | Test 28 (b, c) on the first module's model (T5): `SubscriptionsDbContext` extends the core's — all 21 entity types `ValueGenerated.Never`; the module's inserts send no `RETURNING` and are audited automatically |
 | `CsrfNoDatabaseCommandTests` | CSRF (OPEN_ITEMS 28, a project-owner decision, not PROOF_SPEC): a login with no `Origin`, a signed-in selection from a sibling subdomain, an acceptance with no `X-Requested-With` → 403 `csrf_rejected` and zero commands, the recorder on all four of Api's contexts; the control, the same selection with both headers, runs its commands. Api hosted in-process |

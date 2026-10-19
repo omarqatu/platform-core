@@ -27,6 +27,12 @@ public sealed class InvitationRefusedException(string code, string reason)
 /// <summary>The invitation token: random, sent to the invitee; only its hash is stored (4.5/2).</summary>
 public static class InvitationToken
 {
+    /// <summary>
+    /// How long an invitation stays acceptable. Not set by the document; declared in the PR that set it. Here, in Core,
+    /// because two paths write invitations: a member's (Api) and create-tenant's bootstrap invitation (src/Ops).
+    /// </summary>
+    public static readonly TimeSpan Lifetime = TimeSpan.FromDays(7);
+
     public static string New() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
         .TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
