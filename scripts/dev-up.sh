@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Development only: the whole stack on this machine, for manual testing in the browser.
 #   PostgreSQL 18 (a fresh container, 127.0.0.1:5432) -> migrations, then the seed contract, as migrator (as CI does)
-#   -> Api on http://127.0.0.1:5080 (its three connection strings only, never migrator's: T0.3)
+#   -> the interface built (web/dist), as the image holds it
+#   -> Api on http://127.0.0.1:5080 (its three connection strings only, never migrator's: T0.3), serving that build
 #   -> Vite dev on http://localhost:5173, proxying /api to Api.
 # Every password here is a development value (docker-compose.yml, appsettings.Development.json); never a real secret.
 # The database is recreated on every run: the seed contract runs on a clean database only.
@@ -102,13 +103,24 @@ ConnectionStrings__migrator='Host=127.0.0.1;Port=5432;Database=platform;Username
 echo "==> Seed the contract (migrator)"
 docker exec -i "$pg_container" psql -X -q -v ON_ERROR_STOP=1 -U migrator -d platform < tests/seed/seed-contract.sql
 
-# --- 4. Api: its own three connection strings (appsettings.Development.json), never migrator's (T0.3). ---
+# --- 4. The interface, built: Api serves it as the image does (Web:Root), so the documented local run proves the
+# interface path too — without it Api answers 404 there and one Conformance test is red on every run (OPEN_ITEMS
+# 88). It is a snapshot of web/ as it is now; the interface under development is Vite's, below. ---
+if [ ! -f web/node_modules/.package-lock.json ] || [ web/package-lock.json -nt web/node_modules/.package-lock.json ]; then
+  (cd web && npm ci --no-audit --no-fund)
+fi
+echo "==> Build the interface (web/dist)"
+(cd web && npm run build) > "$state/web-build.log" 2>&1 \
+  || { tail -n 30 "$state/web-build.log"; fail "the interface did not build (.dev/web-build.log)."; }
+
+# --- 5. Api: its own three connection strings (appsettings.Development.json), never migrator's (T0.3). ---
 echo "==> Api ($api_url)"
 setsid env -u ConnectionStrings__migrator -u MIGRATOR_PASSWORD \
   ASPNETCORE_ENVIRONMENT=Development \
   ASPNETCORE_URLS="$api_url" \
   Security__AllowedOrigins__0="$web_origin" \
   Session__RequireHttps=false \
+  Web__Root="$root/web/dist" \
   dotnet run --project src/Api --no-build --no-launch-profile \
   > "$state/api.log" 2>&1 < /dev/null &
 echo $! > "$state/api.pid"
@@ -120,11 +132,8 @@ for _ in $(seq 1 60); do
 done
 [ "$code" = 401 ] || { tail -n 30 "$state/api.log"; fail "Api did not start (.dev/api.log)."; }
 
-# --- 5. Vite dev on 5173, its proxy forwarding /api to Api. ---
+# --- 6. Vite dev on 5173, its proxy forwarding /api to Api. ---
 echo "==> Vite dev ($web_origin)"
-if [ ! -f web/node_modules/.package-lock.json ] || [ web/package-lock.json -nt web/node_modules/.package-lock.json ]; then
-  (cd web && npm ci --no-audit --no-fund)
-fi
 # exec: the background subshell becomes setsid itself, so $! is the new process group (dev-down.sh stops it whole).
 (cd web && API_URL="$api_url" exec setsid npm run dev > "$state/web.log" 2>&1 < /dev/null) &
 echo $! > "$state/web.pid"
@@ -139,5 +148,6 @@ cat << EOF
 
 Ready: $web_origin   (open exactly this origin; 127.0.0.1:5173 is refused by the CSRF check)
 Seed users: omar, sara, khaled, layla, rami, nour — password <username>-seed-password (test values).
-Logs: .dev/api.log, .dev/web.log.   Stop: scripts/dev-down.sh
+Api also serves the interface as built at this run ($api_url/app) — a snapshot; work against $web_origin.
+Logs: .dev/api.log, .dev/web.log, .dev/web-build.log.   Stop: scripts/dev-down.sh
 EOF

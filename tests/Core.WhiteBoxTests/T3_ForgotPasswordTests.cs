@@ -44,6 +44,7 @@ public class T3_ForgotPasswordTests(WhiteBoxFixture fixture)
     private const string Unknown = "nobody-at-all@seed.test";
 
     private const string Floor = "00:00:00.4000000";
+    private static readonly TimeSpan FloorTolerance = TimeSpan.FromMilliseconds(10);
 
     private Task<long> UnusedTokensAsync(string email) => TokensAsync(email, "AND t.used_at IS NULL");
 
@@ -167,8 +168,15 @@ public class T3_ForgotPasswordTests(WhiteBoxFixture fixture)
             var known = await MedianAsync(client, Known);
             var unknown = await MedianAsync(client, Unknown);
 
-            Assert.True(known >= floor, $"an address with an account answered in {known}, below the floor {floor}");
-            Assert.True(unknown >= floor, $"an address without one answered in {unknown}, below the floor {floor}");
+            // The floor is the evidence for item 51 — the difference below passes with no floor at all, the two
+            // paths differing by a token insert — so it stays an absolute lower bound. It is held by Task.Delay,
+            // which works in whole milliseconds on a coarse timer and so can end a few short of the Stopwatch it
+            // is measured with (OPEN_ITEMS 66: 79.8 µs short on CI; 3.4 ms at worst in a probe of HoldAsync's
+            // shape under load). The tolerance is that sleep's inexactness, not the machine's speed: load only
+            // ever adds time to a lower bound.
+            var held = floor - FloorTolerance;
+            Assert.True(known >= held, $"an address with an account answered in {known}, below the floor {floor}");
+            Assert.True(unknown >= held, $"an address without one answered in {unknown}, below the floor {floor}");
             var difference = (known - unknown).Duration();
             Assert.True(difference < floor / 2,
                 $"the two answers differ by {difference}: an account's existence is visible in the response time");

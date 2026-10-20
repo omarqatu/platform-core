@@ -34,19 +34,30 @@ public class T3_LoginLimiterTests(WhiteBoxFixture fixture)
                 await using var api = InProcessApi.Create(settings:
                 [
                     ("Identity:LoginLimits:Window", "00:15:00"),
-                    // The first failure is free, the second costs 0.6 s, and that is the cap.
+                    // The first failure is free, the second costs 2 s, and that is the cap. This test's own
+                    // number, not the deployed default (appsettings.json): it is large enough to stand out of
+                    // the hash's cost on any machine (OPEN_ITEMS 66).
                     ("Identity:LoginLimits:FreeFailures", "1"),
-                    ("Identity:LoginLimits:DelaySecondsByFailure", "0.6"),
+                    ("Identity:LoginLimits:DelaySecondsByFailure", "2"),
                     ("Identity:LoginLimits:PerIpCeiling", "3"),
                 ]).WithWebHostBuilder(web => web.ConfigureServices(services =>
                     services.AddSingleton<IStartupFilter>(new ClientAddress())));
                 using var client = api.CreateClient(new() { BaseAddress = new Uri(InProcessApi.Origin) });
 
+                // The host's first request pays for the first connection and the first JIT of the path; from an
+                // address and a username of its own, it is not the measurement and counts towards neither.
+                await FailAsync(client, username + "-warm", "10.0.0.3");
+
                 var first = await TimedFailureAsync(client, username, "10.0.0.1");
                 var second = await TimedFailureAsync(client, username, "10.0.0.1");
 
-                Assert.True(first < TimeSpan.FromMilliseconds(500), $"the first failure waited {first.TotalMilliseconds:F0} ms");
-                Assert.True(second >= TimeSpan.FromMilliseconds(500), $"the second failure waited {second.TotalMilliseconds:F0} ms");
+                // Both failures derive a password hash (210,000 PBKDF2 iterations), whose cost is the machine's,
+                // so no absolute ceiling holds on the first (OPEN_ITEMS 66: 585 ms to 2390 ms against 500). The
+                // delay is awaited after the hash, so the second is at least the delay whatever the load — a
+                // lower bound — and the escalation is the difference: the hash cancels out, the delay does not.
+                Assert.True(second >= TimeSpan.FromSeconds(2), $"the second failure waited {second.TotalMilliseconds:F0} ms");
+                Assert.True(second - first >= TimeSpan.FromSeconds(1),
+                    $"the second failure waited {second.TotalMilliseconds:F0} ms, the first {first.TotalMilliseconds:F0} ms: no escalation");
 
                 // The third failure reaches the ceiling (three failures from this address in the window): from
                 // then on the address is refused with 429 — and the refusal does not read the password, so the
@@ -93,7 +104,7 @@ public class T3_LoginLimiterTests(WhiteBoxFixture fixture)
         await using var connection = new NpgsqlConnection(fixture.MigratorConnectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
-            "DELETE FROM auth_attempts WHERE ip_address IN ('10.0.0.1', '10.0.0.2')", connection);
+            "DELETE FROM auth_attempts WHERE ip_address IN ('10.0.0.1', '10.0.0.2', '10.0.0.3')", connection);
         await command.ExecuteNonQueryAsync();
     }
 

@@ -177,6 +177,35 @@ Closed by the create-tenant PR:
   including that the link lives only in the container's output, that `--rm` destroys it, and that a lost link
   means running the command again. **In part:** item 89.
 
+Closed by the item-66/88 PR:
+- **66.** The three tests that asserted on timing, or on a render normally complete, made robust **in the test**, with
+  nothing in `src/` changed (the rule the item set). `T3_LoginLimiterTests`: the first failure had an absolute
+  500 ms ceiling against a path that derives a password hash (210,000 PBKDF2 iterations) — one assertion drifting with
+  machine load across 585–2390 ms is a threshold racing the hash, not a timing bug. It is relative now: the test's own
+  delay is 2 s (test configuration, not the deployed default), the second failure is held to at least 2 s — a lower
+  bound, which load cannot undercut, because the delay is awaited after the hash — and the escalation to
+  `second − first ≥ 1 s`, where the hash cancels out; a warm-up request from an address of its own takes the first
+  connection and JIT out of the measurement. What it trades: no absolute claim that the first failure is fast, only
+  that it is at least a second faster than the second. Under four busy loops on four cores: 10/10 red before, 10/10
+  green after. It needed item 91 first — the 2 s it configures was never applied while the sequence was a list.
+  `T3_ForgotPasswordTests`: item 51 read first, as the item asked. The relative assertion (the two medians within
+  half the floor) already existed and proves nothing about the oracle — without the floor the two paths differ by a
+  token insert and pass it anyway — so the **absolute floor stays**, the only evidence the floor works, less **10 ms**:
+  `Task.Delay` works in whole milliseconds on a coarse timer, and in `HoldAsync`'s shape 1344 of 2000 sleeps ended
+  below the floor, by 2.6 ms at worst, 3.4 ms under load. Load only ever adds time to a lower bound, so the tolerance
+  is the sleep's inexactness, not the machine's; 390 ms against a 400 ms floor tells the oracle nothing. `App.test.tsx`:
+  `probe.location` is written by an effect, so it can trail the commit that shows the new screen; the ten reads that
+  follow a navigation are inside `waitFor` (the full suite was red in 4 of 20 runs before, 0 of 20 after). The two
+  reads that assert the screen **did not** move, after a refusal, stay plain — there is no navigation to race, and a
+  `waitFor` there could only hide a flicker.
+- **88.** The documented local run is green: `scripts/dev-up.sh` builds the interface (`web/dist`) and starts Api with
+  `Web__Root` on it, as the image holds it, so Conformance on the dev-up stack goes from 245/246
+  (`InterfacePath_Html_TheInterface` red on every run) to 246/246, and the local run proves the interface path rather
+  than skipping it. What it costs: dev-up builds the interface on every run, and Api's copy on `:5080` is a snapshot of
+  `web/` at that run — the interface under development stays Vite's, on `:5173`, which dev-up says when it is ready.
+  The test was not marked image-only. `Security:AllowedOrigins` gains nothing: DEVELOPER_GUIDE §16 runs e2e on its
+  Docker path, with its own origin, not on dev-up.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -638,45 +667,6 @@ Closed by the create-tenant PR:
 - **Amendment 01 §5.1 names no status for this case**, so this is a gap in the document rather than a conflict
   with it; whether the amendment should name it is the project owner's call.
 
-### 66. Three tests assert on timing, or on a render that is normally complete — the fix is always in the test
-
-- **Origin:** the password-rule PR (OPEN_ITEMS 62), which went red three times without causing any of them.
-  **Decided by the project owner on 2026-10-17**, as a specification decision rather than tidying.
-- **It is one pattern, not three coincidences,** which is why it is one item. Each of these asserts against a
-  deadline, or against a render the system is only *usually* finished with by the time the assertion runs. A
-  separate item per flake would read as a maintenance list; named once, with the rule, it gets read and fixed
-  once.
-- **The rule: the fix is always in the test, never in production code.** A millisecond or two of tolerance
-  where the assertion is a deadline; a `waitFor` around the assertion where it is a render. No floor moves, no
-  timing code changes, nothing in `src/` is touched. Leaving them flaky is the worse option: noise teaches
-  people to ignore red, and a red signal nobody trusts is worth less than a slightly less precise one.
-
-| Test | What it asserts, and why it races | Seen as |
-|---|---|---|
-| `T3_ForgotPasswordTests.TheAnswerTakesTheSameTime_…` [W] | each answer took **at least** the floor, exactly. `UniformTiming.HoldAsync` awaits `Task.Delay(remaining)`; `Task.Delay` sits on a timer whose due time is rounded and can return a fraction of a millisecond early relative to `Stopwatch`, and the work before the handler's `Stopwatch.GetTimestamp()` does not always cover it. An exact comparison against an inexact sleep. | `answered in 00:00:00.3999202, below the floor 00:00:00.4000000` — **79.8 µs** — then passed on a re-run of the **same commit** |
-| `T3_LoginLimiterTests.TheDelayEscalates…` [W] | the first failure waited **under** 500 ms, on a path that derives a password hash (210,000 PBKDF2 iterations). A fixed threshold against work whose cost depends on the machine. | `the first failure waited 585 ms`, reproduced identically on clean `main` (`629 ms`), again at `657 ms` in the stage (b) session (item 82), and at **`802 ms` under load** there — a Conformance run on the same machine — which is the clearest evidence yet that the threshold races the machine and not the clock |
-| `App.test.tsx > a 401 during the session` (and its siblings asserting `probe.location`) | awaits `findByText(…)`, then reads `probe.location` **synchronously**. The probe is written by a render-time effect, so the message appearing and the redirect being observed are two different commits; between them the assertion reads the old path. | `expected '/app/subscriptions' to be '/login?next=%2Fapp%2Fsubscriptions'`; 20 runs gave **2/20** failures on the PR branch and **1/20** on clean `main` |
-
-- **How often it bites, measured (item 82, 2026-10-18):** the limiter test alone accounted for an intermittent
-  `[W]` failure at roughly **one run in seven** on one machine, and was caught on run 1 of a 20-run capture. That
-  is the first rate anyone has recorded for any of the three, and it is high enough that leaving it is already
-  costing red CI runs that mean nothing.
-
-- **Whoever takes `T3_ForgotPasswordTests` reads item 51 first.** That is not a courtesy reference. The floor
-  this test measures (`Identity:ForgotPassword:MinimumResponseTime`) is what stops the forgot-password
-  response time from saying whether an address has an account, and **this test is the only evidence the floor
-  works**. The tolerance is traded against exactly that evidence, so the trade should be made by someone who
-  knows what is on the other side of it. The tolerance stays far below the 400 ms the test configures and far
-  below the half-floor difference its next assertion already allows, so what item 51 is actually protected by
-  does not change.
-- **Also seen (the stage (a) PR, 2026-10-17):** `App.test.tsx > changing one's own password > a reload after the
-  password changed elsewhere still says why` — under the full suite only, **1/20 on clean `main` and 1/20 on the
-  branch**, never in 25 isolated runs of the file on either. The same pattern; reported, not changed.
-- **Also seen (the create-tenant PR, 2026-10-19):** the limiter test at `the first failure waited 2504 ms`, and
-  `2390 ms` on clean `main` in a worktree, the same run — the SDK in a container on a slow machine. Not changed.
-- **Scope:** A3's tests and the web suite, not the PR that found them. The password-rule PR reported all three
-  with their provenance and changed none of them, which is why this item exists.
-
 ## From Amendment 02 — the reminder engine (the project owner's decisions of 2026-10-17)
 
 ### 67. The classification cannot carry `tenant_id`: Check 7 against a nullable tenant column
@@ -1065,23 +1055,6 @@ Closed by the create-tenant PR:
 - **For its own PR:** run the images as the non-root `app` user (`USER $APP_UID`), with the keys' path set in code
   (`PersistKeysToFileSystem`) on a volume that user owns; whether to encrypt them at rest is the project owner's
   decision.
-
-### 88. One Conformance test is red on every local run the guide documents — and so nobody would see it break
-
-- **The shape it belongs to: item 83** — this is its sixth sighting, in a shape of its own: not a verifier that
-  passes on nothing, but a documented baseline that is red by default. Read 83 (its fourth rule) before fixing it.
-- **Origin:** the test-server deployment PR, 2026-10-19, asked for by the project owner while reviewing it.
-- **The finding:** `Conformance.ApiPathTests.InterfacePath_Html_TheInterface` (`GET /app/anything` as HTML → the
-  interface, 200) **fails on `main` itself** (`f91ff65`, checked in a clean worktree) when Conformance runs the way
-  `docs/DEVELOPER_GUIDE.md` §16 says to — against the `scripts/dev-up.sh` stack. That stack runs Api with
-  `dotnet run`, where there is no `wwwroot` and no `Web:Root` (the interface is Vite's, on :5173), so Api answers
-  404. CI is green because CI's Api is the image, which holds the built interface. Measured locally: 237 of 238,
-  that one red, on `main` and on this PR alike.
-- **Why it matters more than one test:** everyone who runs the suite locally learns that one red is normal. The day
-  this test — or any other — breaks for real, the local run looks exactly as it always did, and only CI says so.
-- **What closes it (not done here):** the documented local path gives a green suite — for example `dev-up` building
-  the interface and starting Api with `Web__Root=web/dist` (the guide's Docker path already does this), or §16
-  naming the one step that makes it pass. Never by skipping or weakening the test.
 
 ### 89. `create-tenant` implements Amendment 01 §5.4 in part — no platform subscription, no notification settings
 
