@@ -1119,6 +1119,55 @@ Closed by the create-tenant PR:
   visible, recoverable by a later decision, and costs nothing while there is one user; re-issuing an invitation and
   deleting a tenant are both new write paths the amendment does not describe.
 
+### 91. The limiter's delay sequence was not what its configuration said — the binder appends to a default array
+
+- **The shape it belongs to: item 83** — a verifier that verifies nothing. `T3_LoginLimiterTests` configured its
+  first delay as 0.6 s and asserted only "at least 500 ms", so it passed on a delay that was really 1 s, and nothing
+  anywhere checked that the configured sequence was the one in force.
+- **Origin:** the item-66 PR (2026-10-20). Raising that test's delay to 2 s left the second failure at 1224 ms: the
+  configured number was never applied.
+- **The cause:** `LoginLimits.DelaySecondsByFailure` was initialized to `[1, 2, 4, 8, 15]`, and the configuration
+  binder **appends** configured elements to an array the property already holds. Measured with the real binder
+  (`Configure<LoginLimits>`, as `Program.cs` binds it), on .NET 10:
+
+  | Configuration (all layers) | The sequence in force, before | After this item's fix |
+  |---|---|---|
+  | Deployed: `appsettings.json` `[1,2,4,8,15]` | `[1,2,4,8,15,1,2,4,8,15]` | `[1,2,4,8,15]` |
+  | Development / CI: `[1,2,4]` over `appsettings.json` | `[1,2,4,8,15,1,2,4,8,15]` | `[1,2,4]` |
+  | `T3_LoginLimiterTests`: `:0 = 0.6` over Development | `[1,2,4,8,15,0.6,2,4,8,15]` — first delay 1 s, not 0.6 | `[0.6]` (set as `"0.6"`) |
+
+- **What it meant in production:** the delay escalated 1, 2, 4, 8, 15 s, then **fell back to 1 s** and climbed again,
+  so the cap of 15 s was reached only from the tenth delayed failure on. That is not the escalating delay of
+  Amendment 01 §5.2 ("تأخيراً متصاعداً"); PROOF_SPEC v1.3 says nothing on the sequence or its cap. And any sequence
+  set at launch (items 16, 54) would have run **behind** the default's five steps — `[5, 10, 30]` would have been
+  `[1,2,4,8,15,5,10,30]`, weaker than intended on exactly the first failures. The per-address ceiling held
+  throughout; the forgot path (`DelayFor` is shared) had the same sequence.
+- **The second trap, found in the same PR:** configuration layers merge a list **index by index**. A shorter list in
+  a later layer replaces only its own indices and keeps the tail of the layer beneath: Development's `[1,2,4]` ran
+  over `appsettings.json` as `[1,2,4,8,15]`, and `[5,10,30]` set at launch by environment variables would have run as
+  `[5,10,30,8,15]` — item 54's failure, milder. **The table above is the corrected one.** The PR's first table was
+  measured with the binder alone, without the layer beneath, and gave Development/CI as `[1,2,4,8,15,1,2,4]` and the
+  test as `[1,2,4,8,15,2,2,4]`; every row here was measured through the in-process host, layers and all.
+- **Fixed (the LoginLimits binding PR), both traps at once:** the key is **one comma-separated value**,
+  `"DelaySecondsByFailure": "1,2,4,8,15"` — one key replaces cleanly in every provider, and a string has nothing to
+  append to. `EffectiveDelaySeconds()` parses it; an absent, empty or blank value (a JSON `[]` included) is the
+  default `[1,2,4,8,15]`, never "no delay", so the limiter does not fail open. Parsing is strict and **fail-closed**:
+  an empty, negative or non-numeric element, NaN or infinity, stops Api at startup (`Program.cs`) — never skipped,
+  never defaulted — and so does a sequence that does not escalate (a zero delay, or a step lower than the one before
+  it: `5,3,1`; the project owner's decision, from §5.2's "escalating"), and so does the old list shape, which would otherwise bind to nothing and silently become the
+  default. `appsettings*.json` carry the string; no workflow, deploy file or environment variable set the key.
+  **Production behaviour changes:** after the fifth delayed failure the delay stays at 15 s instead of falling to
+  1 s. **Development and CI change too:** their `"1,2,4"` now means `[1,2,4]`, a 4 s cap, as the files always said
+  (their first 40 failures are free, item 54, so no suite reaches it).
+  `[W]` `T3_LoginLimitsBindingTests` — the deployed host's sequence is exactly `[1,2,4,8,15]` with 15 s as the cap; a
+  shorter override through the same host is exactly that override, with no default in front and no tail behind;
+  absent, empty, blank and `[]` are the default; seven malformed values, two that do not escalate, and the old list
+  shape stop Api. Twelve of its thirteen cases fail on the code before the fix — the thirteenth, "empty is the
+  default", held there by accident of the append.
+- **Related:** 66 (the PR that found it, whose limiter test depends on this fix), 54 (CI does not exercise the
+  deployed numbers — which is also why this went unseen), 16 (the numbers settled at launch, now set as one value),
+  83.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12

@@ -36,7 +36,7 @@ public class T3_LoginLimiterTests(WhiteBoxFixture fixture)
                     ("Identity:LoginLimits:Window", "00:15:00"),
                     // The first failure is free, the second costs 0.6 s, and that is the cap.
                     ("Identity:LoginLimits:FreeFailures", "1"),
-                    ("Identity:LoginLimits:DelaySecondsByFailure:0", "0.6"),
+                    ("Identity:LoginLimits:DelaySecondsByFailure", "0.6"),
                     ("Identity:LoginLimits:PerIpCeiling", "3"),
                 ]).WithWebHostBuilder(web => web.ConfigureServices(services =>
                     services.AddSingleton<IStartupFilter>(new ClientAddress())));

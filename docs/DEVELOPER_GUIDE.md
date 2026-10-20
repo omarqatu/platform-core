@@ -653,7 +653,14 @@ sequenceDiagram
   delays the response by `FreeFailures`/`DelaySecondsByFailure`, **awaited after the transaction commits** and only
   on a failure. **No account lockout**: a lockout would let anyone lock out a known user. Every number lives in
   `Identity:LoginLimits` and is a marked assumption until launch; the Development and CI settings are deliberately
-  lenient, because the whole `[B]` suite comes from one address.
+  lenient, because the whole `[B]` suite comes from one address. **The delay sequence is one comma-separated value**
+  (`"DelaySecondsByFailure": "1,2,4,8,15"`, or `Identity__LoginLimits__DelaySecondsByFailure=5,10,30`), never a
+  list (OPEN_ITEMS 91): as a list it was read wrong twice — the binder appended it to the property's default, and
+  configuration layers merged it index by index, keeping the tail of a longer list beneath a shorter one. One value
+  replaces cleanly in every layer. Absent or empty means the default `[1,2,4,8,15]`, **never "no delay"**; a
+  malformed value (an empty, negative or non-numeric element) or a list in the old shape stops Api at startup, and
+  so does a sequence that does not escalate: every delay is more than zero and at least the one before it (`5,3,1`
+  and `0,1,2` are refused; `1,1,2` is allowed).
 
 ### The session cookie
 
