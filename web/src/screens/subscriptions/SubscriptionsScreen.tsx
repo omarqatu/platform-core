@@ -204,51 +204,59 @@ function SubscriptionsTable({ data: { subscriptions, clients }, actions }: { dat
   return (
     <>
       <Declaration subscriptions={subscriptions} clients={clients.visible_count} />
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">{intl.formatMessage(messages.columnService)}</th>
-            <th scope="col">{intl.formatMessage(messages.columnClient)}</th>
-            <th scope="col">{intl.formatMessage(messages.columnEndsOn)}</th>
-            <th scope="col">{intl.formatMessage(messages.columnStatus)}</th>
-            {actions && <th scope="col">{intl.formatMessage(form.columnActions)}</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {subscriptions.items.map((s) => {
-            const client = names.get(s.client_id);
-            return (
-              <tr key={s.id}>
-                <td>
-                  <bdi dir="auto">{s.service_name}</bdi>
-                </td>
-                <td>
-                  {client === undefined ? intl.formatMessage(messages.clientUnavailable) : <bdi dir="auto">{client}</bdi>}
-                </td>
-                <td className="date">
-                  <time dateTime={s.ends_on}>{formatDay(intl.formatDate, s.ends_on)}</time>
-                </td>
-                <td>
-                  <RowStatus subscription={s} today={today} />
-                </td>
-                {actions && (
-                  <td className="row-actions">
-                    {/* A cancelled or renewed subscription is not edited, renewed or cancelled: the database's own
-                        gate refuses the write, so the screen offers nothing it knows will be refused. */}
-                    {s.status === 'active' && (
-                      <>
-                        {actions.edit(s)}
-                        {actions.renew(s)}
-                        <CancelButton subscription={s} cancel={actions.cancel} />
-                      </>
-                    )}
+      <div className="data-table">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">{intl.formatMessage(messages.columnService)}</th>
+              <th scope="col">{intl.formatMessage(messages.columnClient)}</th>
+              <th scope="col">{intl.formatMessage(messages.columnEndsOn)}</th>
+              <th scope="col">{intl.formatMessage(messages.columnStatus)}</th>
+              {actions && (
+                <th scope="col" className="actions">
+                  {intl.formatMessage(form.columnActions)}
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {subscriptions.items.map((s) => {
+              const client = names.get(s.client_id);
+              return (
+                <tr key={s.id}>
+                  <td>
+                    <bdi dir="auto">{s.service_name}</bdi>
                   </td>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  <td>
+                    {client === undefined ? intl.formatMessage(messages.clientUnavailable) : <bdi dir="auto">{client}</bdi>}
+                  </td>
+                  <td className="date">
+                    <time dateTime={s.ends_on}>{formatDay(intl.formatDate, s.ends_on)}</time>
+                  </td>
+                  <td>
+                    <RowStatus subscription={s} today={today} />
+                  </td>
+                  {actions && (
+                    <td className="actions">
+                      <div className="row-actions">
+                        {/* A cancelled or renewed subscription is not edited, renewed or cancelled: the database's own
+                            gate refuses the write, so the screen offers nothing it knows will be refused. */}
+                        {s.status === 'active' && (
+                          <>
+                            {actions.edit(s)}
+                            {actions.renew(s)}
+                            <CancelButton subscription={s} cancel={actions.cancel} />
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       {subscriptions.has_more_in_scope && (
         <p className="more">{intl.formatMessage(messages.more, { shown: subscriptions.items.length })}</p>
       )}

@@ -12,20 +12,6 @@
   background: color-mix(in srgb, var(--brand) 9%, var(--surface));
 }
 
-.clients table {
-  inline-size: 100%;
-  border-collapse: collapse;
-  margin-block-start: 1rem;
-}
-
-.clients th,
-.clients td {
-  text-align: start;
-  padding-block: 0.4rem;
-  padding-inline: 0.6rem;
-  border-block-end: 1px solid var(--border);
-}
-
 /* The title and the way to a new client, on one line. */
 .clients .heading {
   display: flex;
@@ -33,26 +19,4 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-}
-
-/* Editing and disabling sit together; the second is a button that reads as a link. */
-.clients .row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
-.clients .row-actions .link {
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  color: var(--brand);
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-.clients .row-actions .link:disabled {
-  color: var(--text-muted);
-  cursor: default;
 }

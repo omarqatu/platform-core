@@ -132,37 +132,45 @@ function ClientsTable({ clients, actions }: { clients: ScopedList<ClientItem>; a
   return (
     <>
       <Declaration clients={clients} />
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">{intl.formatMessage(messages.columnName)}</th>
-            <th scope="col">{intl.formatMessage(messages.columnStatus)}</th>
-            {actions && <th scope="col">{intl.formatMessage(messages.columnActions)}</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {clients.items.map((client) => (
-            <tr key={client.id} data-client={client.id}>
-              <td>
-                <bdi dir="auto">{client.name}</bdi>
-              </td>
-              <td>
-                <Badge tone={client.is_active ? 'success' : 'neutral'}>
-                  <span data-status={client.is_active ? 'active' : 'disabled'}>
-                    {intl.formatMessage(client.is_active ? messages.statusActive : messages.statusDisabled)}
-                  </span>
-                </Badge>
-              </td>
+      <div className="data-table">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">{intl.formatMessage(messages.columnName)}</th>
+              <th scope="col">{intl.formatMessage(messages.columnStatus)}</th>
               {actions && (
-                <td className="row-actions">
-                  {actions.edit(client)}
-                  <StatusButton client={client} actions={actions} />
-                </td>
+                <th scope="col" className="actions">
+                  {intl.formatMessage(messages.columnActions)}
+                </th>
               )}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {clients.items.map((client) => (
+              <tr key={client.id} data-client={client.id}>
+                <td>
+                  <bdi dir="auto">{client.name}</bdi>
+                </td>
+                <td>
+                  <Badge tone={client.is_active ? 'success' : 'neutral'}>
+                    <span data-status={client.is_active ? 'active' : 'disabled'}>
+                      {intl.formatMessage(client.is_active ? messages.statusActive : messages.statusDisabled)}
+                    </span>
+                  </Badge>
+                </td>
+                {actions && (
+                  <td className="actions">
+                    <div className="row-actions">
+                      {actions.edit(client)}
+                      <StatusButton client={client} actions={actions} />
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {clients.has_more_in_scope && <p className="more">{intl.formatMessage(messages.more, { shown: clients.items.length })}</p>}
     </>
   );
