@@ -122,6 +122,29 @@ afterEach(() => {
 });
 
 describe('a navigation after an await: kept where the person went (guarded)', () => {
+  // Site 1, AppShell's "Switch organization" (AppShell.tsx): the person taps "Change password" in the top bar while
+  // the API forgets the organization. Without the guard they were thrown to the selection — by two navigations: the
+  // switch's own, and RequireTenant's redirect, rendered again in the tree they had left as the switch ended (both
+  // guarded now: useStayed, useStaleRender).
+  it('switching the organization: a "Change password" tapped while it switches is kept', async () => {
+    const api = fakeApi();
+    const deselect = api.hold('POST /tenants/deselect', undefined, () => (api.state.active = null));
+    renderAt('/app/subscriptions');
+    await screen.findByText('VPS');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch organization' }));
+    await waitFor(() => expect(deselect.asked()).toBe(true));
+    await moveWhileItWaits(
+      () => fireEvent.click(screen.getByRole('link', { name: 'Change password' })),
+      '/app/password/change',
+      deselect.answer,
+      () => screen.getByRole('button', { name: 'Sign out' }),
+    );
+
+    await landsOn('/app/password/change');
+    await screen.findByRole('heading', { name: 'Change your password' });
+  });
+
   // Site 4, the client form (ClientFormScreen.tsx): saved, and while it saves the person taps "Subscriptions" in the
   // sidebar. Without the guard the save took them back to the client list.
   it('saving a client: a sidebar link tapped while it saves is kept', async () => {
