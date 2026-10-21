@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import type { Lang } from '../../i18n/locale';
@@ -475,9 +475,12 @@ describe('the status filter', () => {
   function routed(initial: string) {
     const requests: string[] = [];
     let at = '';
+    let back = () => undefined as void;
     function Where() {
       const location = useLocation();
+      const navigate = useNavigate();
       at = location.pathname + location.search;
+      back = () => void navigate(-1);
       return null;
     }
     vi.stubGlobal(
@@ -506,7 +509,7 @@ describe('the status filter', () => {
         </MemoryRouter>
       </I18nProvider>,
     );
-    return { requests, at: () => at };
+    return { requests, at: () => at, back: () => back() };
   }
 
   afterEach(() => vi.unstubAllGlobals());
@@ -542,6 +545,23 @@ describe('the status filter', () => {
       '/subscriptions?limit=50',
       '/subscriptions?limit=50&status=active',
     ]);
+  });
+
+  // The choice shows at once, and the address wins again whenever it moves: after Back, the radio is the address's.
+  it('marks the choice at once, and follows the address when it moves back', async () => {
+    const { at, back } = routed('/app/subscriptions');
+    await screen.findByText('Row of active');
+    const radio = (name: string) => screen.getByRole('radio', { name }) as HTMLInputElement;
+
+    fireEvent.click(radio('Renewed'));
+    expect(radio('Renewed').checked).toBe(true);
+    await screen.findByText('Row of renewed');
+
+    act(() => back());
+    await screen.findByText('Row of active');
+    expect(at()).toBe('/app/subscriptions');
+    expect(radio('Active').checked).toBe(true);
+    expect(radio('Renewed').checked).toBe(false);
   });
 
   it('opens on the filter the address names, and shows no rows of another filter while it loads', async () => {

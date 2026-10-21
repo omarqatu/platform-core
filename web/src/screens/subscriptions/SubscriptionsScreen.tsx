@@ -269,10 +269,23 @@ const FILTER_LABEL: Record<StatusFilter, typeof messages.filterActive> = {
   all: messages.filterAll,
 };
 
-/** One choice of four, as radio buttons (the arrow keys move between them), drawn as a segmented control. */
+/**
+ * One choice of four, as radio buttons (the arrow keys move between them), drawn as a segmented control. The choice
+ * shows at once: the router renders the new address inside a transition, so a radio bound to the address alone would
+ * spring back to the old choice for a moment (the same transition as OPEN_ITEMS 94).
+ */
 function FilterControl({ filter, onFilter }: { filter: StatusFilter; onFilter?: (filter: StatusFilter) => void }) {
   const intl = useIntl();
   const name = useId();
+  // The choice made here, shown until the address moves; any move (this choice arriving, Back, a link) makes the
+  // address the choice again — reset while rendering, React's pattern for state that follows a prop.
+  const [chosen, setChosen] = useState<StatusFilter | null>(null);
+  const [seen, setSeen] = useState(filter);
+  if (seen !== filter) {
+    setSeen(filter);
+    setChosen(null);
+  }
+  const shown = chosen ?? filter;
   return (
     <fieldset className="status-filter">
       <legend>{intl.formatMessage(messages.filterLabel)}</legend>
@@ -283,9 +296,12 @@ function FilterControl({ filter, onFilter }: { filter: StatusFilter; onFilter?: 
               type="radio"
               name={name}
               value={value}
-              checked={filter === value}
+              checked={shown === value}
               disabled={!onFilter}
-              onChange={() => onFilter?.(value)}
+              onChange={() => {
+                setChosen(value);
+                onFilter?.(value);
+              }}
             />
             <span>{intl.formatMessage(FILTER_LABEL[value])}</span>
           </label>
