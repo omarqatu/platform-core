@@ -567,6 +567,52 @@ This is not a licence for bulk writes: `ExecuteUpdate` / `ExecuteDelete` stay fo
 this one table is never audited anyway (§7). Before using the pattern anywhere else, check the grant really does
 withhold `SELECT` — if the role can read the table, write it through EF like everything else.
 
+### Scope filtering, which is forbidden, and a subject constraint, which is not
+
+The rule above — the code never filters what RLS filters — is about **visibility**. It is not a ban on every
+`WHERE` that names `tenant_id`. There are two different things, and conflating them produces either a security
+hole or a wrong list:
+
+| | Scope filtering — **forbidden** | A subject constraint — **allowed** |
+|---|---|---|
+| What it does | Narrows rows the caller **must not see**, in code | Narrows rows RLS **already admits to this caller**, to the ones the query is about |
+| What happens if you delete the line | A leak | A wrong answer, visible to its own reader only |
+| Who is protected | Other tenants, other scopes | Nobody — the reader already had the right to every row |
+| Example | `.Where(c => c.TenantId == tenant)` on `clients`, instead of `tenant_isolation` | `WHERE m.tenant_id = <active>` on `memberships` |
+
+The one table where this comes up is **`memberships`**, because two *permissive* policies OR together on it:
+`membership_tenant_read` (every membership of the active tenant) and `membership_self` (the caller's own
+memberships, **in every tenant** — which is how `GET /tenants` lists the organizations a person belongs to, T3.7).
+A caller with a tenant selected therefore sees *this tenant's members, plus their own rows elsewhere*. A query
+whose subject is "the members of this organization" must say so:
+
+```csharp
+// Not the isolation — RLS is, and it is intact. The subject: this organization's members.
+// Without it, a person who belongs to two organizations appears twice in each one's list.
+var tenantId = session.Current.TenantId!.Value;
+var ordered = from m in db.Memberships where m.TenantId == tenantId ...
+```
+
+**The two places that do it**, and the only two that should: `LastMemberGuards` (in SQL, via
+`current_setting('app.tenant_id')`) and `GET /api/members`. Both carry the comment above. If a third arrives, it
+follows this table — it does not re-open the question.
+
+**Everything else on `memberships` is safe for a reason worth knowing**, because the reason is not the query:
+
+| Consumer | Why it is safe |
+|---|---|
+| `ScopeResolver` | Names `UserId` **and** `TenantId` explicitly |
+| `GET /me` | Names both, and `Status` |
+| `GET /tenants`, `TenantFanOut` | Cross-tenant **on purpose** — this is the policy's reason for existing |
+| `MemberAdministration` status/leave writes | By primary key; a row from another tenant fails the UPDATE policy, so `CriticalWrite` turns it into `403`, not a wrong write |
+| `Acceptance` (`m.UserId == userId`, no tenant named) | Runs as **`provisioner`**, whose only select policy is `tenant_id = app.tenant_id` with no self branch — so the tenant is implicit in the role, not in the query |
+| Background jobs | `job_runner` holds no grant on `memberships` at all (§3.8) |
+
+That last row is the one to watch. `Acceptance`'s query would be wrong the moment it ran as `app_user`: a
+signed-in person already a member of tenant A, accepting an invitation to tenant B, would match their A
+membership and be refused `already_member` for the wrong tenant. It is correct today because of the role it runs
+under. `T6_UnifiedViewTests` exercises that exact path (`World.JoinExistingAsync`), which is what keeps it honest.
+
 ### `Permissions.RequireAsync` — the explicit permission
 
 ```csharp
@@ -1188,8 +1234,12 @@ and a mapping here — do not return 500s for expected situations.
 | `POST /api/tenants/{id}/select` | own UoW | active membership |
 | `POST /api/tenants/deselect` | no DB | session |
 | `GET /api/me/scope` | normal | active tenant |
+| `GET /api/scope/memberships/{id}` | normal | `core.scope.manage` — a colleague's mode and **every** assignment row, withdrawn ones included (§4.8: a row is disabled, never deleted). A membership this reader cannot see is `403 not_permitted`, as a hidden client is |
 | `PUT /api/scope/memberships/{id}/mode` | normal | `core.scope.manage` |
 | `PUT /api/scope/memberships/{id}/assignments/{scopeRefId}` | normal | `core.scope.manage` |
+| `GET /api/roles` | normal | `core.members.manage` **or** `core.scope.manage` — the tenant's active roles, named from the row (`name_ar`/`name_en`, data as a category's are). No scope declaration: a closed catalogue |
+| `GET /api/members` | normal | `core.members.manage` **or** `core.scope.manage` — whoever assigns must see whom they assign to. `scope_mode` is `null` for a colleague where `membership_scope_read` admits no row, i.e. without `core.scope.manage` (§4.8/1.8) — the interface renders no column at all from that, never an empty one |
+| `GET /api/members/invitations` | normal | `core.members.manage` — never `core.scope.manage`: the addresses an organization has approached are a member-management matter. The token is **never** in this list, nor its hash |
 | `PUT /api/members/{id}/status` | normal | `core.members.manage` |
 | `POST /api/members/{id}/roles` | normal | `core.members.manage` |
 | `DELETE /api/members/{id}/roles/{roleId}` | normal | `core.members.manage` |
@@ -1197,6 +1247,20 @@ and a mapping here — do not return 500s for expected situations.
 | `POST /api/members/invitations/{id}/revoke` | normal | `core.members.manage` |
 | `POST /api/me/leave` | normal | own membership |
 | `GET /api/audit-log` | normal | `core.audit.read`, and `scope_all` (policy) |
+
+> **Two notes on the member reads** (group ب, OPEN_ITEMS 100):
+>
+> 1. **`GET /api/members` constrains `tenant_id` in the query, and that is not a filter standing in for RLS.**
+>    Two permissive policies OR together on `memberships`: `membership_tenant_read` (this tenant's) and
+>    `membership_self` (the caller's own, in *every* tenant — which is how `GET /tenants` lists the organizations a
+>    person belongs to, T3.7). Without the constraint a person who belongs to two organizations appears twice in
+>    each one's member list, their own row arriving from the other tenant. `LastMemberGuards` constrains the same
+>    table the same way, in SQL, for the same reason. No other tenant's people are ever reachable — the constraint
+>    is the list's *subject*, not its isolation.
+> 2. **The permission check on `GET /api/members` is the whole of PROOF_SPEC T8.2 for member data.** The database
+>    admits every membership of the tenant to any member of it, so an assigned member learns the organization's
+>    size the moment this endpoint answers them anything — an empty page and a bare count included. The refusal
+>    therefore carries no scope declaration. Whether the database should hold this line itself is OPEN_ITEMS 103.
 | `POST /api/provision/tenants` | provisioner | Development / CI only |
 | `POST /api/invitations/accept` | provisioner | the invitee |
 | `GET /api/subscriptions/clients` | module | `subscriptions.read` |

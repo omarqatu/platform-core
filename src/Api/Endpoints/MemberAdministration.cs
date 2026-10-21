@@ -34,6 +34,25 @@ public static class MemberAdministration
         return scope.CanManageMembers ? scope : throw new NotPermittedException(ScopeResolver.ManageMembers);
     }
 
+    /// <summary>
+    /// The first layer for the two directory reads — the member list and the role catalogue (group ب): either
+    /// management permission admits them, because whoever assigns clients must see whom they are assigning to, and
+    /// the role catalogue is what an assignment screen names its people by (the project owner's decision).
+    /// <para>
+    /// This is where PROOF_SPEC T8.2 is held for member data, and it holds alone: <c>membership_tenant_read</c>
+    /// admits every membership of the tenant to any member of it, so nothing beneath this line keeps an assigned
+    /// member from counting their colleagues. Measured on PostgreSQL 18.6, not assumed — and recorded as
+    /// OPEN_ITEMS 103, which asks whether the database should hold it instead.
+    /// </para>
+    /// </summary>
+    public static ResolvedScope RequireDirectory(CoreDbContext db)
+    {
+        var scope = db.Scope ?? throw new InvalidOperationException("No scope is resolved: no active tenant.");
+        return scope.CanManageMembers || scope.CanManageScope
+            ? scope
+            : throw new NotPermittedException(ScopeResolver.ManageMembers);
+    }
+
     public static async Task SetStatusAsync(CoreDbContext db, Guid membershipId, string status, CancellationToken ct)
     {
         RequireManage(db);
