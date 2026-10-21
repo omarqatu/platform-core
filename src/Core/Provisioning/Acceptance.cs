@@ -106,6 +106,11 @@ public static class Acceptance
         }
         else
         {
+            // No tenant predicate, on purpose: this path runs as provisioner, whose only SELECT policy on
+            // memberships is tenant-scoped with no self branch, so the tenant is implicit in the role. Move this
+            // to app_user and it breaks — a person already in one organization, accepting an invitation to
+            // another, would match the first membership and be refused already_member for the wrong tenant.
+            // T6_UnifiedViewTests' join-existing path is what catches that (DEVELOPER_GUIDE §6).
             var existing = await db.Memberships.SingleOrDefaultAsync(m => m.UserId == userId, ct);
             switch (existing?.Status)
             {

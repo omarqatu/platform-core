@@ -8,6 +8,10 @@ Every text of the interface uses these terms — the English `defaultMessage` in
 |---|---|---|
 | tenant | الجهة | Organization |
 | membership | العضوية | Membership |
+| a member | العضو | Member |
+| a disabled member | معطَّل | Disabled |
+| a member who has left | غادر | Left |
+| withdrawing an invitation | سحب الدعوة | Withdraw |
 | role | الدور | Role |
 | permission | الصلاحية | Permission |
 | scope | النطاق | Scope |

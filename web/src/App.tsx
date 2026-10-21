@@ -5,6 +5,9 @@ import { LoginScreen } from './screens/auth/LoginScreen';
 import { ClientFormScreen, EDIT_PATH as CLIENT_EDIT_PATH, NEW_PATH as CLIENT_NEW_PATH } from './screens/clients/ClientFormScreen';
 import { ClientsScreen, LIST_PATH as CLIENTS_PATH } from './screens/clients/ClientsScreen';
 import { AcceptInvitationScreen } from './screens/invitations/AcceptInvitationScreen';
+import { InviteMemberScreen } from './screens/members/InviteMemberScreen';
+import { MemberRolesScreen } from './screens/members/MemberRolesScreen';
+import { INVITE_PATH as MEMBER_INVITE_PATH, LIST_PATH as MEMBERS_PATH, MembersScreen } from './screens/members/MembersScreen';
 import { ChangePasswordScreen, CHANGE_PATH } from './screens/password/ChangePasswordScreen';
 import { ForgotPasswordScreen, FORGOT_PATH } from './screens/password/ForgotPasswordScreen';
 import { ResetPasswordScreen } from './screens/password/ResetPasswordScreen';
@@ -52,6 +55,12 @@ export function App() {
           <Route path={CLIENTS_PATH} element={<ClientsScreen />} />
           <Route path={CLIENT_NEW_PATH} element={<ClientFormScreen key="create" mode="create" />} />
           <Route path={CLIENT_EDIT_PATH} element={<ClientFormScreen key="edit" mode="edit" />} />
+          {/* The member screens (OPEN_ITEMS 100). Each is guarded by its endpoint's permission, not by the
+              router: the sidebar hides the link, and whoever reaches the address anyway meets the server's
+              refusal through ForbiddenScreen. */}
+          <Route path={MEMBERS_PATH} element={<MembersScreen />} />
+          <Route path={MEMBER_INVITE_PATH} element={<InviteMemberScreen />} />
+          <Route path={`${MEMBERS_PATH}/:membershipId/roles`} element={<MemberRolesScreen />} />
         </Route>
       </Route>
       <Route path="*" element={<NotFoundScreen />} />
