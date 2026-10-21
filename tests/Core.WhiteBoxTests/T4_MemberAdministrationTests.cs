@@ -2,6 +2,8 @@ using Api.Endpoints;
 using Core.Data;
 using Npgsql;
 
+using Core.Provisioning;
+
 namespace Core.WhiteBoxTests;
 
 // PROOF_SPEC v1.3 T4.13 [W] (the owner's decision: the API refusal is [B], in Conformance; the absence of any database
@@ -11,6 +13,13 @@ namespace Core.WhiteBoxTests;
 [Collection(WhiteBoxCollection.Name)]
 public class T4_MemberAdministrationTests(WhiteBoxFixture fixture)
 {
+
+    /// <summary>
+    /// The invitation limits (OPEN_ITEMS 106), at their configured defaults. A signature change, not a change of
+    /// claim: these tests create one or two invitations, far under 10 per inviter and 30 per organization, and
+    /// the permission check still runs before the counts — so T4.13's "refused with no database command" holds.
+    /// </summary>
+    private static readonly InvitationSettings Limits = new();
     public static TheoryData<string> Operations => new() { "status", "add-role", "remove-role", "invite", "revoke" };
 
     [Theory]
@@ -35,7 +44,7 @@ public class T4_MemberAdministrationTests(WhiteBoxFixture fixture)
                 "status" => MemberAdministration.SetStatusAsync(c, layla, "disabled", ct),
                 "add-role" => MemberAdministration.AddRoleAsync(c, session, layla, viewer, ct),
                 "remove-role" => MemberAdministration.RemoveRoleAsync(c, layla, viewer, ct),
-                "invite" => MemberAdministration.InviteAsync(c, session, "t4.13@white-box.test", viewer, "assigned", ct),
+                "invite" => MemberAdministration.InviteAsync(c, session, "t4.13@white-box.test", viewer, "assigned", Limits, ct),
                 _ => MemberAdministration.RevokeAsync(c, Guid.CreateVersion7(), ct),
             };
         }));

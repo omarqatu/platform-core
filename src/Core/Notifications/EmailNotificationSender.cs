@@ -80,6 +80,10 @@ public sealed class EmailNotificationSender(
         {
             IsBodyHtml = false,
         };
+        // Dormant today: Gmail SMTP rewrites no links, so no caller sets a header. Applied here rather than left
+        // to each caller so that a provider change is one configuration decision and not a code hunt.
+        foreach (var (name, value) in message.Headers ?? new Dictionary<string, string>())
+            mail.Headers.Add(name, value);
         using var client = new SmtpClient(credentials.Host, credentials.Port)
         {
             EnableSsl = credentials.UseStartTls,

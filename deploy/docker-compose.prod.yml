@@ -71,6 +71,9 @@ services:
       Network__TrustedProxies__0: 10.213.47.1
       # Absolute: the link goes out in an e-mail (the default is relative).
       Identity__ForgotPassword__ResetLinkTemplate: https://${PUBLIC_HOST}/app/password/reset#token={token}
+      # The invitation e-mail's acceptance link. Api refuses to start without it (unlike the template above,
+      # whose default is a bare path — OPEN_ITEMS 105).
+      Invitations__PublicOrigin: https://${PUBLIC_HOST:?set in deploy/.env}
       # The platform's e-mail account: the provider_accounts row names "platform-email" (docs/operations.md).
       Notifications__Email__Providers__platform-email__Host: ${SMTP_HOST:?set in deploy/.env}
       Notifications__Email__Providers__platform-email__Port: ${SMTP_PORT:?set in deploy/.env}

@@ -28,6 +28,11 @@ public static class InProcessApi
             foreach (var role in new[] { "app_user", "authenticator", "provisioner" })
                 web.UseSetting($"ConnectionStrings:{role}", WhiteBoxFixture.ConnectionString(role));
             web.UseSetting("Security:AllowedOrigins:0", Origin);
+            // Api refuses to start without an origin for the invitation link (OPEN_ITEMS 60, 105), the way it
+            // refuses without an allowed origin above. Supplied here, for the same reason: it is a condition of
+            // hosting Api at all, not the subject of any test that hosts it. The guard's own proof is
+            // InvitationEmailTests, which asserts the refusal on every value that is not an origin.
+            web.UseSetting("Invitations:PublicOrigin", Origin);
             foreach (var (key, value) in settings)
                 web.UseSetting(key, value);
         });
