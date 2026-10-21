@@ -136,4 +136,25 @@ describe('a navigation after an await: kept where the person went (guarded)', ()
     await landsOn('/app/subscriptions');
     await screen.findByText('VPS');
   });
+
+  // Site 5, the subscription form (SubscriptionFormScreen.tsx): an edit saved, and while it saves the person taps
+  // "Clients". Without the guard the save took them back to the subscription list.
+  it('saving a subscription: a sidebar link tapped while it saves is kept', async () => {
+    const api = fakeApi();
+    const save = api.hold('PUT /subscriptions/s1');
+    renderAt('/app/subscriptions/s1/edit');
+    await screen.findByDisplayValue('VPS');
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(save.asked()).toBe(true));
+
+    await moveWhileItWaits(
+      () => fireEvent.click(screen.getByRole('link', { name: 'Clients' })),
+      '/app/clients',
+      save.answer,
+      () => screen.getByRole('heading', { name: 'Edit subscription' }),
+    );
+
+    await landsOn('/app/clients');
+    await screen.findByText('Nour Co');
+  });
 });

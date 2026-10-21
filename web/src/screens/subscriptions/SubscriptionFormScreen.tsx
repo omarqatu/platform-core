@@ -6,6 +6,7 @@ import { DateField } from '../../components/DateField';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { errorMessage } from '../../i18n/apiErrors';
 import { useLocale } from '../../i18n/I18nProvider';
+import { useStayed } from '../../navigation/useStayed';
 import { useSession } from '../../session/SessionProvider';
 import { ForbiddenScreen, NotFoundScreen } from '../status/StatusScreens';
 import { messages } from './formMessages';
@@ -119,6 +120,7 @@ function SubscriptionForm({ mode, data, onRefusal }: { mode: Mode; data: FormDat
   const intl = useIntl();
   const { lang } = useLocale();
   const navigate = useNavigate();
+  const begin = useStayed();
   const [values, setValues] = useState<FormValues>(data.values);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -150,10 +152,12 @@ function SubscriptionForm({ mode, data, onRefusal }: { mode: Mode; data: FormDat
     }
     setPending(true);
     setRefusal(null);
+    // Back to the list once saved — unless the person has gone somewhere else meanwhile (navigation/useStayed).
+    const stayed = begin();
     try {
       if (mode === 'create') await request('POST', '/subscriptions', toBody(values, mode));
       else await request('PUT', `/subscriptions/${data.id}`, toBody(values, mode));
-      navigate(LIST_PATH);
+      if (stayed()) navigate(LIST_PATH);
     } catch (e) {
       if (isAbort(e)) return;
       const code = e instanceof ApiError ? e.code : null;
