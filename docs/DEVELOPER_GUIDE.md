@@ -1334,7 +1334,9 @@ essentials:
   ISO by the HTML standard). Where `showPicker()` is missing or refused, that date input lies transparent over the
   button and takes the tap itself. **The native field is never what the user reads:** it draws in the browser's own
   format and language, not the page's (Chromium: `2027/03/07`, an Arabic placeholder on an English page). How iOS
-  Safari draws its picker is unverified (OPEN_ITEMS 97).
+  Safari draws its picker is unverified (OPEN_ITEMS 97). **Known limit (OPEN_ITEMS 99):** every edit is reformatted
+  whole, so an edit inside the text (a digit changed in the middle) puts the caret at the end; typing, deleting and
+  pasting at the end, the usual ways, are unaffected.
 - **Renewing and cancelling** (Amendment 01 §2.9): an active row's menu offers edit, renew and cancel; once its end
   date has passed (`subscriptionStatus`, from `ends_on` — the row stays `active` after it ends) renew comes first and
   the row says "Expired since yyyy-MM-dd"; a row that has left `active` has no menu and says why ("Renewed, no

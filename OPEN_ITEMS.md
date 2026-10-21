@@ -1240,6 +1240,19 @@ Closed by the list-filter-dates PR:
 - **Not done here:** the PR changes no screenshot. Remaking them is the same hand work as the first set, in both
   languages, and the client and password screens have none yet either (§15).
 
+### 99. DateField: an edit inside the date puts the caret at the end
+
+- **Origin:** the list-filter-dates PR (2026-10-21), a known limit of item 6, recorded by the project owner's
+  decision.
+- **What happens:** `typeDay` reformats the whole text on every edit (the digits, then the hyphens written back), and
+  React sets the new value, so the browser moves the caret to the end. Changing a digit in the middle — the month of
+  `2027-03-07` — works, and leaves the caret after the day; the next key lands there, not where the user was.
+- **What is unaffected:** typing from empty, deleting from the end, pasting a whole day, and the picker — the usual
+  ways. Nothing wrong is saved: the text is checked (`isDay`) before it is sent, and the server checks it again.
+- **What would close it:** keep the caret's place across the reformat — count the digits before the caret, and put
+  the caret after the same number of digits in the new text (`setSelectionRange` after the render). A vitest typing
+  into the middle, and the same in `list-filter-dates.spec.ts` › 3.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12
