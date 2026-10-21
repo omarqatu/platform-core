@@ -28,6 +28,18 @@ export function TenantSelectScreen() {
   const [entering, setEntering] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const autoEntered = useRef(false);
+  // Whether the user is still here (OPEN_ITEMS 94). An entry that answers after the user has gone somewhere else — a
+  // link in the shell, the browser's back — must not take them back. Two signals, because one is late: the router
+  // renders a new location inside a transition, so for a moment the user has navigated (the address has changed, at
+  // once) while this screen is still mounted; and the address is not the router's in memory (tests), where unmounting
+  // is the signal.
+  const here = useRef(true);
+  useEffect(() => {
+    here.current = true;
+    return () => {
+      here.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const abort = new AbortController();
@@ -39,13 +51,16 @@ export function TenantSelectScreen() {
   }, []);
 
   const enter = async (tenant: TenantChoice) => {
+    const from = window.location.href;
+    const stayed = () => here.current && window.location.href === from;
     setEntering(tenant.tenant_id);
     setError(null);
     try {
       await selectTenant(tenant.tenant_id);
-      navigate(next ?? '/', { replace: true });
+      // The organization is entered either way; where the user goes next is theirs if they have already gone.
+      if (stayed()) navigate(next ?? '/', { replace: true });
     } catch (e) {
-      if (isAbort(e)) return;
+      if (isAbort(e) || !stayed()) return;
       setError(intl.formatMessage(errorMessage(e instanceof ApiError ? e.code : null)));
       setEntering(null);
     }

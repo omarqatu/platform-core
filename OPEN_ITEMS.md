@@ -222,6 +222,19 @@ Closed by the row-actions PR:
   actions cell on one line, its own row's, in reach at phone width — the `.data-table` pattern) and item 3 (the
   actions by the row's state), in the same PR, because all three live in the same cell.
 
+Closed by the org-entry-race PR:
+- **94.** Entering the only organization no longer overrides a navigation the user already made. After signing in, a
+  single organization is entered automatically, and its `navigate('/')` used to land on top of anything the user did
+  meanwhile ("Change password" in the shell), taking them to the list. `TenantSelectScreen` now navigates after the
+  entry only if the user is still there: still mounted, and the address unchanged since the entry began. **Two signals,
+  because the first alone was not enough:** `BrowserRouter` (react-router 8) renders a location change inside
+  `startTransition`, so the address changes at once while the old screen stays mounted for a moment — the
+  unmount-only version of the fix still lost the click 2 of 20 times; in a `MemoryRouter` the address never changes
+  and unmounting is the signal. The organization is entered either way. Proven: a vitest that holds the selection open
+  and clicks while it waits (lost 10/10 on the old code, kept 10/10 now — on `MemoryRouter`, so it proves the unmount
+  path); on the §16 Docker path `password.spec.ts` › "4. change" 4/20 red on `main` (`fb54f74`) and 20/20 green with
+  the fix, the probe that clicks at once 0 lost in 40, and the full e2e 25/25. The password test itself is unchanged.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -1167,27 +1180,6 @@ Closed by the row-actions PR:
 - **What closes it:** a one-file fix in `AppShell.css` at phone width, its own PR (`fix/shell-overflow`), with a 390 px
   before and after in both languages. By the project owner's decision, after the row-actions PR.
 
-### 94. Entering the only organization overrides a navigation the user already made
-
-- **Origin:** the row-actions PR (2026-10-21), through an e2e that lost it.
-- **The finding:** a user with one organization is entered into it automatically after signing in (`/organizations`,
-  then `POST /tenants/{id}/select`, then `GET /me`, then a navigation to `/`). A click made in the shell during those
-  few hundred milliseconds — "Change password" — navigates, and then the entry's own navigation lands on top of it
-  and takes the user to `/app/subscriptions`. Recorded sequence (ms after loading `/login`): `628 nav /organizations`,
-  `664 POST /tenants/…/select`, `685 select 204`, `703 nav /app/password/change` (the user's click), `704 /me 200`,
-  `715 nav /`, `722 nav /app/subscriptions`. The click is lost.
-- **On `main` too:** the same probe (sign in, click "Change password" at once) lost it on `main`'s interface at run 5
-  of 25. It is an existing bug in the app, not in the PR that found it.
-- **How it showed:** `password.spec.ts` › "4. change: this session survives; every other session of the same user
-  ends" clicks "Change password" straight after signing in (line 107) without waiting for the landing page. On the
-  §16 Docker path it lost 4 of 20 runs with the row-actions branch's interface and 0 of 20 with `main`'s, on the same
-  Api. **Inference, not measured:** the branch's larger bundle shifts when the link becomes clickable, into the
-  window; the bug is the same either way.
-- **Not done:** the test is not changed — a wait there would hide the bug a person would meet. **Decided by the
-  project owner:** fixed in the app in its own PR, from a fresh `main`, right after the row-actions PR, because until
-  then CI's `proof` check can lose that test about one run in five. The fix: the automatic entry does not navigate
-  when the user has navigated since it began.
-
 ### 95. The lists' columns are too tight on a phone, and the ISO date will tighten them further
 
 - **Origin:** the row-actions PR (2026-10-21), the project owner's note while reviewing it.
@@ -1199,6 +1191,20 @@ Closed by the row-actions PR:
   removes the date's wrapping and takes its width from the other columns, so the service name will wrap more, not
   less. Whoever builds item 5 decides the columns at phone width with it (a minimum width for the name, which columns
   a phone shows, or a stacked row) rather than discovering it.
+
+### 96. Seven other places navigate after an `await` without checking the user is still there
+
+- **Origin:** the org-entry-race PR (2026-10-21), by the project owner's note that item 94 is a pattern, not one
+  screen. DEVELOPER_GUIDE §15 now states the rule (navigate after an `await` only if still mounted and the address
+  unchanged since it began; reference `TenantSelectScreen`'s `stayed()`).
+- **Where it is not applied yet** (`navigate` within a few lines after an `await`, found by reading the code, not by a
+  failure): `AppShell.tsx:40` (switching organization) and `:48` (signing out), `LoginScreen.tsx:47/49`,
+  `ClientFormScreen.tsx:129`, `SubscriptionFormScreen.tsx:155`, `RenewSubscriptionScreen.tsx:86`,
+  `AcceptInvitationScreen.tsx:69/70`, `ResetPasswordScreen.tsx:68`.
+- **How much it matters:** none of them has been seen to lose a navigation; each waits on one request a user is
+  unlikely to leave mid-way. The forms' "save, then back to the list" is the likeliest to meet it. Not changed in the
+  PR that found it, which was kept to one file by the project owner's decision; to apply with a shared helper, or
+  screen by screen as each is next touched.
 
 ## For the next version of the document — not for the code
 
