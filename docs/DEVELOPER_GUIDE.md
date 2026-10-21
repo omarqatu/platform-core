@@ -1325,6 +1325,42 @@ essentials:
   chat id), with Arabic-Indic digits converted as they are typed. `is_active` is **not a field of the form**:
   disabling is a different permission on a different endpoint, so an operator who may edit a client cannot disable
   one by sending a field.
+- **The member screens** (PLATFORM_CORE §3.10, §4.5, §4.8; OPEN_ITEMS 100): `/app/members`, `/app/members/invite`
+  and `/app/members/:id/roles`, reached from the sidebar. One address, **two permissions that do not imply each
+  other**: `core.members.manage` brings the invitations section, the invite button, disable/enable and the role
+  screen; `core.scope.manage` brings the scope column and the way to a member's assignments. Holding one without
+  the other is real, not theoretical — the seed contract's Rami manages scope and not members.
+  - **The scope column does not exist without `core.scope.manage`** — it is not rendered empty. The server answers
+    `scope_mode: null` for every colleague there (`membership_scope_read`, §4.8/1.8), and a blank column would
+    read as "no scope" instead of "not yours to see": the partial-blinding shape §1 warns about, in an interface.
+  - **No scope declaration sentence**, unlike the subscription and client lists. The second axis does not narrow
+    this list (OPEN_ITEMS 104), and whoever may not read it is refused the endpoint outright, so there is no
+    partial view to declare. The count is stated plainly instead.
+  - **Two rows never have a menu, and say why**: the caller's own (every write policy here carries "not the
+    actor's own membership", so the database refuses it) and a member who has left. An empty actions cell cannot
+    be told from a fault.
+  - **An invitation is withdrawn, never deleted** (§3.10 D8): the row stays, its status becomes `revoked`, and the
+    same address can be invited again. The confirmation says so.
+  - **"Expired" is derived from `expires_at`**, never read from `status` — nothing in `src/` ever writes
+    `status = 'expired'`, so a screen trusting the column would show an expired invitation as waiting for ever.
+    The same shape as `subscriptionStatus` deriving "expired" from `ends_on` while the row stays `active`.
+  - **Inviting says what it is not**: "no one is added to this organization until they accept". An invitation is
+    never a membership (§0), and "invite" reads like "add" to anyone who has used other software. "All clients" is
+    offered **disabled with its reason** rather than hidden — unlike an action, a missing radio option would make
+    the question look as though it had only one answer.
+  - **At phone width**: the name, the status and the actions; the roles fold under the name and the scope under
+    the status. Measured at 390 px on the running interface — 125 px to spare in Arabic, 58 px in English, against
+    the 24 px the rule wants (§16).
+- **The sidebar's one conditional entry** (OPEN_ITEMS 100): "Members" is shown only to whoever holds
+  `core.members.manage` or `core.scope.manage`, learnt from `GET /me/scope` like every other permission in the
+  interface. It **starts absent and only ever turns on** — a link shown and then withdrawn is worse than one that
+  arrives a moment late — it is **re-asked when the organization changes** (permissions belong to the membership,
+  not the person: the same person is an owner in one organization and an operator in another), and a failed
+  `/me/scope` leaves it absent **silently**, because the shell wraps the screen that is already reporting that
+  error and must not add a second. The answer is kept with the organization it answers for and reset *while
+  rendering* when that changes — React's pattern for state that follows a prop, the same one the list's filter
+  uses, and the reason is not style: an effect would reset it a commit late, and that is the frame in which the
+  previous organization's link would still be on screen.
 - **What the caller may do** (OPEN_ITEMS 77): the lists read `GET /me/scope`'s `permissions` with their rows, in one
   load (`web/src/session/permissions.ts`) — never from the cookie, a header or anything kept in the browser. Nothing
   shows until both answer, and a failed `/me/scope` is the screen's error path, never a list that silently lost its

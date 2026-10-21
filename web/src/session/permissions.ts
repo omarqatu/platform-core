@@ -5,6 +5,11 @@ export const PERMISSION = {
   subscriptionsWrite: 'subscriptions.write',
   clientsWrite: 'subscriptions.clients.write',
   clientsManage: 'subscriptions.clients.manage',
+  // The core's two management permissions (PLATFORM_CORE §3.10, §4.8). They are orthogonal — a member may hold
+  // either without the other, and the platform's own seed has a member with scope management and no member
+  // management — so the member screens gate on each of them separately, never on "one of them" standing for both.
+  membersManage: 'core.members.manage',
+  scopeManage: 'core.scope.manage',
 } as const;
 
 /**

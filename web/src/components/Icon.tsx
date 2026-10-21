@@ -12,6 +12,7 @@ export type IconName =
   | 'logout'
   | 'swap'
   | 'lock'
+  | 'users'
   // A row's actions (RowActions): the button that opens them, and one per action.
   | 'more'
   | 'edit'
@@ -35,6 +36,15 @@ const PATHS: Record<IconName, ReactNode> = {
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
       <rect x="14" y="14" width="7" height="7" rx="1" />
+    </>
+  ),
+  // The member screens' own, in the sidebar and in a row's actions.
+  users: (
+    <>
+      <path d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 19v-1a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </>
   ),
   layers: (
