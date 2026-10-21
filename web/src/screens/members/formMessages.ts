@@ -79,3 +79,63 @@ export const formMessages = defineMessages<Values>({
   saving: { id: 'members.roles.saving', defaultMessage: 'Saving…' },
   done: { id: 'members.roles.done', defaultMessage: 'Back to the members' },
 });
+
+/** The scope and assignments screen (PLATFORM_CORE §4.8) — the second axis itself. */
+export const scopeMessages = defineMessages<{
+  title: { member: string };
+  loading: NoMessageValues;
+  back: NoMessageValues;
+  modeLegend: NoMessageValues;
+  modeAll: NoMessageValues;
+  modeAssigned: NoMessageValues;
+  modeAllNote: NoMessageValues;
+  modeAssignedNote: NoMessageValues;
+  assignmentsTitle: NoMessageValues;
+  assignmentsUnderAll: NoMessageValues;
+  assignmentsNone: NoMessageValues;
+  ownScope: NoMessageValues;
+  ownScopeBody: NoMessageValues;
+  yourOwnClients: NoMessageValues;
+  disabledClient: NoMessageValues;
+  withdrawnNote: NoMessageValues;
+  assignLabel: { client: string };
+  saving: NoMessageValues;
+}>({
+  title: { id: 'members.scope.title', defaultMessage: "What {member} sees" },
+  loading: { id: 'members.scope.loading', defaultMessage: 'Loading…' },
+  back: { id: 'members.scope.back', defaultMessage: 'Back to the members' },
+  modeLegend: { id: 'members.scope.modeLegend', defaultMessage: 'Scope' },
+  modeAll: { id: 'members.scope.modeAll', defaultMessage: 'All clients' },
+  modeAssigned: { id: 'members.scope.modeAssigned', defaultMessage: 'Assigned clients' },
+  modeAllNote: {
+    id: 'members.scope.modeAllNote',
+    defaultMessage: 'They see every client of this organization, and every subscription of those clients.',
+  },
+  modeAssignedNote: {
+    id: 'members.scope.modeAssignedNote',
+    defaultMessage: 'They see only the clients assigned below, and nothing about the others — not even how many there are.',
+  },
+  assignmentsTitle: { id: 'members.scope.assignmentsTitle', defaultMessage: 'Clients' },
+  // Kept visible under 'all', not hidden: the rows are permanent and come back into force the moment the mode
+  // returns to 'assigned' (§4.8). Hiding them would open visibility nobody had seen.
+  assignmentsUnderAll: {
+    id: 'members.scope.assignmentsUnderAll',
+    defaultMessage: 'This member sees all clients, so these have no effect now. They are kept, and apply again if you set the scope back to assigned clients.',
+  },
+  assignmentsNone: { id: 'members.scope.assignmentsNone', defaultMessage: 'This organization has no client yet.' },
+  ownScope: { id: 'members.scope.ownScope', defaultMessage: 'This is your own membership' },
+  ownScopeBody: {
+    id: 'members.scope.ownScopeBody',
+    defaultMessage: 'No one sets their own scope — it is refused by the database, not only by this page. Ask another member who manages scope.',
+  },
+  // An assigned manager assigns only what they themselves can see: GET /subscriptions/clients is under the same
+  // second axis. Said plainly, so the short list does not look like a fault.
+  yourOwnClients: {
+    id: 'members.scope.yourOwnClients',
+    defaultMessage: 'You are shown the clients within your own scope, so this list may be shorter than the organization’s.',
+  },
+  disabledClient: { id: 'members.scope.disabledClient', defaultMessage: 'Disabled' },
+  withdrawnNote: { id: 'members.scope.withdrawnNote', defaultMessage: 'Withdrawn' },
+  assignLabel: { id: 'members.scope.assignLabel', defaultMessage: 'Assign {client}' },
+  saving: { id: 'members.scope.saving', defaultMessage: 'Saving…' },
+});
