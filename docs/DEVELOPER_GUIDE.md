@@ -1200,7 +1200,7 @@ and a mapping here — do not return 500s for expected situations.
 | `POST /api/provision/tenants` | provisioner | Development / CI only |
 | `POST /api/invitations/accept` | provisioner | the invitee |
 | `GET /api/subscriptions/clients` | module | `subscriptions.read` |
-| `GET /api/subscriptions` | module | `subscriptions.read` |
+| `GET /api/subscriptions` | module | `subscriptions.read` — `?status=active\|renewed\|cancelled` narrows it to one status (absent: every status; anything else, an empty or a repeated value included: `400 invalid_value`). A constraint on the visible rows, not scope: the declaration's counts are after it |
 | `POST /api/subscriptions` | module | `subscriptions.write` |
 | `GET /api/subscriptions/{id}` | module | `subscriptions.read` — an invisible one is `403 not_permitted` |
 | `PUT /api/subscriptions/{id}` | module | `subscriptions.write` — every field but the client; `409 subscription_not_active` once the row is cancelled or renewed |
