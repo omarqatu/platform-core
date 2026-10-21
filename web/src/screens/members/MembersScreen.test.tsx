@@ -121,18 +121,24 @@ describe('the member list', () => {
     expect(menuOf('Actions for Ahmad')).toEqual(['Roles for Ahmad', 'Disable Ahmad']);
   });
 
-  // Held back until the assignments screen exists: no change in this group leaves a visible path into a page that
-  // answers 404, and the platform is in use. When that screen lands, SCOPE_SCREEN_BUILT turns true in the same
-  // change, and this expectation becomes ['Scope for Ahmad'].
-  it('offers nothing yet with scope management alone, while its screen is unbuilt', () => {
+  // The two permissions are orthogonal (§4.8): scope management alone brings exactly one action, the way to the
+  // assignments screen, and nothing of member management.
+  it('offers only the scope with scope management alone', () => {
+    expect(SCOPE_SCREEN_BUILT).toBe(true);
+
     show('en', [member()], SCOPE_ONLY);
 
-    expect(SCOPE_SCREEN_BUILT).toBe(false);
+    expect(menuOf('Actions for Ahmad')).toEqual(['Scope for Ahmad']);
+  });
+
+  // The guard that outlived the flag: a permission combination leaving no action must leave no button and no
+  // column either. A control that opens nothing is a fault, not an empty state.
+  it('renders no actions button and no column when no action is possible', () => {
+    const page = show('en', [member()], { members: false, scope: false });
+
     expect(screen.queryByRole('button', { name: 'Actions for Ahmad' })).toBeNull();
-    // And no actions column standing empty above the rows: a button that opens nothing is worse than the 404
-    // holding the action back was meant to avoid.
-    expect(document.querySelector('th.actions')).toBeNull();
-    expect(document.querySelector('td.actions')).toBeNull();
+    expect(page.querySelector('th.actions')).toBeNull();
+    expect(page.querySelector('td.actions')).toBeNull();
   });
 
   it('offers enabling, not disabling, for a disabled member', () => {

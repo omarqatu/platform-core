@@ -1358,6 +1358,26 @@ essentials:
   - **At phone width**: the name, the status and the actions; the roles fold under the name and the scope under
     the status. Measured at 390 px on the running interface — 125 px to spare in Arabic, 58 px in English, against
     the 24 px the rule wants (§16).
+- **The scope and assignments screen** (PLATFORM_CORE §4.8; OPEN_ITEMS 100): `/app/members/:id/scope`, reached
+  from a member row with `core.scope.manage`. The second axis, which until this screen was proven in the database
+  and demonstrable nowhere else. Four things on it are the architecture, not the layout:
+  - **An assignment is a switch, never an add-and-delete.** `UNIQUE (tenant_id, membership_id, scope_ref_id)` with
+    no `DELETE` grant for anyone gives one permanent row per pair, disabled and reactivated (§4.8). The word in
+    the interface is **withdraw**, and reactivation restores visibility without rewriting the past.
+  - **A withdrawn row stays on screen**, marked, rather than looking like a client that was never assigned. It is
+    not absence: it comes back into force the moment the mode returns to `assigned`.
+  - **Under `all` the list is shown and disabled**, with one line saying the assignments are kept and apply again
+    if the mode goes back. Hiding them would restore visibility nobody on the screen had seen.
+  - **No one sets their own scope.** `membership_scope_admin_update` carries `membership_id <> app.membership_id`
+    — without it a member holding `core.scope.manage` in mode `assigned` could raise themselves to `all` with one
+    command. The row offers no action for one's own membership, and the address typed directly answers with its
+    own message rather than letting the database refuse into an empty form.
+
+  Two more things it states rather than leaves to be guessed. `GET /subscriptions/clients` is itself under the
+  second axis, so **a manager whose own mode is `assigned` is offered only their own clients** — correct, since
+  one cannot assign what one cannot see, and said in a line so a short list does not read as a fault. And **a
+  disabled client stays assignable and stays visible** to whoever is assigned it, with the badge the client list
+  gives it (the project owner's item 32-c, decided explicitly rather than by silence).
 - **The sidebar's one conditional entry** (OPEN_ITEMS 100): "Members" is shown only to whoever holds
   `core.members.manage` or `core.scope.manage`, learnt from `GET /me/scope` like every other permission in the
   interface. It **starts absent and only ever turns on** — a link shown and then withdrawn is worse than one that

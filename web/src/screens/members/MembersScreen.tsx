@@ -21,11 +21,11 @@ export const INVITE_PATH = '/app/members/invite';
 export const PAGE_SIZE = 200; // the API's maximum page
 
 /**
- * Whether the member row offers its way to the assignments screen. False until that screen and its route exist:
- * every change in this group must be mergeable on its own, and the platform is in use, so none of them may leave
- * a visible path into a page that answers 404.
+ * Whether the member row offers its way to the assignments screen. It was false while that screen did not exist
+ * — no change in this group may leave a visible path into a page that answers 404, and the platform is in use —
+ * and the change that added the screen and its route is the one that turned it true.
  */
-export const SCOPE_SCREEN_BUILT = false;
+export const SCOPE_SCREEN_BUILT = true;
 
 /** What the caller may do here, learnt from GET /me/scope with the rows (OPEN_ITEMS 77). */
 export interface MemberActions {

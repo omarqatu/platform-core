@@ -7,6 +7,7 @@ import { ClientsScreen, LIST_PATH as CLIENTS_PATH } from './screens/clients/Clie
 import { AcceptInvitationScreen } from './screens/invitations/AcceptInvitationScreen';
 import { InviteMemberScreen } from './screens/members/InviteMemberScreen';
 import { MemberRolesScreen } from './screens/members/MemberRolesScreen';
+import { MemberScopeScreen } from './screens/members/MemberScopeScreen';
 import { INVITE_PATH as MEMBER_INVITE_PATH, LIST_PATH as MEMBERS_PATH, MembersScreen } from './screens/members/MembersScreen';
 import { ChangePasswordScreen, CHANGE_PATH } from './screens/password/ChangePasswordScreen';
 import { ForgotPasswordScreen, FORGOT_PATH } from './screens/password/ForgotPasswordScreen';
@@ -61,6 +62,7 @@ export function App() {
           <Route path={MEMBERS_PATH} element={<MembersScreen />} />
           <Route path={MEMBER_INVITE_PATH} element={<InviteMemberScreen />} />
           <Route path={`${MEMBERS_PATH}/:membershipId/roles`} element={<MemberRolesScreen />} />
+          <Route path={`${MEMBERS_PATH}/:membershipId/scope`} element={<MemberScopeScreen />} />
         </Route>
       </Route>
       <Route path="*" element={<NotFoundScreen />} />
