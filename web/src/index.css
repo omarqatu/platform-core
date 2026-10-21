@@ -336,7 +336,10 @@ body:has(.login) {
    fixed width, the actions. Nothing is dropped: a secondary column folds into the column it belongs to, as a second
    line there (.cell-fold), and its own column goes (.col-folded); each is display:none where the other shows, so a
    screen reader meets the value once. The actions column keeps its name for assistive technology and loses it from
-   sight (its header is wider than its 44 px button), and its notes wrap inside it rather than widen it. */
+   sight (its header is wider than its 44 px button), and its notes wrap inside it rather than widen it. The
+   "Expired since …" note goes at this width: the same row already shows the date and the "Expired" badge beside it,
+   and the button and renew-first stay — with the note the table had 7 px of slack at 390 px, and other fonts took
+   it (CI's, 15 px wider). */
 .data-table .cell-fold {
   display: none;
 }
@@ -377,11 +380,11 @@ body:has(.login) {
     font-size: 12px;
   }
 
-  /* A date inside a note wraps as a whole, never at its hyphens; and the button keeps its 44 px beside the note. */
-  .data-table td.actions .row-note bdi {
-    white-space: nowrap;
+  .data-table td.actions [data-note='expired'] {
+    display: none;
   }
 
+  /* The button keeps its 44 px beside a note. */
   .data-table td.actions .row-actions-button {
     flex: 0 0 auto;
   }

@@ -262,12 +262,14 @@ Closed by the list-filter-dates PR:
   (`.cell-fold`), and its own column goes (`.col-folded`): on the subscription list the client folds under the
   service and the status under the date. Both copies are in the markup and each is `display:none` where the other
   shows, so a screen reader meets the value once. The actions column keeps its name for assistive technology only
-  (`.th-label`; the header was wider than its 44 px button). Its notes wrap inside it, the date in a note never at
-  its hyphens, and the button keeps its 44 px. Cells take 0.4rem of side padding. At 390 px the subscription table
-  was 592 px wide in a 342 px container in Arabic; now neither list scrolls inside its container, in either
-  language, with the longest badge («قريب الانتهاء») and the longest note ("Expired since …").
-  `list-filter-dates.spec.ts` › 4 proves it, and fails on the code before. Nothing is hidden: a very long service
-  name still wraps over several lines, in the space left to it.
+  (`.th-label`; the header was wider than its 44 px button). Its notes wrap inside it and the button keeps its
+  44 px; the "Expired since …" note is hidden at that width, because the same row shows the date and the "Expired"
+  badge beside it (the button and renew-first stay). Cells take 0.4rem of side padding. At 390 px the subscription
+  table was 592 px wide in a 342 px container in Arabic; now its narrowest width leaves 69–85 px to spare in either
+  language, with the longest badge («قريب الانتهاء») and the longest note shown. `list-filter-dates.spec.ts` › 4
+  wants 24 px to spare, not a bare fit: with the expired note shown the table fitted here with 7 px and was 8 px over
+  on CI's fonts. No value is lost: a very long service name still wraps over several lines, in the space left to
+  it.
 
 ## For the project owner — a decision after T8
 

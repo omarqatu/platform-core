@@ -1301,8 +1301,10 @@ essentials:
     cell's whole `textContent` sees both, so read the value's own element (`td > bdi`). On the subscription list the
     client folds under the service and the status under the date. The actions header's text is in
     `<span class="th-label">`, visually hidden at that width (it is wider than the 44 px button), and the notes in
-    the actions cell wrap inside it, never at a date's hyphens. A new list declares which column folds where; the
-    proof is `list-filter-dates.spec.ts` › 4, no scroll inside the container at 390 px, in both languages.
+    the actions cell wrap inside it. The "Expired since …" note is hidden at that width: the same row shows the date
+    and the "Expired" badge beside it, and the button and renew-first stay. A new list declares which column folds
+    where; the proof is `list-filter-dates.spec.ts` › 4, which wants 24 px to spare at 390 px, in both languages
+    (§16).
 - **A date inside a translated sentence**: the `<ltr>` rich-text tag — `"Expired since <ltr>{date}</ltr>"`, and in
   `ar.json` `"منتهٍ منذ <ltr>{date}</ltr>"` — rendered as `<bdi dir="ltr">` by the shared chunk renderer
   `components/ltr.tsx` (`ltr`), so `2025-09-01` reads left to right inside an Arabic sentence. Typed
@@ -1483,6 +1485,10 @@ cd web && PW_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome \
 
 The same container runs `dotnet test` for Conformance and the white-box suite. The database it leaves behind holds
 the e2e fixtures' own organizations, exactly as a CI run would; throw it away with `docker compose down -v`.
+
+**A layout e2e asserts a margin, never an exact fit:** fonts differ between this container, CI and a phone (CI's
+measured 15 px wider on a 342 px table), so "fits" with a few pixels to spare is red elsewhere —
+`list-filter-dates.spec.ts` › 4 wants 24 px.
 
 ### The rule about tests
 

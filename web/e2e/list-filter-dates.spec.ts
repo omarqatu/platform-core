@@ -174,8 +174,14 @@ test('3. the date field: typed with its hyphens written, picked through showPick
 
 // Item 95: at phone width a list fits its screen — at most three columns, the rest folded into the column they belong
 // to — so the table does not scroll inside its container. Every state a row can show, the longest badge ("Due soon",
-// «قريب الانتهاء») and the longest note ("Expired since …") included, both lists, both languages.
-test('4. at 390 px neither list scrolls inside its container, with the longest badge and note, ar and en', async ({ page }) => {
+// «قريب الانتهاء») and the longest note shown ("Renewed, no actions") included, both lists, both languages; the
+// "Expired since" note is hidden at this width (the date and the "Expired" badge beside it say the same).
+// It asserts a margin, not a fit: the table's narrowest width is at least 24 px under its container's. A first version
+// asserted the fit, passed here with 7 px to spare, and failed on CI, whose fonts measured 15 px wider — a phone's
+// fonts differ again (DEVELOPER_GUIDE §16).
+const SLACK = 24;
+
+test('4. at 390 px neither list scrolls inside its container, with room to spare, the longest badge and note, ar and en', async ({ page }) => {
   const soon = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
   const owner = await organizationWithHistory([
     ['Domain renewal for the company website', soon], // due soon, and a long name
@@ -196,15 +202,33 @@ test('4. at 390 px neither list scrolls inside its container, with the longest b
       if (path.startsWith('/app/subscriptions')) {
         await expect(page.locator('tbody tr'), where).toHaveCount(6);
         await expect(page.locator('td [data-status="dueSoon"]:visible'), where).toHaveCount(1);
+        // The expired row says so beside its date; its "Expired since" note is in the markup and not shown.
         await expect(page.locator('[data-note="expired"]'), where).toHaveCount(1);
+        await expect(page.locator('[data-note="expired"]'), where).toBeHidden();
+        await expect(page.locator('tr', { hasText: 'Old domain' }).locator('[data-status="expired"]:visible'), where).toHaveCount(1);
+        await expect(page.locator('tr', { hasText: 'Old domain' }).locator('.row-actions-button'), where).toBeVisible();
       }
 
       const seen = await page.evaluate(() => {
         const box = document.querySelector<HTMLElement>('.data-table')!;
+        const table = box.querySelector<HTMLElement>('table')!;
+        // The table's narrowest width: what its content needs, before inline-size: 100% stretches it to the box.
+        table.style.inlineSize = 'min-content';
+        const narrowest = Math.ceil(table.getBoundingClientRect().width);
+        table.style.inlineSize = '';
         const columns = [...document.querySelectorAll('.data-table thead th')].filter((th) => getComputedStyle(th).display !== 'none');
-        return { scrollWidth: box.scrollWidth, clientWidth: box.clientWidth, columns: columns.length, page: document.documentElement.scrollWidth };
+        return {
+          scrollWidth: box.scrollWidth,
+          clientWidth: box.clientWidth,
+          narrowest,
+          columns: columns.length,
+          page: document.documentElement.scrollWidth,
+        };
       });
       expect(seen.scrollWidth, `${where}: the table fits its container (${seen.scrollWidth} > ${seen.clientWidth})`).toBeLessThanOrEqual(seen.clientWidth);
+      expect(seen.narrowest, `${where}: ${SLACK} px to spare (needs ${seen.narrowest} of ${seen.clientWidth})`).toBeLessThanOrEqual(
+        seen.clientWidth - SLACK,
+      );
       expect(seen.columns, `${where}: at most three columns`).toBeLessThanOrEqual(3);
       expect(seen.page, where).toBe(390);
     }

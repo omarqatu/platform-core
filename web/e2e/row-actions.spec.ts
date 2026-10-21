@@ -59,8 +59,11 @@ function measure(page: Page) {
       const row = tr.getBoundingClientRect();
       const cell = td.getBoundingClientRect();
       // One line: every child's vertical middle within half a line of the others' (a link and a button differ by a
-      // pixel, so equal tops would be the wrong test).
-      const kids = [...td.querySelectorAll('.row-actions > *')].map((k) => k.getBoundingClientRect());
+      // pixel, so equal tops would be the wrong test) — every child that is shown: one with no box (the "Expired
+      // since" note, which phone width hides) sits on no line at all.
+      const kids = [...td.querySelectorAll('.row-actions > *')]
+        .map((k) => k.getBoundingClientRect())
+        .filter((k) => k.width > 0 && k.height > 0);
       const middles = kids.map((k) => (k.top + k.bottom) / 2);
       const line = Math.max(0, ...kids.map((k) => k.height));
       const button = td.querySelector('.row-actions-button')?.getBoundingClientRect();
