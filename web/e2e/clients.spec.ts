@@ -69,7 +69,8 @@ test('1. a client is created with its channels, edited, disabled and enabled aga
   ]);
 
   // Editing: the stored channels come back into the fields, and clearing one stores null, not an empty string.
-  await page.getByRole('link', { name: 'Edit شركة النور' }).click();
+  await page.getByRole('button', { name: 'Actions for شركة النور' }).click();
+  await page.getByRole('menuitem', { name: 'Edit شركة النور' }).click();
   await expect(page.getByLabel(/^E-mail/)).toHaveValue('nour@example.com');
   await page.getByLabel(/^Telegram chat id/).fill('');
   await page.getByRole('button', { name: 'Save' }).click();
@@ -86,13 +87,15 @@ test('1. a client is created with its channels, edited, disabled and enabled aga
     );
     return dialog.accept();
   });
-  await page.getByRole('button', { name: 'Disable شركة النور' }).click();
+  await page.getByRole('button', { name: 'Actions for شركة النور' }).click();
+  await page.getByRole('menuitem', { name: 'Disable شركة النور' }).click();
 
   await expect(page.getByText('Disabled')).toBeVisible();
   expect(await clients(owner.tenantId)).toEqual([expect.objectContaining({ is_active: false })]);
 
   // The disabled client is still listed, with its way back.
-  await page.getByRole('button', { name: 'Enable شركة النور' }).click();
+  await page.getByRole('button', { name: 'Actions for شركة النور' }).click();
+  await page.getByRole('menuitem', { name: 'Enable شركة النور' }).click();
   await expect(page.getByText('Active')).toBeVisible();
   expect(await clients(owner.tenantId)).toEqual([expect.objectContaining({ is_active: true })]);
 });
@@ -118,7 +121,8 @@ test('2. a subscription is renewed into a new row and cancelled, and neither tou
   await expect(page).toHaveURL(/\/app\/subscriptions$/);
 
   // Renewing: one field, and the new row keeps the client and the service of the one it renews.
-  await page.getByRole('link', { name: 'Renew VPS' }).click();
+  await page.getByRole('button', { name: 'Actions for VPS' }).click();
+  await page.getByRole('menuitem', { name: 'Renew VPS' }).click();
   await expect(page.getByRole('heading', { name: 'Renew subscription' })).toBeVisible();
   await expect(page.getByLabel(/^Service/)).toHaveText('VPS');
   // There is no client to choose: a renewal never names one.
@@ -140,8 +144,9 @@ test('2. a subscription is renewed into a new row and cancelled, and neither tou
     { service_name: 'VPS', ends_on: '2028-03-31', status: 'active', renews: true, client: 'Nour Co' },
   ]);
   // The renewed row keeps its place in the list, marked, and offers nothing to do to it.
-  await expect(page.getByText('Renewed')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Renew VPS' })).toHaveCount(1);
+  await expect(page.getByText('Renewed', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Actions for VPS' })).toHaveCount(1);
+  await expect(page.getByText('Renewed, no actions')).toBeVisible();
 
   // Cancelling asks first, and keeps the row.
   page.once('dialog', (dialog) => {
@@ -150,15 +155,16 @@ test('2. a subscription is renewed into a new row and cancelled, and neither tou
     );
     return dialog.accept();
   });
-  await page.getByRole('button', { name: 'Cancel VPS' }).click();
+  await page.getByRole('button', { name: 'Actions for VPS' }).click();
+  await page.getByRole('menuitem', { name: 'Cancel VPS' }).click();
 
-  await expect(page.getByText('Cancelled')).toBeVisible();
+  await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
   expect(await subscriptions(owner.tenantId)).toEqual([
     expect.objectContaining({ ends_on: '2027-03-31', status: 'renewed' }),
     expect.objectContaining({ ends_on: '2028-03-31', status: 'cancelled' }),
   ]);
   // Nothing is left to act on, and nothing was deleted.
-  await expect(page.getByRole('link', { name: /^Renew VPS/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Actions for VPS/ })).toHaveCount(0);
   await expect(page.locator('tbody tr')).toHaveCount(2);
   // And the client is untouched by either act.
   expect(await clients(owner.tenantId)).toEqual([expect.objectContaining({ name: 'Nour Co', is_active: true })]);
