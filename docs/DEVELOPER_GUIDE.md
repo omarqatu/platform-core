@@ -1247,9 +1247,9 @@ essentials:
   ways** (`"cost": "12.500"`): a JSON number is read by the browser as binary floating point, so the cost goes from
   the field to `decimal` to `numeric(14,3)` as text, and a cost sent as a number is refused (`400 invalid_value`).
   An edit that names a `client_id` is refused (`400 invalid_value`): moving a subscription between clients is a
-  scope crossing inside the tenant, and there is no path from `PUT` to `scope_ref_id`. The end date and the cost
-  are text fields written left-to-right, and a digit typed on an Arabic keyboard becomes a Western one as it is typed
-  (`subscriptionForm.westernDigits`) — a native date picker would show the browser's own digits (OPEN_ITEMS 78).
+  scope crossing inside the tenant, and there is no path from `PUT` to `scope_ref_id`. The end date is a
+  `DateField` (below); the cost is a text field written left-to-right, and a digit typed on an Arabic keyboard
+  becomes a Western one as it is typed (`components/day.ts` `westernDigits`).
   "New subscription" and each row's actions are shown only to a member who holds `subscriptions.write` — the
   interface learns it from `GET /me/scope`'s `permissions`, below.
 - **The client screens** (Amendment 01 §2.8, §5.1): `/app/clients`, `/app/clients/new` and `/app/clients/:id/edit`,
@@ -1294,11 +1294,47 @@ essentials:
   - **A note in a row** (`.row-note`: "Expired since …", "Renewed, no actions") is `--text-secondary`, not
     `--text-muted`: on `--canvas` in the light theme muted is 3.38:1, under the 4.5:1 normal text needs, and
     secondary is 5.76:1 (dark theme: 5.85 and 9.44).
+  - **At phone width (under 600 px) a table keeps at most three columns** (OPEN_ITEMS 95): the row's name, one value of
+    fixed width, the actions. Nothing is dropped. A secondary column folds into the column it belongs to as a second
+    line there — `<span class="cell-fold">` inside the owner's cell — and its own `<th>`/`<td>` take `col-folded`.
+    Each copy is `display:none` where the other shows, so a screen reader meets the value once; a test reading a
+    cell's whole `textContent` sees both, so read the value's own element (`td > bdi`). On the subscription list the
+    client folds under the service and the status under the date. The actions header's text is in
+    `<span class="th-label">`, visually hidden at that width (it is wider than the 44 px button), and the notes in
+    the actions cell wrap inside it, never at a date's hyphens. A new list declares which column folds where; the
+    proof is `list-filter-dates.spec.ts` › 4, no scroll inside the container at 390 px, in both languages.
 - **A date inside a translated sentence**: the `<ltr>` rich-text tag — `"Expired since <ltr>{date}</ltr>"`, and in
-  `ar.json` `"منتهٍ منذ <ltr>{date}</ltr>"` — rendered as `<bdi dir="ltr">` by
-  `ltr: (chunks) => <bdi dir="ltr">{chunks}</bdi>`, so `2025-09-01` reads left to right inside an Arabic sentence. Typed
+  `ar.json` `"منتهٍ منذ <ltr>{date}</ltr>"` — rendered as `<bdi dir="ltr">` by the shared chunk renderer
+  `components/ltr.tsx` (`ltr`), so `2025-09-01` reads left to right inside an Arabic sentence. Typed
   in the message's values as `ltr: MessageTag` (react-intl's typed values take no React element, so the element goes
   in a tag, not a value). The first rich-text tag in the interface; the pattern for any isolated value in a sentence.
+- **The subscription list's filter** (the project owner's item 4): Active (the default), Renewed, Cancelled, All —
+  radio buttons drawn as a segmented control, fitting one row down to 320 px. The choice is in the address
+  (`?status=renewed|cancelled|all`; "active" is never written), so Back and a reload keep it, and the request follows
+  it: `GET /subscriptions?status=<it>`, or no status for All (§14). The answer is kept with the filter it answers,
+  so a filter changed by Back shows no rows of the one before. **The radio shows the click at once** and returns to
+  the address whenever the address moves — the same `startTransition` as the navigate-after-an-`await` rule below, which would
+  otherwise spring it back for a moment — by React's pattern for state that follows a prop (reset while rendering,
+  not in an effect).
+- **Counted messages that depend on a choice take an ICU `select`**, not one message id per choice: the scope
+  declaration's three messages take `{status, select, active {…} renewed {…} cancelled {…} other {…}}`, the `other`
+  branch being "All". Each branch holds its own `plural`, and `check-i18n-parity` checks the six Arabic forms inside
+  every branch; the typed values name the choice (`status: StatusFilter`). The declaration says what is shown,
+  counted after the filter, and still no total to an assigned member (PROOF_SPEC T8.2).
+- **A calendar day is `<Day day="2027-03-07"/>`** (`components/Day.tsx`, the project owner's item 5): the API's own
+  `yyyy-MM-dd` in a `<time>`, inside the `<ltr>` tag, `.day` (`nowrap`, `tabular-nums`). Never through Intl: the
+  digits are Western by construction and no time zone can move the day. Every date the interface shows is one,
+  in both languages; the documented exception is the server-rendered `/subscriptions/screen`.
+- **A date that is typed is a `DateField`** (`components/DateField.tsx`, the project owner's item 6, OPEN_ITEMS 78),
+  for any vertical. The text is what the user reads and what is sent: `yyyy-MM-dd`, left-to-right, the numeric
+  keypad, and the hyphens written as the digits are typed (`components/day.ts` `typeDay`: deleting never writes
+  one back, a backspace that took a hyphen takes the digit before it, a paste of ISO or of Arabic-Indic digits lands
+  as the day). Beside it a 44 px button (`components.dateField.pick`) calls `showPicker()` on a hidden
+  `<input type="date">`, opened on the day typed, and writes the day picked into the text (a date input's value is
+  ISO by the HTML standard). Where `showPicker()` is missing or refused, that date input lies transparent over the
+  button and takes the tap itself. **The native field is never what the user reads:** it draws in the browser's own
+  format and language, not the page's (Chromium: `2027/03/07`, an Arabic placeholder on an English page). How iOS
+  Safari draws its picker is unverified (OPEN_ITEMS 97).
 - **Renewing and cancelling** (Amendment 01 §2.9): an active row's menu offers edit, renew and cancel; once its end
   date has passed (`subscriptionStatus`, from `ends_on` — the row stays `active` after it ends) renew comes first and
   the row says "Expired since yyyy-MM-dd"; a row that has left `active` has no menu and says why ("Renewed, no
@@ -1306,7 +1342,8 @@ essentials:
   from a fault. Cancelled rows say no date: there is no `cancelled_at` (OPEN_ITEMS 92). Renewing is a screen of its own, `/app/subscriptions/:id/renew`, with **one
   field**: the new end date. There is no client to choose, and none is sent — a renewal keeps the client of the row
   it renews, and a request that names one is refused (`400 invalid_value`), the same door stage (a) closed on the
-  edit. Cancelling asks first and says the row is kept. The status column shows the lifecycle (`Cancelled`,
+  edit. Cancelling asks first and says the row is kept, under "Cancelled" (it leaves the default "Active" list). The
+  status column shows the lifecycle (`Cancelled`,
   `Renewed`) in place of the date-derived status once the row has left `active`: a cancelled subscription's
   remaining days say nothing worth saying.
 - **The password screens** (Amendment 01 §5.1, OPEN_ITEMS 59): `/app/password/forgot` and `/app/password/reset` are
@@ -1334,7 +1371,9 @@ essentials:
   already gone somewhere else and a late `navigate` would take them back. Both checks are needed because react-router
   8's `BrowserRouter` renders a location change inside `startTransition`, so for a moment the address has changed while
   the old screen is still mounted. The reference is `screens/tenants/TenantSelectScreen.tsx` (`stayed()`), proven on
-  both routers in `App.test.tsx`; any screen that calls `navigate` after a request has the same race.
+  both routers in `App.test.tsx`; any screen that calls `navigate` after a request has the same race. The same
+  transition is why a control bound to the address shows its own choice until the address arrives (the list's
+  filter, above).
 - **A 401 is an ended session, with two exceptions** (`api/client.ts`): the login path's, and
   `invalid_credentials` from `PUT /me/password`, which is a wrong *current* password and must not sign the user
   out of a working session. A stale security stamp on the same request is `session_expired` and still ends it.

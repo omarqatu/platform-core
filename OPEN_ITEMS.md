@@ -1229,6 +1229,17 @@ Closed by the list-filter-dates PR:
 - **What closes it:** the screenshots. If the wheels show ٠–٩, the project owner decides whether system UI in the
   device's digits is acceptable; nothing in the page changes either way unless check 2 and 3 both fail.
 
+### 98. The hand-made screenshots of the subscription screens are out of date
+
+- **Origin:** the list-filter-dates PR (2026-10-21), found while updating the guides.
+- **What is stale:** in `docs/screens/`, the list — `identity-subscriptions-*`, `web-subscriptions-*`,
+  `subscriptions-rtl-assigned`, `subscriptions-list-actions-*` — shows no filter and dates as "January 2, 2027" (and,
+  in all but the last, no actions menu); the form — `subscription-new-*`, `subscription-new-refused-*`,
+  `subscription-edit-*` — shows the end date as a bare text field. `docs/DEVELOPER_GUIDE.md` §15 says they are made
+  by hand.
+- **Not done here:** the PR changes no screenshot. Remaking them is the same hand work as the first set, in both
+  languages, and the client and password screens have none yet either (§15).
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12
