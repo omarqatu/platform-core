@@ -51,6 +51,28 @@ Every suite was run in this container through Docker against real PostgreSQL 18.
 No migration, no policy, no grant and no new error code in the whole group; `check-schema-dump` and Check 6 are
 the proof.
 
+## 3b. What was not proven
+
+**The e2e proves the scenario against Mailpit. Production sends through Gmail SMTP, and no test has ever
+exercised that path.** Everything between the endpoint and the provider is covered — the message that enters the
+dispatcher, the link's shape, the silence of the logs, the two rate limits, the refusal to boot without an
+origin — but the SMTP conversation with Gmail itself, its authentication, and whether its quota or its spam
+handling does anything unexpected to an invitation, are untested by construction: a local mail catcher cannot
+test a remote provider.
+
+**So the first real invitation after deployment is a manual verification step** (the project owner, 2026-10-21):
+he invites a real address and walks the Ahmad sequence himself — invitation, e-mail, acceptance from the link,
+password, sign-in, mode `assigned`, two clients assigned, and the two visible with nothing of the others.
+
+**This group is done *pending* that walk, not done.** If the walk fails, it fails in the one layer no test here
+reaches, and the failure belongs to this group.
+
+Two smaller things also stand unproven and are already recorded rather than hidden: the Gmail account's daily
+quota is an assumption behind the tenant-wide invitation ceiling (OPEN_ITEMS 106, 107), and OPEN_ITEMS 103 — the
+asymmetry between database-enforced client visibility and endpoint-enforced member visibility — is read,
+understood and **deliberately deferred by the project owner** until after the deployment walk, because it is a
+schema change.
+
 ## 4. Three lessons
 
 **1. Verify the brief's facts before designing from them.** Three of the brief's statements were wrong — the
