@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { Navigate, Outlet, useLocation } from 'react-router';
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { AppShell } from '../components/AppShell';
+import { useStaleRender } from '../navigation/useStaleRender';
 import { LoadingScreen } from '../screens/status/StatusScreens';
 import { nextQuery } from './next';
 import { useSession } from './SessionProvider';
@@ -34,11 +35,28 @@ export function RequireAuth() {
 export function RequireTenant() {
   const { state } = useSession();
   const location = useLocation();
+  const isStale = useStaleRender(here(location));
   if (state.status !== 'authenticated') return null;
   // Switching: the tenant's screens are already gone; the selection shows once the API has forgotten the tenant.
   if (!state.activeTenant && state.leaving) return <LoadingScreen />;
-  if (!state.activeTenant) return <Navigate to={`/organizations${nextQuery(here(location))}`} replace />;
+  // No tenant: to the selection — unless this is the tree the person has already left (navigation/useStaleRender):
+  // the switch ending ("leaving" over) can render it again inside the router's transition, and the redirect would
+  // land on top of the page they went to.
+  if (!state.activeTenant) return <Redirect to={`/organizations${nextQuery(here(location))}`} isStale={isStale} />;
   return <TenantScope key={state.activeTenant.tenant_id} />;
+}
+
+/** A guard's redirect (replace), made in its effect unless the tree it is rendered in has been left. */
+function Redirect({ to, isStale }: { to: string; isStale: () => boolean }) {
+  const navigate = useNavigate();
+  // Relied on: React runs a child's effects before its parent's in the same commit, so isStale() here still reads
+  // the snapshot RequireTenant's useStaleRender recorded at the previous commit — the one this commit is compared
+  // with. If that order ever changed, the parent would record this commit first, no commit would look stale, and
+  // the redirect would again land on top of where the person went (useStaleRender.test and site 1's test fail).
+  useEffect(() => {
+    if (!isStale()) navigate(to, { replace: true });
+  });
+  return null;
 }
 
 function TenantScope() {

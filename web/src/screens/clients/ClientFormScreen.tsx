@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { ApiError, getJson, isAbort, request } from '../../api/client';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { errorMessage } from '../../i18n/apiErrors';
+import { useStayed } from '../../navigation/useStayed';
 import { useSession } from '../../session/SessionProvider';
 import { ForbiddenScreen, NotFoundScreen } from '../status/StatusScreens';
 import { TENANT_LOST } from '../subscriptions/SubscriptionsScreen';
@@ -101,6 +102,7 @@ const FIELD_ERROR: Record<FieldError, MessageDescriptor> = {
 function ClientForm({ mode, data, onRefusal }: { mode: Mode; data: FormData; onRefusal?: (code: string | null) => void }) {
   const intl = useIntl();
   const navigate = useNavigate();
+  const begin = useStayed();
   const [values, setValues] = useState<FormValues>(data.values);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -123,10 +125,12 @@ function ClientForm({ mode, data, onRefusal }: { mode: Mode; data: FormData; onR
     }
     setPending(true);
     setRefusal(null);
+    // Back to the list once saved — unless the person has gone somewhere else meanwhile (navigation/useStayed).
+    const stayed = begin();
     try {
       if (mode === 'create') await request('POST', '/subscriptions/clients', toBody(values));
       else await request('PUT', `/subscriptions/clients/${data.id}`, toBody(values));
-      navigate(LIST_PATH);
+      if (stayed()) navigate(LIST_PATH);
     } catch (e) {
       if (isAbort(e)) return;
       const code = e instanceof ApiError ? e.code : null;

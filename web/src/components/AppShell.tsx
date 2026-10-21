@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 import { Link, NavLink, useNavigate } from 'react-router';
 import { useLocale } from '../i18n/I18nProvider';
+import { useStayed } from '../navigation/useStayed';
 import { CHANGE_PATH } from '../screens/password/ChangePasswordScreen';
 import { useAuthenticated, useSession } from '../session/SessionProvider';
 import { useAppearance } from '../theme/ThemeProvider';
@@ -31,13 +32,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { lang, setLang } = useLocale();
   const { theme, setTheme } = useAppearance();
   const [leaving, setLeaving] = useState(false);
+  const begin = useStayed();
 
-  // The tenant's screens are gone at once; the selection shows after the API has forgotten the tenant (deselect).
+  // The tenant's screens are gone at once; the selection shows after the API has forgotten the tenant (deselect) —
+  // unless the person has gone somewhere else meanwhile ("Change password" is in this bar): then that is theirs.
   const onSwitch = async () => {
+    const stayed = begin();
     try {
       await switchTenant();
     } finally {
-      navigate('/organizations');
+      if (stayed()) navigate('/organizations');
     }
   };
   const onSignOut = async () => {

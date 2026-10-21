@@ -271,6 +271,25 @@ Closed by the list-filter-dates PR:
   on CI's fonts. No value is lost: a very long service name still wraps over several lines, in the space left to
   it.
 
+Closed by the navigate-after-await PR:
+- **96.** Every navigation after an `await` now asks whether the person is still there, or says why it does not.
+  The count was wrong: not seven places in eight calls, but **seven files, eight decision points, ten calls**.
+  `navigation/useStayed.ts` holds the two guards that were `TenantSelectScreen`'s (still mounted, the address
+  unchanged since the `await` began), and the selection uses it.
+  - **Guarded:** 1, switching organization (`AppShell`); 3, signing in, but not when the person went to a recovery
+    page (the exception sits at `LoginScreen`'s call site); 4, 5 and 6, the client form, the subscription form and
+    renewing.
+  - **Not races, left unguarded and pinned by a test:** 2, signing out; 3, signing in after "Forgot your password?",
+    which the sign-in has just disproved; 7, accepting an invitation; 8, setting a password from a recovery link. In
+    each the success changes what the person cannot take back, and its own page is the next step.
+  - **Site 1 had a second cause:** `RequireTenant`'s redirect, rendered again in the tree the person had left inside
+    the router's transition. `navigation/useStaleRender.ts` detects that commit, and the redirect is skipped there.
+    **`RequireAuth` has the same shape and is left alone deliberately:** the session has ended, the sign-in screen
+    is the right end of a sign-out whatever was tapped, and the sign-out pin depends on it.
+  - Proven in `App.navigateAfterAwait.test.tsx`, on `BrowserRouter` with the move and the answer inside one
+    `act()`: each guarded site's test fails 10/10 on the old code and passes 10/10. Site 1 fails 10/10 with either
+    fix alone. Each pin fails 10/10 with a guard added at its site.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -1194,23 +1213,6 @@ Closed by the list-filter-dates PR:
   `docs/schema.sql` and `DATABASE.md`, and the list's note gaining its date (`subscriptions.list.cancelledNoActions`).
   Existing cancelled rows would need their date from the audit log in the same migration, or none. **Decided by the
   project owner:** not in this group (no migrations here); a later group.
-
-### 96. Seven other places navigate after an `await` without checking the user is still there
-
-- **Origin:** the org-entry-race PR (2026-10-21), by the project owner's note that item 94 is a pattern, not one
-  screen. DEVELOPER_GUIDE §15 now states the rule (navigate after an `await` only if still mounted and the address
-  unchanged since it began; reference `TenantSelectScreen`'s `stayed()`).
-- **Where it is not applied yet** (`navigate` within a few lines after an `await`, found by reading the code, not by a
-  failure): `AppShell.tsx:40` (switching organization) and `:48` (signing out), `LoginScreen.tsx:47/49`,
-  `ClientFormScreen.tsx:129`, `SubscriptionFormScreen.tsx:155`, `RenewSubscriptionScreen.tsx:86`,
-  `AcceptInvitationScreen.tsx:69/70`, `ResetPasswordScreen.tsx:68`.
-- **How much it matters:** none of them has been seen to lose a navigation; each waits on one request a user is
-  unlikely to leave mid-way. The forms' "save, then back to the list" is the likeliest to meet it. Not changed in the
-  PR that found it, which was kept to one file by the project owner's decision.
-- **Plan (project owner, 2026-10-21):** its own PR, after PR ب, not before. Extract `stayed()` into a shared hook,
-  apply it at the seven sites, and add one test per site on the org-entry-race pattern: the request held open, the
-  navigation made while it waits, and on `BrowserRouter` the click and the answer inside one `act()`, so the address
-  guard is what keeps the navigation.
 
 ### 97. iOS Safari's date picker is unverified — needs a device
 
