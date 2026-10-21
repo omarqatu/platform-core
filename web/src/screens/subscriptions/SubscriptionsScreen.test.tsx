@@ -80,7 +80,7 @@ describe('the T8 screen, right-to-left', () => {
     expect(page.textContent).not.toMatch(ARABIC_INDIC_DIGITS);
   });
 
-  it('shows what users entered as is, in its own direction, and dates through Intl in Arabic with Latin digits', () => {
+  it('shows what users entered as is, in its own direction, and dates as yyyy-MM-dd, left-to-right, in Western digits', () => {
     const page = show('ar', list(subscriptions(2), 'assigned'));
     const [service, client, date] = page.querySelectorAll('tbody tr')[0]!.querySelectorAll('td');
     expect(service!.querySelector('bdi')!.getAttribute('dir')).toBe('auto');
@@ -89,12 +89,9 @@ describe('the T8 screen, right-to-left', () => {
     expect(client!.textContent).toBe('Client A');
     const time = date!.querySelector('time')!;
     expect(time.getAttribute('datetime')).toBe('2027-01-02');
-    expect(time.textContent).toBe(
-      new Intl.DateTimeFormat('ar-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(
-        new Date('2027-01-02T00:00:00Z'),
-      ),
-    );
-    expect(time.textContent).toContain('2027');
+    expect(time.textContent).toBe('2027-01-02');
+    expect(time.className).toBe('day');
+    expect(time.querySelector('bdi')!.getAttribute('dir')).toBe('ltr');
     expect(time.textContent).not.toMatch(ARABIC_INDIC_DIGITS);
   });
 });
@@ -108,7 +105,7 @@ describe('the T8 screen, left-to-right', () => {
     expect(page.querySelector('.scope')!.textContent).toBe(
       'You are shown only the subscriptions of the clients assigned to you: 2 clients, 10 subscriptions.',
     );
-    expect(page.querySelector('time')!.textContent).toBe('January 2, 2027');
+    expect(page.querySelector('time')!.textContent).toBe('2027-01-02');
   });
 
   it('keeps user data untranslated', () => {

@@ -12,10 +12,6 @@
   background: color-mix(in srgb, var(--brand) 9%, var(--surface));
 }
 
-.subscriptions .date {
-  font-variant-numeric: tabular-nums;
-}
-
 /* The title and the way to a new subscription, on one line. */
 .subscriptions .heading {
   display: flex;

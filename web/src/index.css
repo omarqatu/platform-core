@@ -75,6 +75,12 @@ button:disabled {
   outline-offset: 2px;
 }
 
+/* A calendar day (components/Day.tsx): yyyy-MM-dd on one line, its digits of one width so a column of them aligns. */
+.day {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Badges (the reference's .badge): a status is always an icon and a word, never a color alone. */
 .badge {
   min-block-size: 28px;

@@ -2,13 +2,14 @@ import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useIntl } from 'react-intl';
 import { Link, useNavigate, useParams } from 'react-router';
 import { ApiError, getJson, isAbort, request } from '../../api/client';
+import { Day } from '../../components/Day';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { errorMessage } from '../../i18n/apiErrors';
 import { useSession } from '../../session/SessionProvider';
 import { ForbiddenScreen, NotFoundScreen } from '../status/StatusScreens';
 import { messages } from './formMessages';
 import { isDay, westernDigits, type SubscriptionDetail } from './subscriptionForm';
-import { formatDay, LIST_PATH, TENANT_LOST } from './SubscriptionsScreen';
+import { LIST_PATH, TENANT_LOST } from './SubscriptionsScreen';
 import './SubscriptionFormScreen.css';
 
 export const RENEW_PATH = '/app/subscriptions/:id/renew';
@@ -108,7 +109,7 @@ function RenewForm({ subscription, onRefusal }: { subscription: SubscriptionDeta
         <div className="field" data-field="currentEnd">
           <label htmlFor={idOf('currentEnd')}>{intl.formatMessage(messages.renewCurrentEnd)}</label>
           <output id={idOf('currentEnd')} className="readonly">
-            <time dateTime={subscription.ends_on}>{formatDay(intl.formatDate, subscription.ends_on)}</time>
+            <Day day={subscription.ends_on} />
           </output>
         </div>
         <div className="field" data-field="endsOn">

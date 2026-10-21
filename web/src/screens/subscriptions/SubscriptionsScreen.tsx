@@ -3,7 +3,9 @@ import { useIntl } from 'react-intl';
 import { Link, useSearchParams } from 'react-router';
 import { ApiError, getJson, isAbort, request } from '../../api/client';
 import { Badge, type BadgeTone } from '../../components/Badge';
+import { Day } from '../../components/Day';
 import { ErrorAlert } from '../../components/ErrorAlert';
+import { ltr } from '../../components/ltr';
 import { RowActions, type RowAction } from '../../components/RowActions';
 import { errorMessage } from '../../i18n/apiErrors';
 import { getPermissions, PERMISSION } from '../../session/permissions';
@@ -218,7 +220,7 @@ function RowActionsCell({
     <>
       {expired && (
         <span className="row-note" data-note="expired">
-          {intl.formatMessage(form.expiredSince, { date: subscription.ends_on, ltr: (chunks) => <bdi dir="ltr">{chunks}</bdi> })}
+          {intl.formatMessage(form.expiredSince, { date: subscription.ends_on, ltr })}
         </span>
       )}
       <RowActions
@@ -353,7 +355,7 @@ function SubscriptionsTable({
                     {client === undefined ? intl.formatMessage(messages.clientUnavailable) : <bdi dir="auto">{client}</bdi>}
                   </td>
                   <td className="date">
-                    <time dateTime={s.ends_on}>{formatDay(intl.formatDate, s.ends_on)}</time>
+                    <Day day={s.ends_on} />
                   </td>
                   <td>
                     <RowStatus subscription={s} today={today} />
@@ -465,12 +467,4 @@ function RowStatus({ subscription, today }: { subscription: SubscriptionItem; to
       <span data-status={subscription.status}>{intl.formatMessage(label)}</span>
     </Badge>
   );
-}
-
-/**
- * A calendar day (yyyy-MM-dd, no time, no zone) through Intl.DateTimeFormat in the current locale. Read and written in
- * UTC, so no time zone can move it to the day before or after.
- */
-export function formatDay(formatDate: ReturnType<typeof useIntl>['formatDate'], day: string): string {
-  return formatDate(new Date(`${day}T00:00:00Z`), { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
 }
