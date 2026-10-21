@@ -67,6 +67,15 @@ builder.Services.AddDbContext<ProvisionerDbContext>(options => options.UseCoreDa
 // marked assumption until the project owner settles it at launch.
 builder.Services.Configure<LoginLimits>(builder.Configuration.GetSection("Identity:LoginLimits"));
 
+// Its delay sequence is one comma-separated value (OPEN_ITEMS 91), checked here so a bad one stops Api rather than
+// the first failed login: a list in the old shape (a JSON array, or __0-style variables) would bind to nothing and
+// silently become the default, and a malformed value is refused rather than skipped — fail-closed, both.
+var delaySequence = builder.Configuration.GetSection("Identity:LoginLimits:DelaySecondsByFailure");
+if (delaySequence.GetChildren().Any())
+    throw new InvalidOperationException(
+        "Identity:LoginLimits:DelaySecondsByFailure is a list; it is one comma-separated value, e.g. \"1,2,4,8,15\".");
+LoginLimits.ParseDelaySeconds(delaySequence.Value);
+
 // POST /auth/password/forgot (Amendment 01 §5.1): the token's life, and the floor that keeps the answer's
 // timing from saying whether the address has an account (OPEN_ITEMS 51). Marked assumptions, like the limiter's.
 builder.Services.Configure<ForgotPasswordSettings>(builder.Configuration.GetSection("Identity:ForgotPassword"));
