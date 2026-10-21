@@ -2,6 +2,7 @@ import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'reac
 import { useIntl, type MessageDescriptor } from 'react-intl';
 import { Link, useNavigate, useParams } from 'react-router';
 import { ApiError, getJson, isAbort, request } from '../../api/client';
+import { DateField } from '../../components/DateField';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { errorMessage } from '../../i18n/apiErrors';
 import { useLocale } from '../../i18n/I18nProvider';
@@ -193,6 +194,12 @@ function SubscriptionForm({ mode, data, onRefusal }: { mode: Mode; data: FormDat
     'aria-describedby': [hint ? `${idOf(name)}-hint` : null, errors[name] ? `${idOf(name)}-error` : null].filter(Boolean).join(' ') || undefined,
   });
 
+  // A calendar day: typed with its hyphens written for the user, or picked (DateField).
+  const day = (name: 'endsOn') => {
+    const { id, 'aria-invalid': invalid, 'aria-describedby': describedBy } = described(name, true);
+    return <DateField id={id} name={name} value={values[name]} onChange={(value) => set(name, value)} invalid={invalid} describedBy={describedBy} />;
+  };
+
   const text = (name: 'serviceName' | 'provider' | 'loginUrl', extra: { type?: string; maxLength?: number; hint?: boolean } = {}) => (
     <input
       {...described(name, extra.hint)}
@@ -232,15 +239,7 @@ function SubscriptionForm({ mode, data, onRefusal }: { mode: Mode; data: FormDat
         {field(
           'endsOn',
           messages.endsOn,
-          <input
-            {...described('endsOn', true)}
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            dir="ltr"
-            value={values.endsOn}
-            onChange={(e) => set('endsOn', westernDigits(e.target.value))}
-          />,
+          day('endsOn'),
           { hint: messages.endsOnHint },
         )}
         {field(

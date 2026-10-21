@@ -246,6 +246,18 @@ Closed by the shell-overflow PR:
   and after are byte-identical. Proven by `row-actions.spec.ts` › "3. at 390 px the page does not scroll sideways"
   (both lists, ar and en). It fails on `main` with 432.
 
+Closed by the list-filter-dates PR:
+- **78.** The end date has a picker now, and its text stays yyyy-MM-dd. `components/DateField.tsx`, reusable by any
+  vertical: the text field (left-to-right, the numeric keypad, the hyphens written as the digits are typed,
+  Arabic-Indic digits taken as Western) and beside it a 44 px button (`components.dateField.pick`) that calls
+  `showPicker()` on a hidden `<input type="date">` and writes the day picked into the text as ISO. Where
+  `showPicker()` is missing or refused, that date input lies transparent over the button instead. It is used on the
+  subscription form (create and edit) and the renew screen. **The native field was rejected as what the user reads,
+  on Chromium's evidence:** on Linux (Playwright's Chromium) `value="2027-03-07"` shows as `2027/03/07` in both an
+  `ar` and an `en-US` page, and an empty one shows `يوم/شهر/سنة` even on the `en-US` page. The field follows the
+  browser's own language, not the page's, and is never `yyyy-MM-dd`; its value is always ISO. **iOS Safari is
+  unverified** (item 97).
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -850,16 +862,6 @@ Closed by the shell-overflow PR:
 - **The same question will meet `plans_read`** (Amendment 01 §3, §4.1) when `plans` is built: it names `job_runner`
   too, and the same two roads apply.
 
-### 78. The subscription form's end date is a text field, not a date picker
-
-- **Origin:** the stage (a) PR, 2026-10-17.
-- **Why text:** the interface shows Western digits in Arabic (`ar-u-nu-latn`, web/README). A native
-  `<input type="date">` draws its value in the browser's own locale, which the page does not control, so in an
-  Arabic browser it may show Arabic-Indic digits. The field is therefore `yyyy-MM-dd` text written left-to-right,
-  with its example under it, a check that the day exists, and Arabic-Indic digits converted as they are typed.
-- **What would close it:** a picker the interface draws itself, in `ar-u-nu-latn`, with Gregorian month names — a
-  component decision for the design system, not for this form alone.
-
 ### 79. `subscriptions.clients.write` is narrowed at creation by the second axis, not by the permission
 
 - **Origin:** the stage (b) PR, 2026-10-18. Proven on PostgreSQL 18.6 **before** the stage was designed around it.
@@ -1211,6 +1213,25 @@ Closed by the shell-overflow PR:
   apply it at the seven sites, and add one test per site on the org-entry-race pattern: the request held open, the
   navigation made while it waits, and on `BrowserRouter` the click and the answer inside one `act()`, so the address
   guard is what keeps the navigation.
+
+### 97. iOS Safari's date picker is unverified — needs a device
+
+- **Origin:** the list-filter-dates PR (2026-10-21). Item 6 (DateField) shipped without iOS evidence: no iPhone was
+  available, and the project owner decided not to wait (item 78 above).
+- **What is open:** only how iOS Safari draws its own picker in Arabic: the digits of its wheels (0–9 or ٠–٩), and
+  whether the calendar is Gregorian. Both are system UI, outside the page. The value it returns is ISO by the HTML
+  standard, and DateField writes only an ISO day into its text, so the stored and shown value does not depend on it.
+- **What to check, on an iPhone set to Arabic, in Safari:** the probe page
+  (https://claude.ai/artifact/T1FSGL9MeU8E6S59rTB5NF, private to the project owner), its four checks, with a
+  screenshot after each:
+  1. how `<input type="date" value="2027-03-07">` is drawn, and its open picker (digits, calendar);
+  2. a button calling `showPicker()` on a hidden date input: whether it exists, any error, the value after a pick.
+     The page runs inside a claude.ai frame, where a browser may refuse `showPicker()`; the app is not framed, so an
+     error there does not settle it;
+  3. the fallback, a transparent date input over a button: the value after a pick;
+  4. the browser: user agent, language, Intl's locale, calendar and numbering system.
+- **What closes it:** the screenshots. If the wheels show ٠–٩, the project owner decides whether system UI in the
+  device's digits is acceptable; nothing in the page changes either way unless check 2 and 3 both fail.
 
 ## For the next version of the document — not for the code
 

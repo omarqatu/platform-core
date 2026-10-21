@@ -56,6 +56,7 @@
   "common.language.label": "اللغة",
   "common.password.rule": "12 محرفًا على الأقل. لا يلزم رمز ولا رقم ولا حرف كبير.",
   "common.status.loading": "جارٍ التحميل…",
+  "components.dateField.pick": "اختيار تاريخ",
   "errors.account_exists": "يوجد حساب بهذا البريد الإلكتروني. سجّل الدخول ثم اقبل الدعوة.",
   "errors.already_member": "أنت عضو في هذه الجهة بالفعل.",
   "errors.conflict": "هذا العنصر موجود بالفعل.",

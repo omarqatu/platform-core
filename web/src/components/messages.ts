@@ -6,6 +6,8 @@ export const messages = defineMessages({
   arabic: { id: 'common.language.arabic', defaultMessage: 'العربية' },
   english: { id: 'common.language.english', defaultMessage: 'English' },
   loading: { id: 'common.status.loading', defaultMessage: 'Loading…' },
+  // DateField: the button beside a date's text that opens the browser's own date picker.
+  datePick: { id: 'components.dateField.pick', defaultMessage: 'Choose a date' },
   identityLabel: { id: 'identity.bar.label', defaultMessage: 'Your session' },
   signedInAs: { id: 'identity.bar.signedInAs', defaultMessage: 'Signed in as' },
   organization: { id: 'identity.bar.organization', defaultMessage: 'Organization' },

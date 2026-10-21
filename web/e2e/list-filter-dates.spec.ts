@@ -118,3 +118,54 @@ test('2. every date is yyyy-MM-dd, left-to-right, on one line — the list and t
       await expect(current.locator('bdi')).toHaveAttribute('dir', 'ltr');
     }
 });
+
+// Item 6, DateField. The limit, stated: the browser's own picker is drawn by the browser, outside the page, and a
+// headless run cannot drive it. So this proves what the page owns — the keypad's text with its hyphens written, the
+// button calling showPicker() (recorded, not opened), and a day set on the date input reaching the text as ISO and
+// the saved renewal — and not how any browser draws its picker (OPEN_ITEMS 97: iOS Safari is unverified).
+test('3. the date field: typed with its hyphens written, picked through showPicker(), saved as ISO', async ({ page }) => {
+  await page.addInitScript(() => {
+    const calls: string[] = [];
+    (window as unknown as { showPickerCalls: string[] }).showPickerCalls = calls;
+    HTMLInputElement.prototype.showPicker = function (this: HTMLInputElement) {
+      calls.push(`${this.type}:${this.value}`);
+    };
+  });
+  await page.context().addCookies([{ name: 'lang', value: 'en', url: BASE_URL }]);
+  const owner = await organizationWithHistory();
+  await signIn(page, owner.username, owner.password);
+  await expect(page).toHaveURL(/\/app\/subscriptions$/);
+
+  await page.getByRole('button', { name: 'Actions for Hosting' }).click();
+  await page.getByRole('menuitem', { name: 'Renew Hosting' }).click();
+  const field = page.getByLabel(/^New end date/);
+
+  // The numeric keypad has no hyphen: the field writes them, and a backspace after one takes the digit before it.
+  await expect(field).toHaveAttribute('inputmode', 'numeric');
+  await field.pressSequentially('2099');
+  await expect(field).toHaveValue('2099-');
+  await field.press('Backspace');
+  await expect(field).toHaveValue('209');
+  await field.pressSequentially('90301');
+  await expect(field).toHaveValue('2099-03-01');
+
+  // The button opens the picker on the day typed; the day picked is written as ISO.
+  const pick = page.getByRole('button', { name: 'Choose a date' });
+  await expect(pick).toHaveCSS('min-block-size', '44px');
+  await pick.click();
+  expect(await page.evaluate(() => (window as unknown as { showPickerCalls: string[] }).showPickerCalls)).toEqual(['date:2099-03-01']);
+  await page.locator('[data-field="endsOn"] input[type="date"]').fill('2099-04-30', { force: true });
+  await expect(field).toHaveValue('2099-04-30');
+
+  await page.getByRole('button', { name: 'Renew' }).click();
+  await expect(page).toHaveURL(/\/app\/subscriptions$/);
+  await expect(page.locator('tbody tr', { hasText: 'Hosting' }).locator('time')).toHaveText('2099-04-30');
+
+  // The same field on the subscription form, in Arabic: named in the language, typed in Arabic-Indic digits.
+  await page.context().addCookies([{ name: 'lang', value: 'ar', url: BASE_URL }]);
+  await page.goto('/app/subscriptions/new');
+  await expect(page.getByRole('button', { name: 'اختيار تاريخ' })).toBeVisible();
+  const ends = page.getByLabel(/^ينتهي في/);
+  await ends.pressSequentially('٢٠٩٩٠٦٣٠');
+  await expect(ends).toHaveValue('2099-06-30');
+});
