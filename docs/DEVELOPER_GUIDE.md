@@ -1370,14 +1370,31 @@ essentials:
   where accounts are actually created. Acceptance has no confirmation field on purpose: the risk one guards
   against is a mistyped first password with no way back, and `/app/password/forgot` is that way back now.
   `check-password-policy` holds the interface's copies of the number to the server's (OPEN_ITEMS 65).
-- **Navigate after an `await` only if the user is still there** (OPEN_ITEMS 94): still mounted, **and** the address
-  unchanged since the `await` began (`window.location.href`); otherwise skip the navigation, because the user has
-  already gone somewhere else and a late `navigate` would take them back. Both checks are needed because react-router
-  8's `BrowserRouter` renders a location change inside `startTransition`, so for a moment the address has changed while
-  the old screen is still mounted. The reference is `screens/tenants/TenantSelectScreen.tsx` (`stayed()`), proven on
-  both routers in `App.test.tsx`; any screen that calls `navigate` after a request has the same race. The same
-  transition is why a control bound to the address shows its own choice until the address arrives (the list's
-  filter, above).
+- **Navigate after an `await` only if the user is still there** (OPEN_ITEMS 94, 96): still mounted, **and** the
+  address unchanged since the `await` began; otherwise skip the navigation, because the user has already gone
+  somewhere else and a late `navigate` would take them back. Both checks are needed because react-router 8's
+  `BrowserRouter` renders a location change inside `startTransition`, so for a moment the address has changed while
+  the old screen is still mounted. Use `navigation/useStayed.ts`: `const stayed = begin()` right before the `await`,
+  then `if (stayed()) navigate(…)`. It guards switching organization, signing in, the three forms' "back to the
+  list", and the selection's entry (`TenantSelectScreen`). **Where the success's own page is the right end,
+  wherever the person went, there is no guard**, and a test pins it (`App.navigateAfterAwait.test.tsx`):
+  - **signing out**: the session the person asked to end is what every page in the shell needs;
+  - **accepting an invitation**: an account or a membership now exists, and the next step is the sign-in or the
+    selection the success leads to;
+  - **setting a password from a recovery link**: the password is set, and the one thing left is to sign in with it;
+  - **signing in, when the person went to a recovery page** ("Forgot your password?" tapped while it waits): the sign-in
+    has just shown the password works. This exception is at the call site (`LoginScreen`'s `RECOVERY`), not in the
+    hook; a Back during sign-in is guarded.
+
+  The same transition is why a control bound to the address shows its own choice until the address arrives (the
+  list's filter, above).
+- **A guard's redirect checks it is not rendering a tree the person has left** (OPEN_ITEMS 96): inside that same
+  transition the old tree can render again — on a state change, such as a switch of organization ending — with the old
+  location, and a `<Navigate>` there lands on top of where the person went. `RequireTenant` redirects through
+  `navigation/useStaleRender.ts`: at each commit it records the address and the location rendered, and its redirect,
+  made in an effect, is skipped when the commit renders that location after the address has moved. `RequireAuth`
+  has the same shape and keeps its plain `<Navigate>` on purpose: the session has ended, and the sign-in screen is
+  the right end of a sign-out whatever was tapped (the sign-out pin depends on it).
 - **A 401 is an ended session, with two exceptions** (`api/client.ts`): the login path's, and
   `invalid_credentials` from `PUT /me/password`, which is a wrong *current* password and must not sign the user
   out of a working session. A stale security stamp on the same request is `session_expired` and still ends it.
