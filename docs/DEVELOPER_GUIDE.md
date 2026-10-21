@@ -1348,6 +1348,13 @@ essentials:
     never a membership (§0), and "invite" reads like "add" to anyone who has used other software. "All clients" is
     offered **disabled with its reason** rather than hidden — unlike an action, a missing radio option would make
     the question look as though it had only one answer.
+
+    > **A declared exception to "hidden, never shown and then refused"** (the project owner, 2026-10-21). That rule
+    > governs **actions**: a button that answers 403 wastes the person's time and teaches them to distrust the
+    > screen. It does not govern **the shape of a question**. A radio group silently reduced to one option states
+    > something false — that the choice does not exist — where a disabled option with its reason states something
+    > true: it exists, and this caller may not pick it. Do not "fix" this into hiding.
+
   - **At phone width**: the name, the status and the actions; the roles fold under the name and the scope under
     the status. Measured at 390 px on the running interface — 125 px to spare in Arabic, 58 px in English, against
     the 24 px the rule wants (§16).

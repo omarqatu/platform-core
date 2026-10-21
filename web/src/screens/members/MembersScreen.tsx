@@ -20,6 +20,13 @@ export const LIST_PATH = '/app/members';
 export const INVITE_PATH = '/app/members/invite';
 export const PAGE_SIZE = 200; // the API's maximum page
 
+/**
+ * Whether the member row offers its way to the assignments screen. False until that screen and its route exist:
+ * every change in this group must be mergeable on its own, and the platform is in use, so none of them may leave
+ * a visible path into a page that answers 404.
+ */
+export const SCOPE_SCREEN_BUILT = false;
+
 /** What the caller may do here, learnt from GET /me/scope with the rows (OPEN_ITEMS 77). */
 export interface MemberActions {
   /** core.members.manage: invite, withdraw, disable and enable, and change roles. */
@@ -158,8 +165,11 @@ const STATUS = {
 function MembersTable({ members, held, setStatus }: { members: ScopedList<MemberItem>; held: MemberActions; setStatus?: ViewProps['setStatus'] }) {
   const intl = useIntl();
   const { lang } = useLocale();
-  // Any action at all needs a permission; with neither there is no actions column, as the client list does it.
-  const actions = held.members || held.scope;
+  // Any action at all needs a permission; with none there is no actions column, as the client list does it.
+  // SCOPE_SCREEN_BUILT is part of the condition and not an afterthought: while the assignments screen is unbuilt,
+  // scope management alone grants no action here, and a column of buttons opening empty menus would be a worse
+  // fault than the 404 it was meant to avoid.
+  const actions = held.members || (held.scope && SCOPE_SCREEN_BUILT);
   return (
     <>
       <p className="count">{intl.formatMessage(messages.count, { members: members.visible_count })}</p>
@@ -280,7 +290,10 @@ function MemberRowActions({ member, held, setStatus }: { member: MemberItem; hel
       icon: 'edit',
       to: `${LIST_PATH}/${member.membership_id}/roles`,
     });
-  if (held.scope)
+  // The way to a member's assignments. Held back until the screen behind it exists: a visible path into an
+  // unbuilt page is a 404 in a live platform, and no change in this group leaves one (the project owner's rule,
+  // 2026-10-21). SCOPE_SCREEN_BUILT turns it on in the same change that adds the route.
+  if (held.scope && SCOPE_SCREEN_BUILT)
     items.push({
       key: 'scope',
       label: intl.formatMessage(messages.manageScope),
@@ -307,6 +320,9 @@ function MemberRowActions({ member, held, setStatus }: { member: MemberItem; hel
             onSelect: () => void change('active'),
           },
     );
+  // A button that opens nothing is a fault, not an empty state. The column above is gone in this case too; this
+  // is the second guard, so a future permission combination cannot reintroduce it by itself.
+  if (items.length === 0) return null;
   return <RowActions label={intl.formatMessage(messages.actionsFor, { member: name })} actions={items} />;
 }
 

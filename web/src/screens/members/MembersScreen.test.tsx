@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import type { Lang } from '../../i18n/locale';
 import type { ScopedList } from '../subscriptions/SubscriptionsScreen';
-import { MembersView, readyState, type MemberActions } from './MembersScreen';
+import { MembersView, readyState, SCOPE_SCREEN_BUILT, type MemberActions } from './MembersScreen';
 import { invitationExpired, type InvitationItem, type MemberItem, type RoleItem } from './types';
 
 const owner: RoleItem = { id: 'r1', code: 'owner', name_ar: 'مالك', name_en: 'Owner', is_system: true };
@@ -121,10 +121,18 @@ describe('the member list', () => {
     expect(menuOf('Actions for Ahmad')).toEqual(['Roles for Ahmad', 'Disable Ahmad']);
   });
 
-  it('offers only the scope with scope management alone', () => {
+  // Held back until the assignments screen exists: no change in this group leaves a visible path into a page that
+  // answers 404, and the platform is in use. When that screen lands, SCOPE_SCREEN_BUILT turns true in the same
+  // change, and this expectation becomes ['Scope for Ahmad'].
+  it('offers nothing yet with scope management alone, while its screen is unbuilt', () => {
     show('en', [member()], SCOPE_ONLY);
 
-    expect(menuOf('Actions for Ahmad')).toEqual(['Scope for Ahmad']);
+    expect(SCOPE_SCREEN_BUILT).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Actions for Ahmad' })).toBeNull();
+    // And no actions column standing empty above the rows: a button that opens nothing is worse than the 404
+    // holding the action back was meant to avoid.
+    expect(document.querySelector('th.actions')).toBeNull();
+    expect(document.querySelector('td.actions')).toBeNull();
   });
 
   it('offers enabling, not disabling, for a disabled member', () => {
