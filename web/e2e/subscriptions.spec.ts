@@ -92,7 +92,8 @@ test('1. a subscription is created with its category and its fields, then edited
     },
   ]);
 
-  await page.getByRole('link', { name: 'Edit VPS' }).click();
+  await page.getByRole('button', { name: 'Actions for VPS' }).click();
+  await page.getByRole('menuitem', { name: 'Edit VPS' }).click();
   await expect(page.getByRole('heading', { name: 'Edit subscription' })).toBeVisible();
   await expect(page.getByLabel(/^Service/)).toHaveValue('VPS');
   await expect(page.getByLabel(/^Category/)).toHaveValue(/.+/);

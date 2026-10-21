@@ -206,6 +206,22 @@ Closed by the item-66/88 PR:
   The test was not marked image-only. `Security:AllowedOrigins` gains nothing: DEVELOPER_GUIDE §16 runs e2e on its
   Docker path, with its own origin, not on dev-up.
 
+Closed by the row-actions PR:
+- **77.** The lists offer each action only to a member who may take it. `GET /me/scope` carries `permissions`: every
+  code the member holds in the active tenant, `core.*` included, sorted, read by `Permissions.HeldAsync` on the
+  request's own transaction with the same query `RequireAsync` uses — never from the session, a header or anything the
+  interface keeps. The subscription list shows "New subscription" and its actions column only with
+  `subscriptions.write`; the client list shows "New client" and edit with `subscriptions.clients.write`, disable and
+  enable with `subscriptions.clients.manage`, and no column with neither — so an operator edits clients and cannot
+  disable them, and a viewer is offered nothing. The permissions come in the same load as each list: nothing shows
+  until both answer, and a failed `/me/scope` is the screen's error, never a list that silently lost its actions. **The
+  interface's copy is as old as the screen's load** — a role changed elsewhere shows on the next load, and until then
+  the server refuses what it always refused. [B] `MeScopePermissionsTests` (each seed membership's permissions exactly
+  the database's, read as `migrator`; a viewer; an operator; the active tenant's, not the person's; nothing a request
+  carries adds one); e2e: layla, the viewer, offered nothing on either list. Built with the project owner's item 1 (the
+  actions cell on one line, its own row's, in reach at phone width — the `.data-table` pattern) and item 3 (the
+  actions by the row's state), in the same PR, because all three live in the same cell.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -810,18 +826,6 @@ Closed by the item-66/88 PR:
 - **The same question will meet `plans_read`** (Amendment 01 §3, §4.1) when `plans` is built: it names `job_runner`
   too, and the same two roads apply.
 
-### 77. The subscription list offers "New" and "Edit" to members who may not write
-
-- **Origin:** the stage (a) PR, 2026-10-17.
-- **What is true:** the interface does not know the caller's permissions — no endpoint tells it, and the session
-  carries none by design (its cookie holds the user and the tenant only — DEVELOPER_GUIDE §7). So the list shows
-  "New subscription" and each row's "Edit" to every member who can list, a viewer included; the viewer's attempt
-  is refused by the server (`403 not_permitted`) and the form says so. Nothing is written, and the server is the
-  guard — this is a courtesy gap, not a security one.
-- **What would close it:** a read of the caller's own permissions in the active tenant (e.g. on `GET /me/scope`,
-  which already resolves `can_manage_scope`), so the screens can hide what the server would refuse. It is a contract
-  addition, so it is not made inside a stage (a) PR.
-
 ### 78. The subscription form's end date is a text field, not a date picker
 
 - **Origin:** the stage (a) PR, 2026-10-17.
@@ -1140,6 +1144,61 @@ Closed by the item-66/88 PR:
 - **Related:** 66 (the PR that found it, whose limiter test depends on this fix), 54 (CI does not exercise the
   deployed numbers — which is also why this went unseen), 16 (the numbers settled at launch, now set as one value),
   83.
+
+### 92. A cancelled subscription does not say when it was cancelled
+
+- **Origin:** the row-actions PR (2026-10-21), the project owner's item 3, which asked for "cancelled on <date>".
+- **What is true:** `subscriptions` has no `cancelled_at` (nor `renewed_at`); the only record of the moment is
+  `audit_log`, which the `audit_read` policy shows only to a member with scope `all` (`app.scope_all`) — an assigned
+  member could never read it, and it is not a list's data. So the list says "Cancelled, no actions" and no date.
+- **What would close it:** a `cancelled_at` column written by `POST /subscriptions/{id}/cancel` — a migration, with
+  `docs/schema.sql` and `DATABASE.md`, and the list's note gaining its date (`subscriptions.list.cancelledNoActions`).
+  Existing cancelled rows would need their date from the audit log in the same migration, or none. **Decided by the
+  project owner:** not in this group (no migrations here); a later group.
+
+### 93. On a phone the whole page is wider than the screen — the top bar overflows
+
+- **Origin:** the row-actions PR (2026-10-21), measured while checking the actions column at 390 px.
+- **The finding:** at a 390 px viewport, `div.shell-controls` (the top bar's controls) spans past the viewport: the
+  document is **432 px** wide in Arabic (the controls at −42..374 px) and **465 px** in English (16..465 px), so the
+  page scrolls sideways. In Arabic it clips the start of every screen: the heading "الاشتراكات" and the scope
+  declaration are cut at the right edge. **Present on `main`** (`d2be7c5`), with the same numbers — the row-actions PR
+  touches no shell file.
+- **What closes it:** a one-file fix in `AppShell.css` at phone width, its own PR (`fix/shell-overflow`), with a 390 px
+  before and after in both languages. By the project owner's decision, after the row-actions PR.
+
+### 94. Entering the only organization overrides a navigation the user already made
+
+- **Origin:** the row-actions PR (2026-10-21), through an e2e that lost it.
+- **The finding:** a user with one organization is entered into it automatically after signing in (`/organizations`,
+  then `POST /tenants/{id}/select`, then `GET /me`, then a navigation to `/`). A click made in the shell during those
+  few hundred milliseconds — "Change password" — navigates, and then the entry's own navigation lands on top of it
+  and takes the user to `/app/subscriptions`. Recorded sequence (ms after loading `/login`): `628 nav /organizations`,
+  `664 POST /tenants/…/select`, `685 select 204`, `703 nav /app/password/change` (the user's click), `704 /me 200`,
+  `715 nav /`, `722 nav /app/subscriptions`. The click is lost.
+- **On `main` too:** the same probe (sign in, click "Change password" at once) lost it on `main`'s interface at run 5
+  of 25. It is an existing bug in the app, not in the PR that found it.
+- **How it showed:** `password.spec.ts` › "4. change: this session survives; every other session of the same user
+  ends" clicks "Change password" straight after signing in (line 107) without waiting for the landing page. On the
+  §16 Docker path it lost 4 of 20 runs with the row-actions branch's interface and 0 of 20 with `main`'s, on the same
+  Api. **Inference, not measured:** the branch's larger bundle shifts when the link becomes clickable, into the
+  window; the bug is the same either way.
+- **Not done:** the test is not changed — a wait there would hide the bug a person would meet. **Decided by the
+  project owner:** fixed in the app in its own PR, from a fresh `main`, right after the row-actions PR, because until
+  then CI's `proof` check can lose that test about one run in five. The fix: the automatic entry does not navigate
+  when the user has navigated since it began.
+
+### 95. The lists' columns are too tight on a phone, and the ISO date will tighten them further
+
+- **Origin:** the row-actions PR (2026-10-21), the project owner's note while reviewing it.
+- **The finding:** at 390 px the subscription list's first row is 73.8 px because a short service name, "A service 1",
+  wraps onto **three** lines, and the date onto two ("January 2, 2027") or three ("2 يناير 2027"). The actions cell is
+  one line. The table already scrolls sideways inside its container with the actions column pinned, so nothing is out
+  of reach — but the columns are squeezed, not laid out.
+- **Why it is recorded now:** the project owner's item 5 (group ب) shows every date as `yyyy-MM-dd` with `nowrap`. That
+  removes the date's wrapping and takes its width from the other columns, so the service name will wrap more, not
+  less. Whoever builds item 5 decides the columns at phone width with it (a minimum width for the name, which columns
+  a phone shows, or a stacked row) rather than discovering it.
 
 ## For the next version of the document — not for the code
 

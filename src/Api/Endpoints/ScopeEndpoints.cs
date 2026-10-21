@@ -18,7 +18,9 @@ public static class ScopeEndpoints
     {
         var scope = app.MapGroup("").RequireAuthorization();
 
-        // Resolved on this request's transaction, not read from the session (3.5/6).
+        // Resolved on this request's transaction, not read from the session (3.5/6). permissions: every code the
+        // caller holds in the active tenant, read as Permissions.RequireAsync reads one, so the interface can hide what
+        // the server would refuse (OPEN_ITEMS 77) — never in place of each endpoint's own check.
         scope.MapGet("/me/scope", async (CoreDbContext db, CancellationToken ct) =>
         {
             if (db.Scope is not { } resolved)
@@ -28,11 +30,13 @@ public static class ScopeEndpoints
                 .OrderBy(a => a.ScopeRefId)
                 .Select(a => a.ScopeRefId)
                 .ToListAsync(ct);
+            var permissions = await Permissions.HeldAsync(db, ct);
             return Results.Ok(new
             {
                 scope_mode = resolved.ScopeAll ? "all" : "assigned",
                 can_manage_scope = resolved.CanManageScope,
                 assignments,
+                permissions,
             });
         });
 

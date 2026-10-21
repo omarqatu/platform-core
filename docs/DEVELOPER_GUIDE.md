@@ -821,7 +821,7 @@ There is no "add member directly" — joining always requires the person to acce
 
 | Endpoint | Effect |
 |---|---|
-| `GET /api/me/scope` | Your resolved mode, `can_manage_scope`, and your active assignments |
+| `GET /api/me/scope` | Your resolved mode, `can_manage_scope`, your active assignments, and `permissions`: every code you hold in the active tenant, sorted, read as `Permissions.RequireAsync` reads one. For the interface to hide what the server would refuse (OPEN_ITEMS 77) — a courtesy, never a guard: every endpoint still checks its own permission |
 | `PUT /api/scope/memberships/{id}/mode` | Change another member's mode (`all`/`assigned`). Not your own. |
 | `PUT /api/scope/memberships/{id}/assignments/{scopeRefId}` | Create, disable or re-enable an assignment (`active`, `reason`, `assignment_role`) |
 
@@ -1250,8 +1250,8 @@ essentials:
   scope crossing inside the tenant, and there is no path from `PUT` to `scope_ref_id`. The end date and the cost
   are text fields written left-to-right, and a digit typed on an Arabic keyboard becomes a Western one as it is typed
   (`subscriptionForm.westernDigits`) — a native date picker would show the browser's own digits (OPEN_ITEMS 78).
-  The list shows both actions to every member, because the interface does not know the caller's permissions: a
-  viewer's attempt is refused by the server (OPEN_ITEMS 77).
+  "New subscription" and each row's actions are shown only to a member who holds `subscriptions.write` — the
+  interface learns it from `GET /me/scope`'s `permissions`, below.
 - **The client screens** (Amendment 01 §2.8, §5.1): `/app/clients`, `/app/clients/new` and `/app/clients/:id/edit`,
   reached from the sidebar. The list carries its scope declaration like the subscription list, and a **disabled
   client stays in it with a badge** — disabling is not deleting, and the interface never hides what the server
@@ -1261,9 +1261,49 @@ essentials:
   chat id), with Arabic-Indic digits converted as they are typed. `is_active` is **not a field of the form**:
   disabling is a different permission on a different endpoint, so an operator who may edit a client cannot disable
   one by sending a field.
-- **Renewing and cancelling** (Amendment 01 §2.9): the list offers "Renew" and "Cancel subscription" on an active
-  row and neither on one that has left `active` — the database refuses the write either way, so the screen does not
-  offer what it knows will be refused. Renewing is a screen of its own, `/app/subscriptions/:id/renew`, with **one
+- **What the caller may do** (OPEN_ITEMS 77): the lists read `GET /me/scope`'s `permissions` with their rows, in one
+  load (`web/src/session/permissions.ts`) — never from the cookie, a header or anything kept in the browser. Nothing
+  shows until both answer, and a failed `/me/scope` is the screen's error path, never a list that silently lost its
+  actions. Subscriptions: `subscriptions.write` for "New subscription" and the actions. Clients:
+  `subscriptions.clients.write` for "New client" and edit, `subscriptions.clients.manage` for disable and enable (an
+  operator edits and cannot disable); neither, no actions column. **The copy is as old as the screen's load:** a role
+  changed elsewhere shows on the next load, and until then the server refuses what it always refused — it is the
+  guard; this is the courtesy.
+- **Data tables** (`.data-table` in `index.css`): the pattern both lists use, and the one a new list uses.
+  - **A cell stays a table cell.** Never `display: flex` on a `<td>`: it stops being a table cell, and its border and
+    alignment come loose from its row — which is how a wrapped "Cancel" once sat level with the row above. The flex row
+    is a wrapper inside the cell (`.row-actions`).
+  - **`border-collapse: separate` with `border-spacing: 0`**, not `collapse`: the actions column is sticky, and a
+    sticky cell's collapsed border stays behind as the cell moves. With spacing 0 it looks the same. Do not "fix" it
+    back.
+  - **The actions column never wraps and is pinned** at the inline end (`position: sticky; inset-inline-end: 0`, its
+    own background), in both directions; a table wider than the screen scrolls inside its container, so a row's
+    actions are on screen at phone width without scrolling.
+  - **The actions are one `RowActions` button per row** (`components/RowActions.tsx`), 44 × 44 like every button —
+    the actions cell has 4 px of vertical padding so the row stays 53 px. It opens an ARIA menu of icon-and-name
+    items (every action named on touch, where there is no hover): arrow keys, Home and End, Space and Enter, Escape
+    back to the button, Tab moves on and the menu closes behind it, a press outside closes it. A destructive item
+    (cancel, disable) is last, apart, in the danger color, and still asks first.
+  - **The menu** is fixed to the viewport beside its button, its inline-end edge on the button's, above it when there
+    is no room below — so no scroll container clips it. It closes on a resize, and on a scroll that has **moved the
+    button**: the sticky column does not move under a sideways scroll of the table, and a scroll event can arrive a
+    frame after a scroll from before the menu opened. **The Popover API** (`popover="manual"`) puts it in the top
+    layer — Chrome 114, Safari 17, Firefox 125 and later. **Below that floor the same fixed menu still opens**, with no
+    top layer: a menu that never opened would be a row with no actions. Manual, not auto, on purpose — the reason is
+    in the component's comment.
+  - **A note in a row** (`.row-note`: "Expired since …", "Renewed, no actions") is `--text-secondary`, not
+    `--text-muted`: on `--canvas` in the light theme muted is 3.38:1, under the 4.5:1 normal text needs, and
+    secondary is 5.76:1 (dark theme: 5.85 and 9.44).
+- **A date inside a translated sentence**: the `<ltr>` rich-text tag — `"Expired since <ltr>{date}</ltr>"`, and in
+  `ar.json` `"منتهٍ منذ <ltr>{date}</ltr>"` — rendered as `<bdi dir="ltr">` by
+  `ltr: (chunks) => <bdi dir="ltr">{chunks}</bdi>`, so `2025-09-01` reads left to right inside an Arabic sentence. Typed
+  in the message's values as `ltr: MessageTag` (react-intl's typed values take no React element, so the element goes
+  in a tag, not a value). The first rich-text tag in the interface; the pattern for any isolated value in a sentence.
+- **Renewing and cancelling** (Amendment 01 §2.9): an active row's menu offers edit, renew and cancel; once its end
+  date has passed (`subscriptionStatus`, from `ends_on` — the row stays `active` after it ends) renew comes first and
+  the row says "Expired since yyyy-MM-dd"; a row that has left `active` has no menu and says why ("Renewed, no
+  actions", "Cancelled, no actions") — the database refuses the write either way, and an empty cell cannot be told
+  from a fault. Cancelled rows say no date: there is no `cancelled_at` (OPEN_ITEMS 92). Renewing is a screen of its own, `/app/subscriptions/:id/renew`, with **one
   field**: the new end date. There is no client to choose, and none is sent — a renewal keeps the client of the row
   it renews, and a request that names one is refused (`400 invalid_value`), the same door stage (a) closed on the
   edit. Cancelling asks first and says the row is kept. The status column shows the lifecycle (`Cancelled`,
@@ -1351,6 +1391,10 @@ Api__Origin=http://localhost:5173 dotnet test tests/Conformance -c Release --no-
 ```
 
 Conformance's job tests run the Worker from `src/Worker/bin/Release/net10.0/Worker.dll` — build in Release first.
+
+**e2e is not part of this run:** it runs on the Docker path below, which serves the built interface on its own origin
+(`127.0.0.1:5080`), as CI does. On the `dev-up` stack Playwright's requests are refused by the CSRF check — dev-up's Api
+allows only `http://localhost:5173` — which is that check working, not a bug. CI is the reference.
 
 **This run is green, all of it.** A red test here is a real failure, never "the usual one": `dev-up` builds the
 interface and Api serves it, so `ApiPathTests.InterfacePath_Html_TheInterface` proves the interface path locally as

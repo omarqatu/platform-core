@@ -1,4 +1,4 @@
-import { defineMessages, type NoMessageValues } from 'react-intl';
+import { defineMessages, type MessageTag, type NoMessageValues } from 'react-intl';
 
 // The values each message takes, so formatMessage checks them (react-intl's typed descriptors).
 type Values = {
@@ -50,6 +50,10 @@ type Values = {
   cancelLabel: { service: string };
   confirmCancel: { service: string };
   working: NoMessageValues;
+  actionsFor: { service: string };
+  expiredSince: { date: string; ltr: MessageTag };
+  renewedNoActions: NoMessageValues;
+  cancelledNoActions: NoMessageValues;
   renewTitle: NoMessageValues;
   renewService: NoMessageValues;
   renewCurrentEnd: NoMessageValues;
@@ -131,6 +135,14 @@ export const messages = defineMessages<Values>({
     defaultMessage: 'Cancel {service}? It stays in the list with its history, and it cannot be edited or renewed afterwards.',
   },
   working: { id: 'subscriptions.list.working', defaultMessage: 'Working…' },
+  // The row's actions button (RowActions): which row's actions it opens.
+  actionsFor: { id: 'subscriptions.list.actionsFor', defaultMessage: 'Actions for {service}' },
+  // Beside an active row whose end date has passed: why its menu is worth opening (renewing comes first in it). The
+  // date is the end date, yyyy-MM-dd, isolated left-to-right inside the sentence by the <ltr> tag (a <bdi dir="ltr">).
+  expiredSince: { id: 'subscriptions.list.expiredSince', defaultMessage: 'Expired since <ltr>{date}</ltr>' },
+  // In place of the actions of a row that has left 'active' (Amendment 01 §2.9): a rule, said, not an empty cell.
+  renewedNoActions: { id: 'subscriptions.list.renewedNoActions', defaultMessage: 'Renewed, no actions' },
+  cancelledNoActions: { id: 'subscriptions.list.cancelledNoActions', defaultMessage: 'Cancelled, no actions' },
   // Renewing (Amendment 01 §2.9): a new subscription that keeps every detail of the one it renews but its end date.
   renewTitle: { id: 'subscriptions.renew.title', defaultMessage: 'Renew subscription' },
   renewService: { id: 'subscriptions.renew.service', defaultMessage: 'Service' },

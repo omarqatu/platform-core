@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import type { Lang } from '../../i18n/locale';
 import type { ScopedList } from '../subscriptions/SubscriptionsScreen';
-import { ClientsView, type ListActions } from './ClientsScreen';
+import { SessionProvider } from '../../session/SessionProvider';
+import { ClientsScreen, ClientsView, type ListActions } from './ClientsScreen';
 import type { ClientItem } from './clientForm';
 
 const ARABIC_INDIC_DIGITS = /[٠-٩۰-۹]/;
@@ -28,11 +29,17 @@ function show(lang: Lang, clients: ScopedList<ClientItem>, actions?: ListActions
   ).container;
 }
 
+// Owner or admin: both permissions (subscriptions.clients.write and .manage).
 const actions = (setStatus: ListActions['setStatus']): ListActions => ({
   create: () => null,
-  edit: () => null,
+  edit: true,
   setStatus,
 });
+
+const menuOf = (client: string) => {
+  fireEvent.click(screen.getByRole('button', { name: `Actions for ${client}` }));
+  return screen.getAllByRole('menuitem').map((i) => i.getAttribute('aria-label'));
+};
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -90,7 +97,8 @@ describe('disabling and enabling', () => {
     const setStatus = vi.fn();
     show('en', list([two[0]], 'all'), actions(setStatus));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Disable Client A' }));
+    menuOf('Client A');
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Disable Client A' }));
 
     expect(confirm).toHaveBeenCalledWith(
       'Stop the reminders for Client A? Its subscriptions are not changed, and you can enable it again.',
@@ -103,7 +111,8 @@ describe('disabling and enabling', () => {
     const setStatus = vi.fn();
     show('en', list([two[0]], 'all'), actions(setStatus));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Disable Client A' }));
+    menuOf('Client A');
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Disable Client A' }));
 
     expect(setStatus).toHaveBeenCalledWith(two[0], false);
   });
@@ -115,10 +124,136 @@ describe('disabling and enabling', () => {
     const setStatus = vi.fn();
     show('en', list([two[1]], 'all'), actions(setStatus));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enable شركة النور' }));
+    menuOf('شركة النور');
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Enable شركة النور' }));
 
     expect(confirm).not.toHaveBeenCalled();
     expect(setStatus).toHaveBeenCalledWith(two[1], true);
+  });
+});
+
+// Each way to act behind its own permission (Amendment 01 §4.2): editing with subscriptions.clients.write,
+// disabling and enabling with subscriptions.clients.manage.
+describe('the menu, by permission', () => {
+  it('both permissions: edit, then disable — last, apart, as the destructive one', () => {
+    show('en', list([two[0]], 'all'), actions(vi.fn()));
+
+    expect(menuOf('Client A')).toEqual(['Edit Client A', 'Disable Client A']);
+    expect(screen.getByRole('menuitem', { name: 'Edit Client A' }).getAttribute('href')).toBe('/app/clients/c1/edit');
+    expect(screen.getByRole('menuitem', { name: 'Disable Client A' }).classList.contains('danger')).toBe(true);
+    expect(screen.getByRole('separator')).toBeDefined();
+  });
+
+  it('a disabled client: edit, then enable — not as a destructive one', () => {
+    show('en', list([two[1]], 'all'), actions(vi.fn()));
+
+    expect(menuOf('شركة النور')).toEqual(['Edit شركة النور', 'Enable شركة النور']);
+    expect(screen.getByRole('menuitem', { name: 'Enable شركة النور' }).classList.contains('danger')).toBe(false);
+  });
+
+  // The operator: subscriptions.clients.write without .manage.
+  it('an operator: edit, and no disable or enable', () => {
+    show('en', list(two, 'all'), { create: () => null, edit: true });
+
+    expect(menuOf('Client A')).toEqual(['Edit Client A']);
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    expect(menuOf('شركة النور')).toEqual(['Edit شركة النور']);
+  });
+
+  // A custom role with .manage and not .write: the way back without the form.
+  it('manage alone: disable or enable, and no edit', () => {
+    show('en', list([two[0]], 'all'), { edit: false, setStatus: vi.fn() });
+
+    expect(menuOf('Client A')).toEqual(['Disable Client A']);
+    expect(screen.queryByRole('link', { name: 'New client' })).toBeNull();
+  });
+
+  it('names the button in Arabic', () => {
+    show('ar', list([two[0]], 'all'), actions(vi.fn()));
+
+    expect(screen.getByRole('button', { name: 'إجراءات Client A' })).toBeDefined();
+  });
+});
+
+// The routed screen: the caller's permissions come from GET /me/scope, in the same load as the list (OPEN_ITEMS 77).
+describe('the actions follow the permission (GET /me/scope)', () => {
+  const rows = { scope_mode: 'all', visible_count: 1, total_count: 1, has_more_in_scope: false,
+    items: [{ id: 'c1', name: 'Client A', is_active: true }] };
+
+  function api(meScope: () => Response | Promise<Response>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input).replace(/^\/api/, '').split('?')[0]!;
+        if (path === '/me') return Response.json({ username: 'khaled', active_tenant: { tenant_id: 't', name: 'Al-Amin' } });
+        if (path === '/me/scope') return meScope();
+        if (path === '/subscriptions/clients') return Response.json(rows);
+        return new Response(null, { status: 404 });
+      }),
+    );
+  }
+
+  const permitted = (...permissions: string[]) => () =>
+    Response.json({ scope_mode: 'all', can_manage_scope: false, assignments: [], permissions });
+
+  function renderScreen() {
+    render(
+      <I18nProvider initial="en">
+        <MemoryRouter>
+          <SessionProvider>
+            <ClientsScreen />
+          </SessionProvider>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+  }
+
+  it('a viewer: no "New client", no actions column, no menu', async () => {
+    api(permitted('subscriptions.read'));
+    renderScreen();
+
+    await screen.findByText('Client A');
+    expect(screen.queryByRole('link', { name: 'New client' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Actions' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Actions for Client A' })).toBeNull();
+  });
+
+  it('an operator: "New client", and edit without disable', async () => {
+    api(permitted('subscriptions.read', 'subscriptions.write', 'subscriptions.clients.write'));
+    renderScreen();
+
+    await screen.findByText('Client A');
+    expect(screen.getByRole('link', { name: 'New client' })).toBeDefined();
+    expect(menuOf('Client A')).toEqual(['Edit Client A']);
+  });
+
+  it('an owner: edit and disable', async () => {
+    api(permitted('subscriptions.clients.manage', 'subscriptions.clients.write', 'subscriptions.read'));
+    renderScreen();
+
+    await screen.findByText('Client A');
+    expect(menuOf('Client A')).toEqual(['Edit Client A', 'Disable Client A']);
+  });
+
+  it('shows no row and no action while the permissions are still loading', async () => {
+    let answer: (r: Response) => void = () => undefined;
+    api(() => new Promise<Response>((resolve) => (answer = resolve)));
+    renderScreen();
+
+    await screen.findByText('Loading…');
+    expect(screen.queryByText('Client A')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'New client' })).toBeNull();
+    answer(permitted('subscriptions.clients.write')());
+    await screen.findByText('Client A');
+  });
+
+  it('shows the error path when /me/scope fails, never the list without its actions', async () => {
+    api(() => Response.json({ error: 'internal_error' }, { status: 500 }));
+    renderScreen();
+
+    await screen.findByRole('alert');
+    expect(screen.queryByText('Client A')).toBeNull();
+    expect(screen.queryByRole('table')).toBeNull();
   });
 });
 

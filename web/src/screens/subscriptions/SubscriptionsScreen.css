@@ -12,20 +12,6 @@
   background: color-mix(in srgb, var(--brand) 9%, var(--surface));
 }
 
-.subscriptions table {
-  inline-size: 100%;
-  border-collapse: collapse;
-  margin-block-start: 1rem;
-}
-
-.subscriptions th,
-.subscriptions td {
-  text-align: start;
-  padding-block: 0.4rem;
-  padding-inline: 0.6rem;
-  border-block-end: 1px solid var(--border);
-}
-
 .subscriptions .date {
   font-variant-numeric: tabular-nums;
 }
@@ -37,26 +23,4 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-}
-
-/* Editing, renewing and cancelling sit together; the third is a button that reads as a link. */
-.subscriptions .row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
-.subscriptions .row-actions .link {
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  color: var(--brand);
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-.subscriptions .row-actions .link:disabled {
-  color: var(--text-muted);
-  cursor: default;
 }

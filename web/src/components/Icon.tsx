@@ -1,7 +1,24 @@
 import type { ReactNode } from 'react';
 
 /** The reference's line icons (docs/ui/reference): decorative only, so always aria-hidden — the text names the control. */
-export type IconName = 'grid' | 'layers' | 'globe' | 'moon' | 'check' | 'warn' | 'palette' | 'logout' | 'swap' | 'lock';
+export type IconName =
+  | 'grid'
+  | 'layers'
+  | 'globe'
+  | 'moon'
+  | 'check'
+  | 'warn'
+  | 'palette'
+  | 'logout'
+  | 'swap'
+  | 'lock'
+  // A row's actions (RowActions): the button that opens them, and one per action.
+  | 'more'
+  | 'edit'
+  | 'renew'
+  | 'cancel'
+  | 'pause'
+  | 'play';
 
 const PATHS: Record<IconName, ReactNode> = {
   grid: (
@@ -58,6 +75,44 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <rect x="4" y="10" width="16" height="11" rx="2" />
       <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+    </>
+  ),
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    </>
+  ),
+  edit: (
+    <>
+      <path d="M4 20h4L19 9l-4-4L4 16v4Z" />
+      <path d="m13.5 6.5 4 4" />
+    </>
+  ),
+  renew: (
+    <>
+      <path d="M20 12a8 8 0 0 1-14 5.3" />
+      <path d="M4 12a8 8 0 0 1 14-5.3" />
+      <path d="M18 3v4h-4M6 21v-4h4" />
+    </>
+  ),
+  cancel: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m5.6 5.6 12.8 12.8" />
+    </>
+  ),
+  pause: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M10 9v6M14 9v6" />
+    </>
+  ),
+  play: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m10 8.5 5 3.5-5 3.5v-7Z" />
     </>
   ),
 };
