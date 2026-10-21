@@ -332,6 +332,61 @@ body:has(.login) {
   gap: var(--space-3);
 }
 
+/* At phone width (the project owner's item 95, OPEN_ITEMS 95): at most three columns — the row's name, one value of
+   fixed width, the actions. Nothing is dropped: a secondary column folds into the column it belongs to, as a second
+   line there (.cell-fold), and its own column goes (.col-folded); each is display:none where the other shows, so a
+   screen reader meets the value once. The actions column keeps its name for assistive technology and loses it from
+   sight (its header is wider than its 44 px button), and its notes wrap inside it rather than widen it. */
+.data-table .cell-fold {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .data-table th,
+  .data-table td {
+    padding-inline: 0.4rem;
+  }
+
+  .data-table .col-folded {
+    display: none;
+  }
+
+  .data-table .cell-fold {
+    display: block;
+    margin-block-start: var(--space-1);
+    color: var(--text-secondary);
+    font-size: var(--type-label-size);
+  }
+
+  .data-table th.actions .th-label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .data-table td.actions .row-actions {
+    gap: var(--space-2);
+  }
+
+  .data-table td.actions .row-note {
+    white-space: normal;
+    max-inline-size: 5.5rem;
+    font-size: 12px;
+  }
+
+  /* A date inside a note wraps as a whole, never at its hyphens; and the button keeps its 44 px beside the note. */
+  .data-table td.actions .row-note bdi {
+    white-space: nowrap;
+  }
+
+  .data-table td.actions .row-actions-button {
+    flex: 0 0 auto;
+  }
+}
+
 /* A note in place of, or beside, a row's actions: why there are none ("Renewed, no actions"), or why the menu is worth
    opening ("Expired since …"). Secondary, not muted: it is read, so it keeps the contrast of text. */
 .data-table .row-note {

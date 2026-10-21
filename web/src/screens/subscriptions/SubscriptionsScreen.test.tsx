@@ -84,7 +84,7 @@ describe('the T8 screen, right-to-left', () => {
     const page = show('ar', list(subscriptions(2), 'assigned'));
     const [service, client, date] = page.querySelectorAll('tbody tr')[0]!.querySelectorAll('td');
     expect(service!.querySelector('bdi')!.getAttribute('dir')).toBe('auto');
-    expect(service!.textContent).toBe('استضافة');
+    expect(service!.querySelector(':scope > bdi')!.textContent).toBe('استضافة');
     expect(client!.querySelector('bdi')!.getAttribute('dir')).toBe('auto');
     expect(client!.textContent).toBe('Client A');
     const time = date!.querySelector('time')!;
@@ -110,7 +110,7 @@ describe('the T8 screen, left-to-right', () => {
 
   it('keeps user data untranslated', () => {
     const page = show('en', list(subscriptions(2), 'assigned'));
-    expect(page.querySelector('tbody td')!.textContent).toBe('استضافة');
+    expect(page.querySelector('tbody td > bdi')!.textContent).toBe('استضافة');
   });
 
   it('says when more is in scope', () => {
@@ -571,4 +571,43 @@ describe('the status filter', () => {
     expect(screen.queryByText('Row of cancelled')).toBeNull();
     await waitFor(() => expect(screen.getByText('Row of renewed')).toBeDefined());
   });
+});
+
+// The project owner's item 95: at phone width a secondary column folds into the column it belongs to. Both copies are
+// in the markup; the CSS (index.css, .data-table) shows one at each width, so here it is the markup that is checked.
+describe('the table at phone width', () => {
+  it('folds the client under the service and the status under the date, and marks their own columns', () => {
+    const page = show('en', list(subscriptions(2), 'all'));
+    const heads = [...page.querySelectorAll('thead th')].map((th) => [th.textContent, th.className]);
+    expect(heads).toEqual([
+      ['Service', ''],
+      ['Client', 'col-folded'],
+      ['Ends on', ''],
+      ['Status', 'col-folded'],
+    ]);
+    const [service, client, date, status] = page.querySelectorAll('tbody tr')[0]!.querySelectorAll('td');
+    expect(service!.querySelector('.cell-fold')!.textContent).toBe('Client A');
+    expect(client!.className).toBe('col-folded');
+    expect(date!.querySelector('.cell-fold .badge')!.textContent).toBe(status!.querySelector('.badge')!.textContent);
+    expect(status!.className).toBe('col-folded');
+  });
+
+  it("keeps the actions column's name, for assistive technology, in a label the phone width hides from sight", () => {
+    const page = withActionsTable();
+    expect(page.querySelector('th.actions .th-label')!.textContent).toBe('Actions');
+  });
+
+  function withActionsTable() {
+    return render(
+      <I18nProvider initial="en">
+        <MemoryRouter>
+          <SubscriptionsView
+            state={{ status: 'ready', data: { subscriptions: list(subscriptions(1), 'all'), clients: list(clients, 'all') } }}
+            filter="all"
+            actions={{ create: () => null, cancel: () => undefined }}
+          />
+        </MemoryRouter>
+      </I18nProvider>,
+    ).container;
+  }
 });

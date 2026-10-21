@@ -257,6 +257,17 @@ Closed by the list-filter-dates PR:
   `ar` and an `en-US` page, and an empty one shows `يوم/شهر/سنة` even on the `en-US` page. The field follows the
   browser's own language, not the page's, and is never `yyyy-MM-dd`; its value is always ISO. **iOS Safari is
   unverified** (item 97).
+- **95.** A list fits a phone's width. Under 600 px `.data-table` keeps at most three columns: the row's name, one
+  value of fixed width, the actions. A secondary column folds into the column it belongs to, as a second line there
+  (`.cell-fold`), and its own column goes (`.col-folded`): on the subscription list the client folds under the
+  service and the status under the date. Both copies are in the markup and each is `display:none` where the other
+  shows, so a screen reader meets the value once. The actions column keeps its name for assistive technology only
+  (`.th-label`; the header was wider than its 44 px button). Its notes wrap inside it, the date in a note never at
+  its hyphens, and the button keeps its 44 px. Cells take 0.4rem of side padding. At 390 px the subscription table
+  was 592 px wide in a 342 px container in Arabic; now neither list scrolls inside its container, in either
+  language, with the longest badge («قريب الانتهاء») and the longest note ("Expired since …").
+  `list-filter-dates.spec.ts` › 4 proves it, and fails on the code before. Nothing is hidden: a very long service
+  name still wraps over several lines, in the space left to it.
 
 ## For the project owner — a decision after T8
 
@@ -1181,21 +1192,6 @@ Closed by the list-filter-dates PR:
   `docs/schema.sql` and `DATABASE.md`, and the list's note gaining its date (`subscriptions.list.cancelledNoActions`).
   Existing cancelled rows would need their date from the audit log in the same migration, or none. **Decided by the
   project owner:** not in this group (no migrations here); a later group.
-
-### 95. The lists' columns are too tight on a phone, and the ISO date will tighten them further
-
-- **Origin:** the row-actions PR (2026-10-21), the project owner's note while reviewing it.
-- **The finding:** at 390 px the subscription list's first row is 73.8 px because a short service name, "A service 1",
-  wraps onto **three** lines, and the date onto two ("January 2, 2027") or three ("2 يناير 2027"). The actions cell is
-  one line. The table already scrolls sideways inside its container with the actions column pinned, so nothing is out
-  of reach — but the columns are squeezed, not laid out.
-- **Why it is recorded now:** the project owner's item 5 (group ب) shows every date as `yyyy-MM-dd` with `nowrap`. That
-  removes the date's wrapping and takes its width from the other columns, so the service name will wrap more, not
-  less. Whoever builds item 5 decides the columns at phone width with it (a minimum width for the name, which columns
-  a phone shows, or a stacked row) rather than discovering it.
-- **Seen again in the shell-overflow PR (2026-10-21):** at 390 px the subscription list's "Status" column is cut
-  down to "Stat" in its English header. Its status badges are cut too, in both languages ("نشط" shows only in part).
-  It is the same squeeze, inside the table's own sideways scroll; the page itself no longer scrolls sideways (item 93).
 
 ### 96. Seven other places navigate after an `await` without checking the user is still there
 

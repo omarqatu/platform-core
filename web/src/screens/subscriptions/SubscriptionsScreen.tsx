@@ -333,12 +333,16 @@ function SubscriptionsTable({
           <thead>
             <tr>
               <th scope="col">{intl.formatMessage(messages.columnService)}</th>
-              <th scope="col">{intl.formatMessage(messages.columnClient)}</th>
+              <th scope="col" className="col-folded">
+                {intl.formatMessage(messages.columnClient)}
+              </th>
               <th scope="col">{intl.formatMessage(messages.columnEndsOn)}</th>
-              <th scope="col">{intl.formatMessage(messages.columnStatus)}</th>
+              <th scope="col" className="col-folded">
+                {intl.formatMessage(messages.columnStatus)}
+              </th>
               {actions && (
                 <th scope="col" className="actions">
-                  {intl.formatMessage(form.columnActions)}
+                  <span className="th-label">{intl.formatMessage(form.columnActions)}</span>
                 </th>
               )}
             </tr>
@@ -346,20 +350,22 @@ function SubscriptionsTable({
           <tbody>
             {subscriptions.items.map((s) => {
               const client = names.get(s.client_id);
+              const clientCell =
+                client === undefined ? intl.formatMessage(messages.clientUnavailable) : <bdi dir="auto">{client}</bdi>;
+              const status = <RowStatus subscription={s} today={today} />;
+              // At phone width the client folds under the service, the status under the date (.cell-fold).
               return (
                 <tr key={s.id}>
                   <td>
                     <bdi dir="auto">{s.service_name}</bdi>
+                    <span className="cell-fold">{clientCell}</span>
                   </td>
-                  <td>
-                    {client === undefined ? intl.formatMessage(messages.clientUnavailable) : <bdi dir="auto">{client}</bdi>}
-                  </td>
+                  <td className="col-folded">{clientCell}</td>
                   <td className="date">
                     <Day day={s.ends_on} />
+                    <span className="cell-fold">{status}</span>
                   </td>
-                  <td>
-                    <RowStatus subscription={s} today={today} />
-                  </td>
+                  <td className="col-folded">{status}</td>
                   {actions && (
                     <td className="actions">
                       <div className="row-actions">

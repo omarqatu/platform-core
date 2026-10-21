@@ -10,8 +10,8 @@ import { api, asMigrator, BASE_URL, ownOrganization, signIn } from './fixtures';
 // The organization is the test's own; its client is the fixture's, as migrator (as row-actions.spec.ts), and its
 // subscriptions go through the real API, renewal and cancellation included. Nothing of the seed is written.
 
-/** One client; one subscription active, one renewed (with its active renewal), one cancelled. */
-async function organizationWithHistory() {
+/** One client; one subscription active, one renewed (with its active renewal), one cancelled — and any `more`. */
+async function organizationWithHistory(more: [service: string, endsOn: string][] = []) {
   const owner = await ownOrganization('list-filter');
   const client = randomUUID();
   await asMigrator((db) =>
@@ -39,13 +39,15 @@ async function organizationWithHistory() {
     expect((await context.post(`/api/subscriptions/${mail}/renew`, { data: { ends_on: '2099-05-01' } })).status()).toBe(201);
     const backup = await create('Backup', '2099-02-01');
     expect((await context.post(`/api/subscriptions/${backup}/cancel`)).status()).toBe(204);
+    for (const [service, endsOn] of more) await create(service, endsOn);
   } finally {
     await context.dispose();
   }
   return owner;
 }
 
-const services = (page: import('@playwright/test').Page) => page.locator('tbody tr td:first-child').allTextContents();
+// The service's own text: the cell also holds the client, folded under it for phone width (item 95).
+const services = (page: import('@playwright/test').Page) => page.locator('tbody tr td:first-child > bdi').allTextContents();
 
 test('1. the filter: "Active" by default, one status at a time, in the address, declared after it', async ({ page }) => {
   await page.context().addCookies([{ name: 'lang', value: 'en', url: BASE_URL }]);
@@ -168,4 +170,42 @@ test('3. the date field: typed with its hyphens written, picked through showPick
   const ends = page.getByLabel(/^ينتهي في/);
   await ends.pressSequentially('٢٠٩٩٠٦٣٠');
   await expect(ends).toHaveValue('2099-06-30');
+});
+
+// Item 95: at phone width a list fits its screen — at most three columns, the rest folded into the column they belong
+// to — so the table does not scroll inside its container. Every state a row can show, the longest badge ("Due soon",
+// «قريب الانتهاء») and the longest note ("Expired since …") included, both lists, both languages.
+test('4. at 390 px neither list scrolls inside its container, with the longest badge and note, ar and en', async ({ page }) => {
+  const soon = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
+  const owner = await organizationWithHistory([
+    ['Domain renewal for the company website', soon], // due soon, and a long name
+    ['Old domain', '2020-03-07'], // active, past its end date: the "Expired since" note
+  ]);
+  await page.context().addCookies([{ name: 'lang', value: 'en', url: BASE_URL }]);
+  await signIn(page, owner.username, owner.password);
+  await expect(page).toHaveURL(/\/app\/subscriptions$/);
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  for (const lang of ['ar', 'en'] as const)
+    for (const path of ['/app/subscriptions?status=all', '/app/clients']) {
+      await page.context().addCookies([{ name: 'lang', value: lang, url: BASE_URL }]);
+      await page.goto(path);
+      await expect(page.locator('html')).toHaveAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+      await expect(page.locator('tbody tr').first()).toBeVisible();
+      const where = `${path}, ${lang}`;
+      if (path.startsWith('/app/subscriptions')) {
+        await expect(page.locator('tbody tr'), where).toHaveCount(6);
+        await expect(page.locator('td [data-status="dueSoon"]:visible'), where).toHaveCount(1);
+        await expect(page.locator('[data-note="expired"]'), where).toHaveCount(1);
+      }
+
+      const seen = await page.evaluate(() => {
+        const box = document.querySelector<HTMLElement>('.data-table')!;
+        const columns = [...document.querySelectorAll('.data-table thead th')].filter((th) => getComputedStyle(th).display !== 'none');
+        return { scrollWidth: box.scrollWidth, clientWidth: box.clientWidth, columns: columns.length, page: document.documentElement.scrollWidth };
+      });
+      expect(seen.scrollWidth, `${where}: the table fits its container (${seen.scrollWidth} > ${seen.clientWidth})`).toBeLessThanOrEqual(seen.clientWidth);
+      expect(seen.columns, `${where}: at most three columns`).toBeLessThanOrEqual(3);
+      expect(seen.page, where).toBe(390);
+    }
 });

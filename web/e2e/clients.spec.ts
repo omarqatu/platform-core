@@ -151,7 +151,9 @@ test('2. a subscription is renewed into a new row and cancelled, and neither tou
   await page.getByRole('radio', { name: 'Renewed' }).check();
   await expect(page).toHaveURL(/\/app\/subscriptions\?status=renewed$/);
   await expect(rows).toHaveCount(1);
-  await expect(rows.getByText('Renewed', { exact: true })).toBeVisible();
+  // The badge is in the row twice — its column's, and the copy folded under the date for phone width (item 95) — and
+  // one of them is shown.
+  await expect(rows.getByText('Renewed', { exact: true }).filter({ visible: true })).toHaveCount(1);
   await expect(page.getByText('Renewed, no actions')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Actions for VPS' })).toHaveCount(0);
   await page.getByRole('radio', { name: 'Active' }).check();
@@ -174,7 +176,7 @@ test('2. a subscription is renewed into a new row and cancelled, and neither tou
   ]);
   await page.getByRole('radio', { name: 'Cancelled' }).check();
   await expect(rows).toHaveCount(1);
-  await expect(rows.getByText('Cancelled', { exact: true })).toBeVisible();
+  await expect(rows.getByText('Cancelled', { exact: true }).filter({ visible: true })).toHaveCount(1);
   // Nothing is left to act on, and nothing was deleted: "All" shows both rows.
   await page.getByRole('radio', { name: 'All' }).check();
   await expect(page.getByRole('button', { name: /^Actions for VPS/ })).toHaveCount(0);
