@@ -567,6 +567,52 @@ This is not a licence for bulk writes: `ExecuteUpdate` / `ExecuteDelete` stay fo
 this one table is never audited anyway (§7). Before using the pattern anywhere else, check the grant really does
 withhold `SELECT` — if the role can read the table, write it through EF like everything else.
 
+### Scope filtering, which is forbidden, and a subject constraint, which is not
+
+The rule above — the code never filters what RLS filters — is about **visibility**. It is not a ban on every
+`WHERE` that names `tenant_id`. There are two different things, and conflating them produces either a security
+hole or a wrong list:
+
+| | Scope filtering — **forbidden** | A subject constraint — **allowed** |
+|---|---|---|
+| What it does | Narrows rows the caller **must not see**, in code | Narrows rows RLS **already admits to this caller**, to the ones the query is about |
+| What happens if you delete the line | A leak | A wrong answer, visible to its own reader only |
+| Who is protected | Other tenants, other scopes | Nobody — the reader already had the right to every row |
+| Example | `.Where(c => c.TenantId == tenant)` on `clients`, instead of `tenant_isolation` | `WHERE m.tenant_id = <active>` on `memberships` |
+
+The one table where this comes up is **`memberships`**, because two *permissive* policies OR together on it:
+`membership_tenant_read` (every membership of the active tenant) and `membership_self` (the caller's own
+memberships, **in every tenant** — which is how `GET /tenants` lists the organizations a person belongs to, T3.7).
+A caller with a tenant selected therefore sees *this tenant's members, plus their own rows elsewhere*. A query
+whose subject is "the members of this organization" must say so:
+
+```csharp
+// Not the isolation — RLS is, and it is intact. The subject: this organization's members.
+// Without it, a person who belongs to two organizations appears twice in each one's list.
+var tenantId = session.Current.TenantId!.Value;
+var ordered = from m in db.Memberships where m.TenantId == tenantId ...
+```
+
+**The two places that do it**, and the only two that should: `LastMemberGuards` (in SQL, via
+`current_setting('app.tenant_id')`) and `GET /api/members`. Both carry the comment above. If a third arrives, it
+follows this table — it does not re-open the question.
+
+**Everything else on `memberships` is safe for a reason worth knowing**, because the reason is not the query:
+
+| Consumer | Why it is safe |
+|---|---|
+| `ScopeResolver` | Names `UserId` **and** `TenantId` explicitly |
+| `GET /me` | Names both, and `Status` |
+| `GET /tenants`, `TenantFanOut` | Cross-tenant **on purpose** — this is the policy's reason for existing |
+| `MemberAdministration` status/leave writes | By primary key; a row from another tenant fails the UPDATE policy, so `CriticalWrite` turns it into `403`, not a wrong write |
+| `Acceptance` (`m.UserId == userId`, no tenant named) | Runs as **`provisioner`**, whose only select policy is `tenant_id = app.tenant_id` with no self branch — so the tenant is implicit in the role, not in the query |
+| Background jobs | `job_runner` holds no grant on `memberships` at all (§3.8) |
+
+That last row is the one to watch. `Acceptance`'s query would be wrong the moment it ran as `app_user`: a
+signed-in person already a member of tenant A, accepting an invitation to tenant B, would match their A
+membership and be refused `already_member` for the wrong tenant. It is correct today because of the role it runs
+under. `T6_UnifiedViewTests` exercises that exact path (`World.JoinExistingAsync`), which is what keeps it honest.
+
 ### `Permissions.RequireAsync` — the explicit permission
 
 ```csharp
