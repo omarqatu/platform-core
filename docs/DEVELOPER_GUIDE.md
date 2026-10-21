@@ -297,8 +297,11 @@ It does, in order:
 2. Builds the solution.
 3. Runs the migrations **as `migrator`** (`dotnet run --project src/Migrations`).
 4. Loads the seed contract (`tests/seed/seed-contract.sql`) as `migrator`.
-5. Starts Api on `http://127.0.0.1:5080` with its own three connection strings — never `migrator`'s.
-6. Starts Vite on `http://localhost:5173`, proxying `/api` to Api.
+5. Builds the interface (`web/dist`, `npm run build`).
+6. Starts Api on `http://127.0.0.1:5080` with its own three connection strings — never `migrator`'s — serving that
+   build (`Web__Root`), as the image serves its own. It is a snapshot of `web/` at this run; the interface you work
+   on is Vite's, below.
+7. Starts Vite on `http://localhost:5173`, proxying `/api` to Api.
 
 Open **exactly** `http://localhost:5173` — `127.0.0.1:5173` is a different origin and the CSRF check refuses it.
 Logs go to `.dev/api.log` and `.dev/web.log`. Stop everything with `scripts/dev-down.sh`. The database is recreated
@@ -1348,6 +1351,14 @@ Api__Origin=http://localhost:5173 dotnet test tests/Conformance -c Release --no-
 ```
 
 Conformance's job tests run the Worker from `src/Worker/bin/Release/net10.0/Worker.dll` — build in Release first.
+
+**This run is green, all of it.** A red test here is a real failure, never "the usual one": `dev-up` builds the
+interface and Api serves it, so `ApiPathTests.InterfacePath_Html_TheInterface` proves the interface path locally as
+it does in CI (OPEN_ITEMS 88, which it used to fail on every run). The timing tests hold under load too — they bound
+the delay from below and assert the escalation as a difference, never a ceiling on work whose cost is the machine's
+(OPEN_ITEMS 66). If you add a test that asserts on time: a lower bound with a few milliseconds for `Task.Delay`'s
+rounding, a relative assertion for anything that scales with the machine, and `waitFor` around anything a render
+writes after the commit you awaited.
 If a run leaves the database in a strange state, `scripts/dev-down.sh && scripts/dev-up.sh` gives you a clean one.
 
 ### No .NET SDK on the machine? Docker has one — try it before reporting anything unprovable

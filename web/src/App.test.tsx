@@ -58,6 +58,8 @@ function fakeApi(options: { me?: typeof A | null; signedIn?: boolean; tenants?: 
   return { state, overrides, calls };
 }
 
+// Written by an effect, so it can trail the commit that shows the new screen: after a navigation it is read inside
+// waitFor, never straight after a findBy (OPEN_ITEMS 66). Where the screen must not move, a plain read is the claim.
 const probe = { location: '' };
 function LocationProbe() {
   const current = useLocation();
@@ -111,7 +113,7 @@ describe('switching the organization', () => {
 
     // The selection shows once the API has forgotten the tenant: deselect comes before the selection's first request.
     await screen.findByRole('heading', { name: 'Choose an organization' });
-    expect(probe.location.startsWith('/organizations')).toBe(true);
+    await waitFor(() => expect(probe.location.startsWith('/organizations')).toBe(true));
     const deselect = api.calls.findIndex((c) => c.method === 'POST' && c.path === '/tenants/deselect');
     const listed = api.calls.findIndex((c, i) => i > 0 && c.path === '/tenants' && api.calls.slice(0, i).some((p) => p.path.startsWith('/subscriptions')));
     expect(deselect).toBeGreaterThan(-1);
@@ -136,7 +138,7 @@ describe('signing out', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
 
     await screen.findByRole('heading', { name: 'Sign in' });
-    expect(probe.location).toBe('/login');
+    await waitFor(() => expect(probe.location).toBe('/login'));
     expect(screen.queryByRole('table')).toBeNull();
     expect(screen.queryByTestId('identity-user')).toBeNull();
     const logout = api.calls.find((c) => c.method === 'POST' && c.path === '/auth/logout');
@@ -147,7 +149,7 @@ describe('signing out', () => {
     fakeApi({ signedIn: false });
     renderApp('/app/subscriptions');
     await screen.findByRole('heading', { name: 'Sign in' });
-    expect(probe.location).toBe('/login?next=%2Fapp%2Fsubscriptions');
+    await waitFor(() => expect(probe.location).toBe('/login?next=%2Fapp%2Fsubscriptions'));
   });
 });
 
@@ -161,7 +163,7 @@ describe('a 401 during the session', () => {
     act(() => window.dispatchEvent(new Event('focus'))); // the user comes back to the tab
 
     await screen.findByText('Your session has ended. Sign in again.');
-    expect(probe.location).toBe('/login?next=%2Fapp%2Fsubscriptions');
+    await waitFor(() => expect(probe.location).toBe('/login?next=%2Fapp%2Fsubscriptions'));
     expect(screen.queryByRole('table')).toBeNull();
   });
 });
@@ -175,7 +177,7 @@ describe('changing one\u2019s own password', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Change password' }));
 
     await screen.findByRole('heading', { name: 'Change your password' });
-    expect(probe.location).toBe('/app/password/change');
+    await waitFor(() => expect(probe.location).toBe('/app/password/change'));
   });
 
   it('a reload after the password changed elsewhere still says why (the cold load reads the code)', async () => {
@@ -186,7 +188,7 @@ describe('changing one\u2019s own password', () => {
     renderApp('/app/subscriptions');
 
     await screen.findByText('Your session has ended. Sign in again.');
-    expect(probe.location).toBe('/login?next=%2Fapp%2Fsubscriptions');
+    await waitFor(() => expect(probe.location).toBe('/login?next=%2Fapp%2Fsubscriptions'));
   });
 
   it('a cold load with no session at all says nothing — it is not an ended session', async () => {
@@ -209,7 +211,7 @@ describe('changing one\u2019s own password', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Change the password' }));
 
     await screen.findByText('Your session has ended. Sign in again.');
-    expect(probe.location).toBe('/login?next=%2Fapp%2Fpassword%2Fchange');
+    await waitFor(() => expect(probe.location).toBe('/login?next=%2Fapp%2Fpassword%2Fchange'));
   });
 });
 
@@ -241,7 +243,7 @@ describe('signing in', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     await screen.findByText('Al-Amin row 0');
-    expect(probe.location).toBe('/app/subscriptions');
+    await waitFor(() => expect(probe.location).toBe('/app/subscriptions'));
   });
 
   it('several organizations: the selection', async () => {
@@ -259,7 +261,7 @@ describe('signing in', () => {
     expect(screen.getAllByRole('button', { name: /Al-Amin|Maan/ })).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: /Maan/ }));
     await screen.findByText('Maan row 0');
-    expect(probe.location).toBe('/app/subscriptions');
+    await waitFor(() => expect(probe.location).toBe('/app/subscriptions'));
   });
 
   it('a refusal: one generic message, focused, and the password cleared', async () => {
@@ -298,7 +300,7 @@ describe('signing in', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     await screen.findByText('Al-Amin row 0');
-    expect(probe.location).toBe('/app/subscriptions');
+    await waitFor(() => expect(probe.location).toBe('/app/subscriptions'));
   });
 });
 
