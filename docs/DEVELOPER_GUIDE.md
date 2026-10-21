@@ -821,7 +821,7 @@ There is no "add member directly" — joining always requires the person to acce
 
 | Endpoint | Effect |
 |---|---|
-| `GET /api/me/scope` | Your resolved mode, `can_manage_scope`, and your active assignments |
+| `GET /api/me/scope` | Your resolved mode, `can_manage_scope`, your active assignments, and `permissions`: every code you hold in the active tenant, sorted, read as `Permissions.RequireAsync` reads one. For the interface to hide what the server would refuse (OPEN_ITEMS 77) — a courtesy, never a guard: every endpoint still checks its own permission |
 | `PUT /api/scope/memberships/{id}/mode` | Change another member's mode (`all`/`assigned`). Not your own. |
 | `PUT /api/scope/memberships/{id}/assignments/{scopeRefId}` | Create, disable or re-enable an assignment (`active`, `reason`, `assignment_role`) |
 
