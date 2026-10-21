@@ -6,6 +6,7 @@ import { DateField } from '../../components/DateField';
 import { Day } from '../../components/Day';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { errorMessage } from '../../i18n/apiErrors';
+import { useStayed } from '../../navigation/useStayed';
 import { useSession } from '../../session/SessionProvider';
 import { ForbiddenScreen, NotFoundScreen } from '../status/StatusScreens';
 import { messages } from './formMessages';
@@ -64,6 +65,7 @@ export function RenewView({ state, onRefusal }: { state: State; onRefusal?: (cod
 function RenewForm({ subscription, onRefusal }: { subscription: SubscriptionDetail; onRefusal?: (code: string | null) => void }) {
   const intl = useIntl();
   const navigate = useNavigate();
+  const begin = useStayed();
   const [endsOn, setEndsOn] = useState('');
   const [error, setError] = useState<'required' | 'date' | 'after' | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -83,9 +85,11 @@ function RenewForm({ subscription, onRefusal }: { subscription: SubscriptionDeta
     }
     setPending(true);
     setRefusal(null);
+    // Back to the list once renewed — unless the person has gone somewhere else meanwhile (navigation/useStayed).
+    const stayed = begin();
     try {
       await request('POST', `/subscriptions/${subscription.id}/renew`, { ends_on: value });
-      navigate(LIST_PATH);
+      if (stayed()) navigate(LIST_PATH);
     } catch (e) {
       if (isAbort(e)) return;
       const code = e instanceof ApiError ? e.code : null;

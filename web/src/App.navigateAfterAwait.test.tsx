@@ -157,4 +157,26 @@ describe('a navigation after an await: kept where the person went (guarded)', ()
     await landsOn('/app/clients');
     await screen.findByText('Nour Co');
   });
+
+  // Site 6, renewing (RenewSubscriptionScreen.tsx): the renewal sent, and while it waits the person taps "Clients".
+  // Without the guard the renewal took them back to the subscription list.
+  it('renewing a subscription: a sidebar link tapped while it renews is kept', async () => {
+    const api = fakeApi();
+    const renew = api.hold('POST /subscriptions/s1/renew', () => Response.json({ id: 's2' }, { status: 201 }));
+    renderAt('/app/subscriptions/s1/renew');
+    fireEvent.change(await screen.findByLabelText(/^New end date/), { target: { value: '2028-03-07' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Renew' }));
+    await waitFor(() => expect(renew.asked()).toBe(true));
+
+    await moveWhileItWaits(
+      () => fireEvent.click(screen.getByRole('link', { name: 'Clients' })),
+      '/app/clients',
+      renew.answer,
+      () => screen.getByRole('heading', { name: 'Renew subscription' }),
+    );
+
+    await landsOn('/app/clients');
+    await screen.findByText('Nour Co');
+  });
 });
+
