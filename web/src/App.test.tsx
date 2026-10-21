@@ -251,6 +251,43 @@ describe('signing in', () => {
     await waitFor(() => expect(probe.location).toBe('/app/subscriptions'));
   });
 
+  // OPEN_ITEMS 94: a navigation the user makes while the single organization is being entered is theirs — the entry
+  // finishing afterwards does not take them back to the list. The selection is held open here so the click lands
+  // inside that window on every run, not one run in five.
+  it('one organization: a navigation made while it is being entered is kept', async () => {
+    const api = fakeApi({ signedIn: false, me: null, tenants: [A] });
+    api.overrides.set('POST /auth/login', () => {
+      api.state.signedIn = true;
+      return new Response(null, { status: 204 });
+    });
+    let answer: () => void = () => undefined;
+    api.overrides.set(
+      'POST /tenants/tenant-a/select',
+      () =>
+        new Promise<Response>((resolve) => {
+          answer = () => {
+            api.state.active = A;
+            resolve(new Response(null, { status: 204 }));
+          };
+        }),
+    );
+    renderApp('/login');
+    fireEvent.change(await screen.findByLabelText('Username'), { target: { value: 'sara' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(api.calls.some((c) => c.method === 'POST' && c.path === '/tenants/tenant-a/select')).toBe(true));
+
+    // The user leaves the selection before the entry answers…
+    fireEvent.click(screen.getByRole('link', { name: 'Change password' }));
+    await screen.findByRole('heading', { name: 'Change your password' });
+    // …and then it does.
+    await act(async () => answer());
+
+    await waitFor(() => expect(api.calls.filter((c) => c.path === '/me').length).toBeGreaterThan(1));
+    expect(probe.location).toBe('/app/password/change');
+    expect(screen.getByRole('heading', { name: 'Change your password' })).toBeDefined();
+  });
+
   it('several organizations: the selection', async () => {
     const api = fakeApi({ signedIn: false, me: null });
     api.overrides.set('POST /auth/login', () => {
