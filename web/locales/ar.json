@@ -30,6 +30,7 @@
   "clients.form.titleEdit": "تعديل عميل",
   "clients.form.titleNew": "عميل جديد",
   "clients.form.tooLong": "أطول من المسموح",
+  "clients.list.actionsFor": "إجراءات {client}",
   "clients.list.columnActions": "الإجراءات",
   "clients.list.columnName": "العميل",
   "clients.list.columnStatus": "الحالة",

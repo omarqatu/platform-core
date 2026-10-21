@@ -20,6 +20,7 @@ type Values = {
   disableLabel: { client: string };
   enable: NoMessageValues;
   enableLabel: { client: string };
+  actionsFor: { client: string };
   confirmDisable: { client: string };
   working: NoMessageValues;
 };
@@ -61,6 +62,8 @@ export const messages = defineMessages<Values>({
   disableLabel: { id: 'clients.list.disableLabel', defaultMessage: 'Disable {client}' },
   enable: { id: 'clients.list.enable', defaultMessage: 'Enable' },
   enableLabel: { id: 'clients.list.enableLabel', defaultMessage: 'Enable {client}' },
+  // The row's actions button (RowActions): which client's actions it opens.
+  actionsFor: { id: 'clients.list.actionsFor', defaultMessage: 'Actions for {client}' },
   // Said plainly, because the act is easy to misread: it stops reminders and leaves every subscription as it is.
   confirmDisable: {
     id: 'clients.list.confirmDisable',

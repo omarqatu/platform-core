@@ -4,7 +4,9 @@ import { Link } from 'react-router';
 import { ApiError, getJson, isAbort, request } from '../../api/client';
 import { Badge } from '../../components/Badge';
 import { ErrorAlert } from '../../components/ErrorAlert';
+import { RowActions, type RowAction } from '../../components/RowActions';
 import { errorMessage } from '../../i18n/apiErrors';
+import { getPermissions, PERMISSION } from '../../session/permissions';
 import { useSession } from '../../session/SessionProvider';
 import { ForbiddenScreen } from '../status/StatusScreens';
 import { TENANT_LOST, type ScopedList } from '../subscriptions/SubscriptionsScreen';
@@ -20,18 +22,26 @@ type State = { status: 'loading' } | { status: 'error'; code: string | null } | 
 /**
  * The client list (Amendment 01 §2.8, §5.1), from GET /subscriptions/clients: the scope declaration, then the rows.
  * A disabled client is listed with its badge and its way back — disabling is not deletion, and the interface never
- * hides what the server shows.
+ * hides what the server shows. The caller's permissions (GET /me/scope) come in the same load, so nothing is shown
+ * until both have answered and a failure of either is the screen's one error path.
  */
 export function ClientsScreen() {
   const { revalidate } = useSession();
   const [state, setState] = useState<State>({ status: 'loading' });
+  const [held, setHeld] = useState<{ write: boolean; manage: boolean }>({ write: false, manage: false });
   const [refusal, setRefusal] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
     const abort = new AbortController();
-    getJson<ScopedList<ClientItem>>(`/subscriptions/clients?limit=${PAGE_SIZE}`, abort.signal).then(
-      (data) => setState({ status: 'ready', data }),
+    Promise.all([
+      getJson<ScopedList<ClientItem>>(`/subscriptions/clients?limit=${PAGE_SIZE}`, abort.signal),
+      getPermissions(abort.signal),
+    ]).then(
+      ([data, permissions]) => {
+        setHeld({ write: permissions.has(PERMISSION.clientsWrite), manage: permissions.has(PERMISSION.clientsManage) });
+        setState({ status: 'ready', data });
+      },
       (error: unknown) => {
         if (abort.signal.aborted || isAbort(error)) return;
         const code = error instanceof ApiError ? error.code : null;
@@ -49,40 +59,46 @@ export function ClientsScreen() {
     [revalidate],
   );
 
+  const setStatus = async (client: ClientItem, isActive: boolean) => {
+    setRefusal(null);
+    try {
+      await request('PUT', `/subscriptions/clients/${client.id}/status`, { is_active: isActive });
+      setReload((n) => n + 1);
+    } catch (e) {
+      if (isAbort(e)) return;
+      const code = e instanceof ApiError ? e.code : null;
+      setRefusal(code);
+      onRefusal(code);
+    }
+  };
+
   if (state.status === 'error' && state.code === 'not_permitted') return <ForbiddenScreen />;
   return (
     <ClientsView
       state={state}
       refusal={refusal}
-      actions={{
-        create: () => <NewLink />,
-        edit: (client) => <EditLink client={client} />,
-        setStatus: async (client, isActive) => {
-          setRefusal(null);
-          try {
-            await request('PUT', `/subscriptions/clients/${client.id}/status`, { is_active: isActive });
-            setReload((n) => n + 1);
-          } catch (e) {
-            if (isAbort(e)) return;
-            const code = e instanceof ApiError ? e.code : null;
-            setRefusal(code);
-            onRefusal(code);
-          }
-        },
-      }}
+      // Each way to act is shown only with its own permission (Amendment 01 §4.2, OPEN_ITEMS 77): creating and
+      // editing with subscriptions.clients.write (owner, admin, operator), disabling and enabling with
+      // subscriptions.clients.manage (owner and admin alone). Neither: no actions column. The server stays the guard
+      // — a role changed elsewhere shows on the next load.
+      actions={
+        held.write || held.manage
+          ? { create: held.write ? () => <NewLink /> : undefined, edit: held.write, setStatus: held.manage ? setStatus : undefined }
+          : undefined
+      }
     />
   );
 }
 
 /**
- * The list's ways to act. Shown to every member who can list, because the interface does not know the caller's
- * permissions (OPEN_ITEMS 77): an operator sees "Disable" and the server refuses it with not_permitted. The server
- * is the guard; this is a courtesy gap, not a security one.
+ * The list's ways to act, each present only when the caller holds its permission: creating and editing
+ * (subscriptions.clients.write), disabling and enabling (subscriptions.clients.manage). Given at all only when the
+ * caller holds one of the two.
  */
 export interface ListActions {
-  create: () => ReactNode;
-  edit: (client: ClientItem) => ReactNode;
-  setStatus: (client: ClientItem, isActive: boolean) => void | Promise<void>;
+  create?: () => ReactNode;
+  edit: boolean;
+  setStatus?: (client: ClientItem, isActive: boolean) => void | Promise<void>;
 }
 
 function NewLink() {
@@ -94,13 +110,52 @@ function NewLink() {
   );
 }
 
-function EditLink({ client }: { client: ClientItem }) {
+/**
+ * A client's actions, as one RowActions menu: edit, and disable or enable it again. Disabling is the destructive one —
+ * it stops the reminders — so it comes last, apart, and asks first, saying what it does not change; enabling resumes
+ * them with no catch-up for what was missed, so it asks nothing. While the request runs the row says it is working.
+ */
+function ClientRowActions({ client, actions }: { client: ClientItem; actions: ListActions }) {
   const intl = useIntl();
-  return (
-    <Link to={`${LIST_PATH}/${client.id}/edit`} aria-label={intl.formatMessage(messages.editLabel, { client: client.name })}>
-      {intl.formatMessage(messages.edit)}
-    </Link>
-  );
+  const [pending, setPending] = useState(false);
+  if (pending) return <span className="row-note">{intl.formatMessage(messages.working)}</span>;
+
+  const name = client.name;
+  const change = async (isActive: boolean) => {
+    if (!isActive && !globalThis.confirm(intl.formatMessage(messages.confirmDisable, { client: name }))) return;
+    setPending(true);
+    await actions.setStatus?.(client, isActive);
+    setPending(false);
+  };
+  const items: RowAction[] = [];
+  if (actions.edit)
+    items.push({
+      key: 'edit',
+      label: intl.formatMessage(messages.edit),
+      accessibleName: intl.formatMessage(messages.editLabel, { client: name }),
+      icon: 'edit',
+      to: `${LIST_PATH}/${client.id}/edit`,
+    });
+  if (actions.setStatus)
+    items.push(
+      client.is_active
+        ? {
+            key: 'disable',
+            label: intl.formatMessage(messages.disable),
+            accessibleName: intl.formatMessage(messages.disableLabel, { client: name }),
+            icon: 'pause',
+            danger: true,
+            onSelect: () => void change(false),
+          }
+        : {
+            key: 'enable',
+            label: intl.formatMessage(messages.enable),
+            accessibleName: intl.formatMessage(messages.enableLabel, { client: name }),
+            icon: 'play',
+            onSelect: () => void change(true),
+          },
+    );
+  return <RowActions label={intl.formatMessage(messages.actionsFor, { client: name })} actions={items} />;
 }
 
 export function ClientsView({
@@ -117,7 +172,7 @@ export function ClientsView({
     <main className="clients">
       <div className="heading">
         <h1>{intl.formatMessage(messages.title)}</h1>
-        {state.status === 'ready' && actions?.create()}
+        {state.status === 'ready' && actions?.create?.()}
       </div>
       <ErrorAlert message={refusal ? intl.formatMessage(errorMessage(refusal)) : null} />
       {state.status === 'loading' && <p>{intl.formatMessage(messages.loading)}</p>}
@@ -161,8 +216,7 @@ function ClientsTable({ clients, actions }: { clients: ScopedList<ClientItem>; a
                 {actions && (
                   <td className="actions">
                     <div className="row-actions">
-                      {actions.edit(client)}
-                      <StatusButton client={client} actions={actions} />
+                      <ClientRowActions client={client} actions={actions} />
                     </div>
                   </td>
                 )}
@@ -173,33 +227,6 @@ function ClientsTable({ clients, actions }: { clients: ScopedList<ClientItem>; a
       </div>
       {clients.has_more_in_scope && <p className="more">{intl.formatMessage(messages.more, { shown: clients.items.length })}</p>}
     </>
-  );
-}
-
-/**
- * Disabling a client, and enabling it again. Disabling asks first and says what it does — it stops the reminders
- * and changes nothing about the subscriptions; enabling resumes them, with no catch-up for what was missed, so it
- * asks nothing.
- */
-function StatusButton({ client, actions }: { client: ClientItem; actions: ListActions }) {
-  const intl = useIntl();
-  const [pending, setPending] = useState(false);
-  const act = async () => {
-    if (client.is_active && !globalThis.confirm(intl.formatMessage(messages.confirmDisable, { client: client.name }))) return;
-    setPending(true);
-    await actions.setStatus(client, !client.is_active);
-    setPending(false);
-  };
-  return (
-    <button
-      type="button"
-      className="link"
-      disabled={pending}
-      aria-label={intl.formatMessage(client.is_active ? messages.disableLabel : messages.enableLabel, { client: client.name })}
-      onClick={act}
-    >
-      {intl.formatMessage(pending ? messages.working : client.is_active ? messages.disable : messages.enable)}
-    </button>
   );
 }
 
