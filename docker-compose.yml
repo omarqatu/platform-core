@@ -22,3 +22,21 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+  # The e-mail the tests read (group ب). Mailpit accepts SMTP on 1025 and serves what it caught over HTTP on
+  # 8025, so an e2e can follow an invitation's real link instead of the token the API also returns — which is
+  # the whole point of OPEN_ITEMS 60: a test that reads the response bypasses the part the item exists for.
+  # Development and CI only; nothing in deploy/ refers to it.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

@@ -106,7 +106,7 @@ jobs:
 
       # Always a fresh container: T0.4 is a clean database, migrated with no manual steps.
       - name: Start PostgreSQL 18 (clean database)
-        run: docker compose up -d --wait postgres
+        run: docker compose up -d --wait postgres mailpit
 
       - name: Migrate as migrator (T0.4)
         run: dotnet run --project src/Migrations -c Release --no-build
@@ -220,7 +220,7 @@ jobs:
       # evidence of a failure destroys it instead.
       - name: Database logs on failure
         if: failure()
-        run: docker compose logs --tail 200 postgres
+        run: docker compose logs --tail 200 postgres mailpit
 
       - name: Api logs on failure
         if: failure()
