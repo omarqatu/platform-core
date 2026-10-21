@@ -1329,6 +1329,12 @@ essentials:
   where accounts are actually created. Acceptance has no confirmation field on purpose: the risk one guards
   against is a mistyped first password with no way back, and `/app/password/forgot` is that way back now.
   `check-password-policy` holds the interface's copies of the number to the server's (OPEN_ITEMS 65).
+- **Navigate after an `await` only if the user is still there** (OPEN_ITEMS 94): still mounted, **and** the address
+  unchanged since the `await` began (`window.location.href`); otherwise skip the navigation, because the user has
+  already gone somewhere else and a late `navigate` would take them back. Both checks are needed because react-router
+  8's `BrowserRouter` renders a location change inside `startTransition`, so for a moment the address has changed while
+  the old screen is still mounted. The reference is `screens/tenants/TenantSelectScreen.tsx` (`stayed()`), proven on
+  both routers in `App.test.tsx`; any screen that calls `navigate` after a request has the same race.
 - **A 401 is an ended session, with two exceptions** (`api/client.ts`): the login path's, and
   `invalid_credentials` from `PUT /me/password`, which is a wrong *current* password and must not sign the user
   out of a working session. A stale security stamp on the same request is `session_expired` and still ends it.

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router';
+import { BrowserRouter, MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { I18nProvider } from './i18n/I18nProvider';
@@ -286,6 +286,64 @@ describe('signing in', () => {
     await waitFor(() => expect(api.calls.filter((c) => c.path === '/me').length).toBeGreaterThan(1));
     expect(probe.location).toBe('/app/password/change');
     expect(screen.getByRole('heading', { name: 'Change your password' })).toBeDefined();
+  });
+
+  // The same, on the router the app runs on, and in the window the browser has: BrowserRouter renders a location
+  // change inside a transition (react-router 8), so the address changes at once while the selection screen is still
+  // mounted. Inside one act() React holds its renders, so here the entry answers in exactly that window — the screen
+  // still mounted, the address already the user's — and only the address can say the user has gone.
+  it('one organization, on BrowserRouter: a navigation made while it is being entered is kept, mounted or not', async () => {
+    window.history.replaceState(null, '', '/login');
+    const api = fakeApi({ signedIn: false, me: null, tenants: [A] });
+    api.overrides.set('POST /auth/login', () => {
+      api.state.signedIn = true;
+      return new Response(null, { status: 204 });
+    });
+    let answer: () => void = () => undefined;
+    api.overrides.set(
+      'POST /tenants/tenant-a/select',
+      () =>
+        new Promise<Response>((resolve) => {
+          answer = () => {
+            api.state.active = A;
+            resolve(new Response(null, { status: 204 }));
+          };
+        }),
+    );
+    render(
+      <I18nProvider initial="en">
+        <ThemeProvider store={noStore}>
+          <BrowserRouter>
+            <SessionProvider>
+              <App />
+              <LocationProbe />
+            </SessionProvider>
+          </BrowserRouter>
+        </ThemeProvider>
+      </I18nProvider>,
+    );
+    fireEvent.change(await screen.findByLabelText('Username'), { target: { value: 'sara' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(api.calls.some((c) => c.method === 'POST' && c.path === '/tenants/tenant-a/select')).toBe(true));
+    const meBefore = api.calls.filter((c) => c.path === '/me').length;
+
+    await act(async () => {
+      // The user's click: the address changes now; the new route renders only when this act ends.
+      fireEvent.click(screen.getByRole('link', { name: 'Change password' }));
+      expect(window.location.pathname).toBe('/app/password/change');
+      // The entry answers, and finishes (its GET /me), while the selection screen is still mounted.
+      answer();
+      for (let i = 0; i < 50 && api.calls.filter((c) => c.path === '/me').length === meBefore; i++)
+        await new Promise((r) => setTimeout(r, 5));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(screen.getByRole('heading', { name: 'Choose an organization' })).toBeDefined();
+    });
+
+    await screen.findByRole('heading', { name: 'Change your password' });
+    expect(window.location.pathname).toBe('/app/password/change');
+    expect(probe.location).toBe('/app/password/change');
+    window.history.replaceState(null, '', '/');
   });
 
   it('several organizations: the selection', async () => {

@@ -1192,6 +1192,20 @@ Closed by the org-entry-race PR:
   less. Whoever builds item 5 decides the columns at phone width with it (a minimum width for the name, which columns
   a phone shows, or a stacked row) rather than discovering it.
 
+### 96. Seven other places navigate after an `await` without checking the user is still there
+
+- **Origin:** the org-entry-race PR (2026-10-21), by the project owner's note that item 94 is a pattern, not one
+  screen. DEVELOPER_GUIDE §15 now states the rule (navigate after an `await` only if still mounted and the address
+  unchanged since it began; reference `TenantSelectScreen`'s `stayed()`).
+- **Where it is not applied yet** (`navigate` within a few lines after an `await`, found by reading the code, not by a
+  failure): `AppShell.tsx:40` (switching organization) and `:48` (signing out), `LoginScreen.tsx:47/49`,
+  `ClientFormScreen.tsx:129`, `SubscriptionFormScreen.tsx:155`, `RenewSubscriptionScreen.tsx:86`,
+  `AcceptInvitationScreen.tsx:69/70`, `ResetPasswordScreen.tsx:68`.
+- **How much it matters:** none of them has been seen to lose a navigation; each waits on one request a user is
+  unlikely to leave mid-way. The forms' "save, then back to the list" is the likeliest to meet it. Not changed in the
+  PR that found it, which was kept to one file by the project owner's decision; to apply with a shared helper, or
+  screen by screen as each is next touched.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12
