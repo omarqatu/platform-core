@@ -1257,6 +1257,100 @@ Closed by the navigate-after-await PR:
   the caret after the same number of digits in the new text (`setSelectionRange` after the render). A vitest typing
   into the middle, and the same in `list-filter-dates.spec.ts` › 3.
 
+## From group (ب) — the second axis gets an interface (the project owner's decisions of 2026-10-21)
+
+### 100. The second axis has no interface — four screens and four read endpoints
+
+- **Origin:** the project owner's list, item 11, 2026-10-21. Recorded here because no numbered item covered it:
+  the brief named OPEN_ITEMS 48, which is the platform subscription register (D7) and unrelated.
+- **The finding:** every **write** of §3.10 and §4.8 has existed since T4 — invite, revoke, status, roles, mode,
+  assignment — and **nothing could list what they act on**. No member list, no invitation list, no role catalogue,
+  no read of a colleague's mode or assignments. So the second axis, which the platform was built around and which
+  PROOF_SPEC T8 proves in the database, could not be shown, demonstrated or used by anyone but its author.
+- **Being built in group (ب):** the four read endpoints (PR 1), the member/role screens (PR 2), the scope and
+  assignment screens (PR 3), invitation delivery by e-mail with its rate limit (PR 4, with item 60), and the
+  end-to-end proof through screens only (PR 5).
+- **Closed by:** the group's last PR. Items 101–105 below are what building it found.
+
+### 101. "Resend an invitation" does not exist — the one reason the token is still in the response
+
+- **Origin:** group (ب) PR 1, and the project owner's decision of 2026-10-21 on the invitation e-mail.
+- **The finding:** once invitations are sent by e-mail (item 60), the send is fire-and-forget —
+  `NotificationDispatcher` logs a failed delivery and drops it, because these are the direct sends of §5.5 with no
+  outbox row to retry from. With no way to re-issue, a dropped message leaves a pending invitation nobody holds a
+  token for: the shape of item 90, reached by a different road.
+- **The interim measure, approved by the project owner:** `POST /members/invitations` keeps returning the token,
+  and the screen shows it **once**, on the success panel, with a copy button — never stored in any client state,
+  cache or URL afterwards.
+- **Not built:** re-issuing an invitation. It is a new write path the amendment does not describe, and its
+  absence is the only thing justifying the concession above. Settle them together.
+
+### 102. The invitation e-mail is bilingual; the recovery e-mail is English only, hardcoded
+
+- **Origin:** group (ب) PR 1, while reading the A3 sender.
+- **The finding:** `POST /auth/password/forgot` composes its message as an English string literal inside
+  `AuthEndpoints.cs` — no i18n, no Arabic — on a platform whose first language is Arabic. The invitation e-mail
+  of item 60 cannot copy it: an invitee has no account yet, so `users.language` does not exist for them and their
+  language is genuinely unknown, which is why the project owner chose a bilingual body (Arabic, separator, English).
+- **Not done here, by decision:** the recovery e-mail is not changed in group (ب). Both messages should end up
+  under one way of composing text, chosen once.
+
+### 103. Member visibility is held by the endpoint alone, while client visibility is held by the database
+
+- **Origin:** measured in group (ب) PR 1 on PostgreSQL 18.6, before the read endpoints were written; opened at the
+  project owner's instruction.
+- **The finding:** `membership_tenant_read` admits **every** membership of the tenant to **any** member of it, with
+  no permission condition. An assigned employee with no management permission reads all of their colleagues'
+  memberships, names and addresses straight from the database. Measured, not inferred: three personas, three
+  membership rows returned to the one who should see none.
+- **The consequence:** PROOF_SPEC T8.2 for member data rests entirely on `GET /api/members` checking
+  `core.members.manage` or `core.scope.manage`. That is a real asymmetry with the platform's own argument — the
+  second axis on clients is enforced by RLS and survives a bug in the endpoint; member visibility does not.
+- **To evaluate (not built — a schema change and the project owner's decision after group ب's report):** a
+  restrictive policy requiring `core.members.manage` (or the row being the reader's own) to read another
+  membership. What it might break: any screen showing member names to ordinary members, audit attribution, and
+  `GET /tenants`, which reads the caller's own memberships across tenants through `membership_self`.
+
+### 104. `ScopedList` on a list that scope does not narrow
+
+- **Origin:** group (ب) PR 1.
+- **The finding:** §14 requires every list to carry a scope declaration, and `GET /api/members` now does — but
+  memberships carry no `scope_ref_id` and no `client_scope` policy, so the second axis removes nothing from it. A
+  member manager whose own mode is `assigned` therefore reads `scope_mode: "assigned"`, `total_count: null` and a
+  `visible_count` equal to the whole organization: a declaration that says the list was narrowed when it was not.
+- **The precedent followed:** `GET /api/audit-log` is the same shape (gated by `scope_all` in its policy rather
+  than by `client_scope`) and declares the same way, so the new list matches it rather than inventing a second
+  form.
+- **To settle:** whether a list outside the second axis should declare something else — an explicit "not scoped" —
+  or whether the declaration should stay uniform and be read as the caller's mode rather than the list's.
+
+### 105. The recovery link's default is a relative path; `Ops` refuses to start without an absolute one
+
+- **Origin:** group (ب) pre-flight, 2026-10-21.
+- **The finding:** `ForgotPasswordSettings.ResetLinkTemplate` defaults to `/app/password/reset#token={token}` and
+  is placed verbatim in the e-mail body. A relative path is not a link anyone can click. Production is correct —
+  `deploy/docker-compose.prod.yml` sets `https://${PUBLIC_HOST}/...` — so nothing is broken today.
+- **The asymmetry:** `Ops` **refuses to run** without `Ops:PublicOrigin`, and a white-box test pins that refusal;
+  `Api` sends the unusable link silently if its setting is ever lost in a deployment.
+- **Done in group (ب):** the invitation link's own origin setting refuses to start without an absolute origin, the
+  way `Ops` does (PR 4, the project owner's instruction).
+- **Not done:** the recovery link keeps its default. Give it the same guard, in its own PR.
+
+### 106. `POST /members/invitations` has no rate limit — and nothing outside the auth paths does
+
+- **Origin:** group (ب) pre-flight, 2026-10-21.
+- **The finding:** there is no `AddRateLimiter` and no limiting middleware anywhere in `src/`. `LoginLimits` is
+  read by exactly two endpoints (`/auth/login`, `/auth/password/forgot`) and keys on `auth_attempts`, a table of
+  the `authenticator` role, while the invitation path runs as `app_user`. A holder of `core.members.manage` can
+  therefore create unlimited invitations to arbitrary addresses.
+- **Harmless until group (ب):** nothing is sent today — no `Notifications:Email` settings and no
+  `provider_accounts` row in any environment — so item 60 is what turns this into outbound mail to addresses of
+  the sender's choosing. The exposure is created by this group's PR 4, not inherited.
+- **Being built in PR 4** (the project owner's decision: the PR that creates the exposure closes it): a
+  per-inviter window counted from `invitations.invited_by` and `created_at` on the same transaction — no new
+  table, no new grant, no new error code (`too_many_attempts` exists) — with the number marked `[—]` as the
+  limiter's are. Production sends through Gmail SMTP, whose own daily quota the limit also protects.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12
