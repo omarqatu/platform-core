@@ -41,6 +41,11 @@ function fakeApi(options: { me?: typeof A | null; signedIn?: boolean; tenants?: 
     if (!state.signedIn) return new Response(null, { status: 401 });
     if (path === '/me') return Response.json({ username: 'omar', active_tenant: state.active });
     if (path === '/tenants') return Response.json({ tenants });
+    // The caller's permissions, which the list screens load with their rows (OPEN_ITEMS 77): a member who may write.
+    if (path === '/me/scope')
+      return state.active
+        ? Response.json({ scope_mode: 'all', can_manage_scope: false, assignments: [], permissions: ['subscriptions.read', 'subscriptions.write'] })
+        : Response.json({ error: 'no_active_tenant' }, { status: 409 });
     const select = /^\/tenants\/(.+)\/select$/.exec(path);
     if (method === 'POST' && select) {
       state.active = [A, B].find((t) => t.tenant_id === select[1]) ?? null;

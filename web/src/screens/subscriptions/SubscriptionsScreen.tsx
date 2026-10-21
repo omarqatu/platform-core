@@ -4,7 +4,9 @@ import { Link } from 'react-router';
 import { ApiError, getJson, isAbort, request } from '../../api/client';
 import { Badge, type BadgeTone } from '../../components/Badge';
 import { ErrorAlert } from '../../components/ErrorAlert';
+import { RowActions, type RowAction } from '../../components/RowActions';
 import { errorMessage } from '../../i18n/apiErrors';
+import { getPermissions, PERMISSION } from '../../session/permissions';
 import { useSession } from '../../session/SessionProvider';
 import { ForbiddenScreen } from '../status/StatusScreens';
 import { messages as form } from './formMessages';
@@ -49,10 +51,13 @@ export const TENANT_LOST = new Set(['not_a_member', 'no_active_tenant', 'tenant_
 /**
  * The subscription list (PROOF_SPEC T8), from GET /subscriptions and GET /subscriptions/clients: the scope declaration,
  * then the rows. The chrome is translated; what users entered — services and clients — is shown as is, in its own
- * direction (dir="auto").
+ * direction (dir="auto"). The caller's permissions (GET /me/scope) come with the lists, in the same load: nothing is
+ * shown until all three have answered, so no action appears and then vanishes, and a failure of any of them is the
+ * screen's one error path — never a list that silently lost its actions.
  */
 export function SubscriptionsScreen() {
   const [state, setState] = useState<State>({ status: 'loading' });
+  const [canWrite, setCanWrite] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const { revalidate } = useSession();
@@ -62,8 +67,12 @@ export function SubscriptionsScreen() {
     Promise.all([
       getJson<ScopedList<SubscriptionItem>>(`/subscriptions?limit=${PAGE_SIZE}`, abort.signal),
       getJson<ScopedList<ClientItem>>(`/subscriptions/clients?limit=${CLIENTS_LIMIT}`, abort.signal),
+      getPermissions(abort.signal),
     ]).then(
-      ([subscriptions, clients]) => setState({ status: 'ready', data: { subscriptions, clients } }),
+      ([subscriptions, clients, permissions]) => {
+        setCanWrite(permissions.has(PERMISSION.subscriptionsWrite));
+        setState({ status: 'ready', data: { subscriptions, clients } });
+      },
       (error: unknown) => {
         if (abort.signal.aborted || isAbort(error)) return;
         const code = error instanceof ApiError ? error.code : null;
@@ -79,36 +88,39 @@ export function SubscriptionsScreen() {
     <SubscriptionsView
       state={state}
       refusal={refusal}
-      actions={{
-        create: () => <NewLink />,
-        edit: (subscription) => <EditLink subscription={subscription} />,
-        renew: (subscription) => <RenewLink subscription={subscription} />,
-        cancel: async (subscription) => {
-          setRefusal(null);
-          try {
-            await request('POST', `/subscriptions/${subscription.id}/cancel`);
-            setReload((n) => n + 1);
-          } catch (e) {
-            if (isAbort(e)) return;
-            const code = e instanceof ApiError ? e.code : null;
-            setRefusal(code);
-            if (code && TENANT_LOST.has(code)) revalidate().catch(() => undefined);
-          }
-        },
-      }}
+      // Shown only to a member who may write (OPEN_ITEMS 77): a viewer has no "New subscription" and no actions
+      // column. The server is still the guard — a role changed elsewhere shows on the next load, and until then a
+      // refused action says so.
+      actions={
+        canWrite
+          ? {
+              create: () => <NewLink />,
+              cancel: async (subscription) => {
+                setRefusal(null);
+                try {
+                  await request('POST', `/subscriptions/${subscription.id}/cancel`);
+                  setReload((n) => n + 1);
+                } catch (e) {
+                  if (isAbort(e)) return;
+                  const code = e instanceof ApiError ? e.code : null;
+                  setRefusal(code);
+                  if (code && TENANT_LOST.has(code)) revalidate().catch(() => undefined);
+                }
+              },
+            }
+          : undefined
+      }
     />
   );
 }
 
 /**
- * The list's ways to the form (Amendment 02 §3.2): creating, and editing a row. The routed screen supplies them; the
- * view alone renders none, so it stands without a router. Shown to every member who lists: the interface does not
- * know the caller's permissions, and a viewer's attempt is refused by the server with not_permitted.
+ * The list's ways to act (Amendment 02 §3.2, Amendment 01 §2.9), given only to a member who holds
+ * subscriptions.write: creating, and cancelling a row. Editing and renewing are links to their screens, which the
+ * view builds itself; it needs a router for them only when it is given actions.
  */
 export interface ListActions {
   create: () => ReactNode;
-  edit: (subscription: SubscriptionItem) => ReactNode;
-  renew: (subscription: SubscriptionItem) => ReactNode;
   cancel: (subscription: SubscriptionItem) => void | Promise<void>;
 }
 
@@ -121,57 +133,74 @@ function NewLink() {
   );
 }
 
-function RenewLink({ subscription }: { subscription: SubscriptionItem }) {
-  const intl = useIntl();
-  return (
-    <Link
-      to={`${LIST_PATH}/${subscription.id}/renew`}
-      aria-label={intl.formatMessage(form.renewLabel, { service: subscription.service_name })}
-    >
-      {intl.formatMessage(form.renew)}
-    </Link>
-  );
-}
-
 /**
- * Cancelling from the list: a status change, never a delete (Amendment 01 §2.9). It asks first, because the row
- * stops being editable afterwards — the database's own gate sees to that.
+ * A row's actions, by its state (the project owner's table): an active row has edit, renew and cancel — renew first
+ * once its end date has passed, with a note saying since when; a renewed or a cancelled row has none, and says so,
+ * because the database's own gate refuses the write and an empty cell reads as a fault. "Expired" comes from the end
+ * date (subscriptionStatus), never from the status, which stays 'active' past the end. Cancelling asks first, because
+ * the row stops being editable afterwards; while the request runs the row says it is working.
  */
-function CancelButton({ subscription, cancel }: { subscription: SubscriptionItem; cancel: ListActions['cancel'] }) {
+function RowActionsCell({
+  subscription,
+  today,
+  cancel,
+}: {
+  subscription: SubscriptionItem;
+  today: string;
+  cancel: ListActions['cancel'];
+}) {
   const intl = useIntl();
   const [pending, setPending] = useState(false);
-  const act = async () => {
-    if (!globalThis.confirm(intl.formatMessage(form.confirmCancel, { service: subscription.service_name }))) return;
+  if (subscription.status === 'renewed') return <span className="row-note">{intl.formatMessage(form.renewedNoActions)}</span>;
+  if (subscription.status === 'cancelled') return <span className="row-note">{intl.formatMessage(form.cancelledNoActions)}</span>;
+  // A status the interface does not know offers nothing it cannot vouch for.
+  if (subscription.status !== 'active') return null;
+  if (pending) return <span className="row-note">{intl.formatMessage(form.working)}</span>;
+
+  const service = subscription.service_name;
+  const ask = async () => {
+    if (!globalThis.confirm(intl.formatMessage(form.confirmCancel, { service }))) return;
     setPending(true);
     await cancel(subscription);
     setPending(false);
   };
+  const edit: RowAction = {
+    key: 'edit',
+    label: intl.formatMessage(form.edit),
+    accessibleName: intl.formatMessage(form.editLabel, { service }),
+    icon: 'edit',
+    to: `${LIST_PATH}/${subscription.id}/edit`,
+  };
+  const renew: RowAction = {
+    key: 'renew',
+    label: intl.formatMessage(form.renew),
+    accessibleName: intl.formatMessage(form.renewLabel, { service }),
+    icon: 'renew',
+    to: `${LIST_PATH}/${subscription.id}/renew`,
+  };
+  const cancelAction: RowAction = {
+    key: 'cancel',
+    label: intl.formatMessage(form.cancelSubscription),
+    accessibleName: intl.formatMessage(form.cancelLabel, { service }),
+    icon: 'cancel',
+    danger: true,
+    onSelect: () => void ask(),
+  };
+  const expired = subscriptionStatus(subscription.ends_on, today) === 'expired';
   return (
-    <button
-      type="button"
-      className="link"
-      disabled={pending}
-      aria-label={intl.formatMessage(form.cancelLabel, { service: subscription.service_name })}
-      onClick={act}
-    >
-      {intl.formatMessage(pending ? form.working : form.cancelSubscription)}
-    </button>
+    <>
+      {expired && (
+        <span className="row-note" data-note="expired">
+          {intl.formatMessage(form.expiredSince, { date: subscription.ends_on, ltr: (chunks) => <bdi dir="ltr">{chunks}</bdi> })}
+        </span>
+      )}
+      <RowActions
+        label={intl.formatMessage(form.actionsFor, { service })}
+        actions={expired ? [renew, edit, cancelAction] : [edit, renew, cancelAction]}
+      />
+    </>
   );
 }
-
-function EditLink({ subscription }: { subscription: SubscriptionItem }) {
-  const intl = useIntl();
-  return (
-    <Link
-      to={`${LIST_PATH}/${subscription.id}/edit`}
-      aria-label={intl.formatMessage(form.editLabel, { service: subscription.service_name })}
-    >
-      {intl.formatMessage(form.edit)}
-    </Link>
-  );
-}
-
-
 
 export function SubscriptionsView({
   state,
@@ -239,15 +268,7 @@ function SubscriptionsTable({ data: { subscriptions, clients }, actions }: { dat
                   {actions && (
                     <td className="actions">
                       <div className="row-actions">
-                        {/* A cancelled or renewed subscription is not edited, renewed or cancelled: the database's own
-                            gate refuses the write, so the screen offers nothing it knows will be refused. */}
-                        {s.status === 'active' && (
-                          <>
-                            {actions.edit(s)}
-                            {actions.renew(s)}
-                            <CancelButton subscription={s} cancel={actions.cancel} />
-                          </>
-                        )}
+                        <RowActionsCell subscription={s} today={today} cancel={actions.cancel} />
                       </div>
                     </td>
                   )}

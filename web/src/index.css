@@ -326,6 +326,13 @@ body:has(.login) {
   gap: var(--space-3);
 }
 
+/* A note in place of, or beside, a row's actions: why there are none ("Renewed, no actions"), or why the menu is worth
+   opening ("Expired since …"). Secondary, not muted: it is read, so it keeps the contrast of text. */
+.data-table .row-note {
+  color: var(--text-secondary);
+  font-size: var(--type-label-size);
+}
+
 /* A button that reads as a link, beside the links. */
 .data-table .row-actions .link {
   background: none;

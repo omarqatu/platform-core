@@ -1,11 +1,14 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import type { Lang } from '../../i18n/locale';
+import { SessionProvider } from '../../session/SessionProvider';
 import {
   DUE_SOON_DAYS,
   localDay,
   subscriptionStatus,
+  SubscriptionsScreen,
   SubscriptionsView,
   type ClientItem,
   type ListActions,
@@ -161,27 +164,30 @@ describe('the status badge', () => {
 });
 
 describe('the lifecycle on the list (Amendment 01 §2.9)', () => {
-  const lifecycle = (status: SubscriptionItem['status']): SubscriptionItem[] => [
-    { id: 's1', client_id: 'c1', service_name: 'VPS', ends_on: '2027-01-02', status },
+  const lifecycle = (status: SubscriptionItem['status'], ends_on = '2099-01-02'): SubscriptionItem[] => [
+    { id: 's1', client_id: 'c1', service_name: 'VPS', ends_on, status },
   ];
 
-  const actions: ListActions = {
-    create: () => null,
-    edit: () => <span data-testid="edit" />,
-    renew: () => <span data-testid="renew" />,
-    cancel: () => undefined,
-  };
+  const actions: ListActions = { create: () => null, cancel: () => undefined };
 
-  function withActions(items: SubscriptionItem[]) {
+  // With actions the rows link to the edit and renew screens, so the view needs a router.
+  function withActions(items: SubscriptionItem[], lang: Lang = 'en', listActions: ListActions = actions) {
     return render(
-      <I18nProvider initial="en">
-        <SubscriptionsView
-          state={{ status: 'ready', data: { subscriptions: list(items, 'all'), clients: list(clients, 'all') } }}
-          actions={actions}
-        />
+      <I18nProvider initial={lang}>
+        <MemoryRouter>
+          <SubscriptionsView
+            state={{ status: 'ready', data: { subscriptions: list(items, 'all'), clients: list(clients, 'all') } }}
+            actions={listActions}
+          />
+        </MemoryRouter>
       </I18nProvider>,
     ).container;
   }
+
+  const menuOf = (service: string) => {
+    fireEvent.click(screen.getByRole('button', { name: `Actions for ${service}` }));
+    return screen.getAllByRole('menuitem').map((i) => i.getAttribute('aria-label'));
+  };
 
   // The lifecycle wins over the date: once a row has left 'active' its remaining days say nothing worth saying.
   it.each([
@@ -200,39 +206,170 @@ describe('the lifecycle on the list (Amendment 01 §2.9)', () => {
     expect(['Active', 'Due soon', 'Expired']).toContain(badge.textContent);
   });
 
-  // The database refuses an edit, a renewal and a cancellation on a row that has left 'active', so the screen
-  // offers none of the three rather than offering what it knows will be refused.
-  it('offers edit, renew and cancel on an active row and none of them otherwise', () => {
-    expect(withActions(lifecycle('active')).querySelectorAll('[data-testid]')).toHaveLength(2);
-    expect(screen.getByRole('button', { name: 'Cancel VPS' })).toBeDefined();
-    cleanup();
-    for (const status of ['cancelled', 'renewed'] as const) {
-      const page = withActions(lifecycle(status));
-      expect(page.querySelectorAll('[data-testid]')).toHaveLength(0);
-      expect(page.querySelectorAll('.row-actions button')).toHaveLength(0);
-      cleanup();
-    }
+  // The project owner's state table: an active row — edit, renew, cancel.
+  it('offers edit, renew and cancel on an active row, behind one button, cancel last', () => {
+    withActions(lifecycle('active'));
+
+    expect(menuOf('VPS')).toEqual(['Edit VPS', 'Renew VPS', 'Cancel VPS']);
+    expect(screen.getByRole('menuitem', { name: 'Edit VPS' }).getAttribute('href')).toBe('/app/subscriptions/s1/edit');
+    expect(screen.getByRole('menuitem', { name: 'Renew VPS' }).getAttribute('href')).toBe('/app/subscriptions/s1/renew');
+    expect(document.querySelector('[data-note="expired"]')).toBeNull();
+  });
+
+  // Active and past its end date: renewing is the point, so it comes first, and the row says why to open the menu.
+  // "Expired" is the end date's, not the status's — the row stays 'active' after it ends.
+  it('puts renew first on an active row past its end date, and says since when', () => {
+    withActions(lifecycle('active', '2020-01-02'));
+
+    expect(menuOf('VPS')).toEqual(['Renew VPS', 'Edit VPS', 'Cancel VPS']);
+    const note = document.querySelector('[data-note="expired"]')!;
+    expect(note.textContent).toBe('Expired since 2020-01-02');
+    expect(note.querySelector('bdi')!.getAttribute('dir')).toBe('ltr');
+  });
+
+  it('says the same in Arabic, the date left-to-right in Western digits', () => {
+    withActions(lifecycle('active', '2020-01-02'), 'ar');
+
+    const note = document.querySelector('[data-note="expired"]')!;
+    expect(note.textContent).toBe('منتهٍ منذ 2020-01-02');
+    expect(note.querySelector('bdi')!.textContent).toBe('2020-01-02');
+    expect(ARABIC_INDIC_DIGITS.test(note.textContent!)).toBe(false);
+  });
+
+  // A renewed or cancelled row: the database's own gate refuses any write, so there are no actions — and the cell
+  // says so, because an empty one cannot be told from a fault.
+  it.each([
+    ['renewed' as const, 'Renewed, no actions'],
+    ['cancelled' as const, 'Cancelled, no actions'],
+  ])('offers nothing on a %s row, and says so', (status, note) => {
+    const page = withActions(lifecycle(status));
+
+    expect(screen.queryByRole('button', { name: 'Actions for VPS' })).toBeNull();
+    expect(page.querySelector('td.actions')!.textContent).toBe(note);
+  });
+
+  it.each([
+    ['renewed' as const, 'مجدَّد، لا إجراءات'],
+    ['cancelled' as const, 'ملغى، لا إجراءات'],
+  ])('says so in Arabic on a %s row', (status, note) => {
+    const page = withActions(lifecycle(status), 'ar');
+
+    expect(page.querySelector('td.actions')!.textContent).toBe(note);
   });
 
   it('asks before cancelling, and says the row is kept', () => {
     const confirm = vi.fn(() => false);
     vi.stubGlobal('confirm', confirm);
     const cancel = vi.fn();
-    render(
-      <I18nProvider initial="en">
-        <SubscriptionsView
-          state={{ status: 'ready', data: { subscriptions: list(lifecycle('active'), 'all'), clients: list(clients, 'all') } }}
-          actions={{ ...actions, cancel }}
-        />
-      </I18nProvider>,
-    );
+    withActions(lifecycle('active'), 'en', { ...actions, cancel });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel VPS' }));
+    menuOf('VPS');
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cancel VPS' }));
 
     expect(confirm).toHaveBeenCalledWith(
       'Cancel VPS? It stays in the list with its history, and it cannot be edited or renewed afterwards.',
     );
     expect(cancel).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+
+  it('cancels once the question is answered', () => {
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    const cancel = vi.fn();
+    withActions(lifecycle('active'), 'en', { ...actions, cancel });
+
+    menuOf('VPS');
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cancel VPS' }));
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(cancel.mock.calls[0]![0]).toMatchObject({ id: 's1' });
+    vi.unstubAllGlobals();
+  });
+});
+
+// The routed screen: the caller's permissions come from GET /me/scope, in the same load as the lists (OPEN_ITEMS 77).
+describe('the actions follow the permission (GET /me/scope)', () => {
+  const A = { tenant_id: 'tenant-a', name: 'Al-Amin' };
+  const rows = { scope_mode: 'all', visible_count: 1, total_count: 1, has_more_in_scope: false,
+    items: [{ id: 's1', client_id: 'c1', service_name: 'VPS', ends_on: '2099-01-02', status: 'active' }] };
+  const clientRows = { scope_mode: 'all', visible_count: 1, total_count: 1, has_more_in_scope: false,
+    items: [{ id: 'c1', name: 'Client A', is_active: true }] };
+
+  function api(meScope: () => Response) {
+    const paths: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input).replace(/^\/api/, '').split('?')[0]!;
+        paths.push(path);
+        if (path === '/me') return Response.json({ username: 'layla', active_tenant: A });
+        if (path === '/me/scope') return meScope();
+        if (path === '/subscriptions/clients') return Response.json(clientRows);
+        if (path === '/subscriptions') return Response.json(rows);
+        return new Response(null, { status: 404 });
+      }),
+    );
+    return paths;
+  }
+
+  const permitted = (...permissions: string[]) => () =>
+    Response.json({ scope_mode: 'all', can_manage_scope: false, assignments: [], permissions });
+
+  function renderScreen() {
+    render(
+      <I18nProvider initial="en">
+        <MemoryRouter>
+          <SessionProvider>
+            <SubscriptionsScreen />
+          </SessionProvider>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('a viewer: no "New subscription", no actions column, no menu', async () => {
+    const paths = api(permitted('core.audit.read', 'subscriptions.read'));
+    renderScreen();
+
+    await screen.findByText('VPS');
+    expect(paths).toContain('/me/scope');
+    expect(screen.queryByRole('link', { name: 'New subscription' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Actions' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Actions for VPS' })).toBeNull();
+  });
+
+  it('a member who may write: "New subscription", the column, and the menu', async () => {
+    api(permitted('subscriptions.read', 'subscriptions.write'));
+    renderScreen();
+
+    await screen.findByText('VPS');
+    expect(screen.getByRole('link', { name: 'New subscription' })).toBeDefined();
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Actions for VPS' })).toBeDefined();
+  });
+
+  // Nothing is shown until the permissions have answered: no action appears and then vanishes.
+  it('shows no row and no action while the permissions are still loading', async () => {
+    let answer: (r: Response) => void = () => undefined;
+    api(() => new Promise<Response>((resolve) => (answer = resolve)) as unknown as Response);
+    renderScreen();
+
+    await screen.findByText('Loading…');
+    expect(screen.queryByText('VPS')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'New subscription' })).toBeNull();
+    answer(permitted('subscriptions.write')());
+    await screen.findByText('VPS');
+  });
+
+  // A failed /me/scope is the screen's error, not a list that silently lost its actions.
+  it('shows the error path when /me/scope fails, never the list without its actions', async () => {
+    api(() => Response.json({ error: 'internal_error' }, { status: 500 }));
+    renderScreen();
+
+    await screen.findByRole('alert');
+    expect(screen.queryByText('VPS')).toBeNull();
+    expect(screen.queryByRole('table')).toBeNull();
   });
 });
