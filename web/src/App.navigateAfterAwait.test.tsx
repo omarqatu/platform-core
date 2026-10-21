@@ -2,6 +2,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { BrowserRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { capturePendingInvitation } from './invitations/pendingInvitation';
+import { capturePendingResetToken } from './password/pendingResetToken';
 import { I18nProvider } from './i18n/I18nProvider';
 import { SessionProvider } from './session/SessionProvider';
 import type { PreferenceStore } from './theme/preferenceStore';
@@ -236,4 +238,86 @@ describe('a navigation after an await: where the success leads, wherever the per
     await landsOn('/app/subscriptions');
     await screen.findByText('VPS');
   });
+
+  // Site 2, signing out (AppShell.tsx): the person goes back while the sign-out waits — here to an open page. Their
+  // last intention was to end the session; every page in the shell needs it, and the end of a sign-out is the sign-in
+  // screen, whatever was tapped meanwhile.
+  it('signing out: Back while it signs out still ends on the sign-in screen', async () => {
+    const api = fakeApi();
+    const signOut = api.hold('POST /auth/logout', undefined, () => (api.state.signedIn = false));
+    window.history.replaceState(null, '', '/app/password/forgot');
+    window.history.pushState(null, '', '/app/subscriptions');
+    renderAt('/app/subscriptions');
+    await screen.findByText('VPS');
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    await waitFor(() => expect(signOut.asked()).toBe(true));
+
+    // Back, all the way: the open page is on screen before the sign-out answers. (Inside the transition, the shell's
+    // own guard, RequireAuth, would also send them to the sign-in screen as the session ends — so only a move that
+    // has finished shows what the sign-out's own navigation does.)
+    window.history.back();
+    await screen.findByRole('heading', { name: 'Forgot your password' });
+    await act(async () => {
+      signOut.answer();
+      for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 5));
+    });
+
+    await landsOn('/login');
+    await screen.findByRole('heading', { name: 'Sign in' });
+  });
+
+  // Site 7, accepting an invitation with a new account (AcceptInvitationScreen.tsx): the person taps "Sign in to
+  // accept" while the account is being created. The account exists now and the invitation is used: what follows is
+  // signing in to it — the success's own page, with what it knows (accepted: the selection enters nothing by
+  // itself) — not the sign-in they tapped, whose way back is an invitation already cleared.
+  it('accepting an invitation: "Sign in to accept" tapped while it accepts still ends on the success\'s sign-in', async () => {
+    const api = fakeApi({ signedIn: false });
+    const accept = api.hold('POST /invitations/accept');
+    window.history.replaceState(null, '', '/app/invitations/accept#tenant=tenant-a&token=secret-token');
+    capturePendingInvitation();
+    renderAt(window.location.pathname);
+    fireEvent.change(await screen.findByLabelText(/^Full name/), { target: { value: 'Rami Haddad' } });
+    fireEvent.change(screen.getByLabelText(/^Email/), { target: { value: 'rami@example.com' } });
+    fireEvent.change(screen.getByLabelText(/^Username/), { target: { value: 'rami' } });
+    fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'a-long-enough-password' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create account and accept' }));
+    await waitFor(() => expect(accept.asked()).toBe(true));
+
+    await moveWhileItWaits(
+      () => fireEvent.click(screen.getByRole('link', { name: 'Sign in to accept' })),
+      '/login',
+      accept.answer,
+      () => screen.getByRole('heading', { name: 'Accept the invitation' }),
+    );
+
+    await landsOn('/login');
+    await screen.findByRole('heading', { name: 'Sign in' });
+  });
+
+  // Site 8, setting a new password from a recovery link (ResetPasswordScreen.tsx): the person goes back while it is
+  // set. The password is changed now; the one thing left is to sign in with it, on the screen that says it is set.
+  it('resetting the password: Back while it is set still ends on the sign-in screen', async () => {
+    const api = fakeApi({ signedIn: false });
+    const reset = api.hold('POST /auth/password/reset');
+    window.history.replaceState(null, '', '/app/password/forgot');
+    window.history.pushState(null, '', '/app/password/reset#token=recovery-token');
+    capturePendingResetToken();
+    renderAt(window.location.pathname);
+    fireEvent.change(await screen.findByLabelText(/^New password/), { target: { value: 'a-long-enough-password' } });
+    fireEvent.change(screen.getByLabelText(/^Repeat the new password/), { target: { value: 'a-long-enough-password' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Set the password' }));
+    await waitFor(() => expect(reset.asked()).toBe(true));
+
+    await act(async () => {
+      window.history.back();
+      for (let i = 0; i < 40 && window.location.pathname !== '/app/password/forgot'; i++) await new Promise((r) => setTimeout(r, 5));
+      expect(window.location.pathname).toBe('/app/password/forgot');
+      reset.answer();
+      for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 5));
+    });
+
+    await landsOn('/login');
+    await screen.findByRole('heading', { name: 'Sign in' });
+  });
 });
+
