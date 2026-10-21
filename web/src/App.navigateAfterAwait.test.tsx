@@ -45,6 +45,10 @@ function fakeApi(options: { signedIn?: boolean } = {}) {
         return new Response(null, { status: 204 });
       }
       if (!state.signedIn) return new Response(null, { status: 401 });
+      if (key === 'POST /tenants/tenant-a/select') {
+        state.active = A;
+        return new Response(null, { status: 204 });
+      }
       if (key === 'GET /me') return Response.json({ username: 'omar', active_tenant: state.active });
       if (key === 'GET /tenants') return Response.json({ tenants: [{ ...A, tenant_status: 'active', membership_status: 'active' }] });
       if (key === 'GET /me/scope')
@@ -178,5 +182,58 @@ describe('a navigation after an await: kept where the person went (guarded)', ()
     await landsOn('/app/clients');
     await screen.findByText('Nour Co');
   });
+
+  // Site 3, signing in (LoginScreen.tsx), by Back: the person goes back while the sign-in waits — here to a page that
+  // needs a session, so the app brings them to a new sign-in with that page as the way back. Without the guard the
+  // first sign-in's navigation still ran, and the way back was the page they had left, not the one they went to.
+  it('signing in: Back while it signs in is kept — the way back is the page they went back to', async () => {
+    const api = fakeApi({ signedIn: false });
+    const signIn = api.hold('POST /auth/login', undefined, () => (api.state.signedIn = true));
+    window.history.replaceState(null, '', '/app/subscriptions');
+    window.history.pushState(null, '', '/app/clients');
+    renderAt('/app/clients');
+    fireEvent.change(await screen.findByLabelText('Username'), { target: { value: 'omar' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
+    expect(window.location.pathname + window.location.search).toBe('/login?next=%2Fapp%2Fclients');
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(signIn.asked()).toBe(true));
+
+    await act(async () => {
+      window.history.back(); // jsdom moves the history a moment later, as a browser does
+      for (let i = 0; i < 40 && window.location.pathname !== '/app/subscriptions'; i++) await new Promise((r) => setTimeout(r, 5));
+      expect(window.location.pathname).toBe('/app/subscriptions');
+      signIn.answer();
+      for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 5));
+    });
+
+    await landsOn('/organizations?next=%2Fapp%2Fsubscriptions');
+    await screen.findByRole('heading', { name: 'Choose an organization' });
+  });
 });
 
+
+describe('a navigation after an await: where the success leads, wherever the person went (not a race — pinned)', () => {
+  // Site 3, signing in, by "Forgot your password?": the person doubted their password while the sign-in waited, and
+  // the sign-in succeeded. Left on the recovery page, a signed-in person would be asked to reset a password that
+  // works; where signing in leads is the right end (LoginScreen's RECOVERY exception to useStayed).
+  it('signing in: "Forgot your password?" tapped while it signs in still ends where signing in leads', async () => {
+    const api = fakeApi({ signedIn: false });
+    const signIn = api.hold('POST /auth/login', undefined, () => (api.state.signedIn = true));
+    renderAt('/login');
+    fireEvent.change(await screen.findByLabelText('Username'), { target: { value: 'omar' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(signIn.asked()).toBe(true));
+
+    await moveWhileItWaits(
+      () => fireEvent.click(screen.getByRole('link', { name: 'Forgot your password?' })),
+      '/app/password/forgot',
+      signIn.answer,
+      () => screen.getByLabelText('Username'),
+    );
+
+    // One organization: the selection enters it by itself, and the list shows.
+    await landsOn('/app/subscriptions');
+    await screen.findByText('VPS');
+  });
+});
