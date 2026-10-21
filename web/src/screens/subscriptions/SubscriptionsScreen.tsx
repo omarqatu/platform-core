@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useIntl } from 'react-intl';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { ApiError, getJson, isAbort, request } from '../../api/client';
 import { Badge, type BadgeTone } from '../../components/Badge';
 import { ErrorAlert } from '../../components/ErrorAlert';
@@ -11,7 +11,7 @@ import { useSession } from '../../session/SessionProvider';
 import { ForbiddenScreen } from '../status/StatusScreens';
 import { messages as form } from './formMessages';
 import type { ClientItem } from '../clients/clientForm';
-import { messages } from './messages';
+import { messages, type StatusFilter } from './messages';
 import type { LifecycleStatus } from './subscriptionForm';
 import './SubscriptionsScreen.css';
 
@@ -45,6 +45,23 @@ const CLIENTS_LIMIT = 200; // the API's maximum page
 
 type State = { status: 'loading' } | { status: 'error'; code: string | null } | { status: 'ready'; data: SubscriptionsData };
 
+export type { StatusFilter };
+const FILTERS: readonly StatusFilter[] = ['active', 'renewed', 'cancelled', 'all'];
+
+/**
+ * The filter in the address (?status=renewed|cancelled|all), so Back and a reload keep it. "active" is the default
+ * and is never written; anything the interface does not know reads as the default.
+ */
+export function filterOf(params: URLSearchParams): StatusFilter {
+  const value = params.get('status');
+  return value !== 'active' && FILTERS.includes(value as StatusFilter) ? (value as StatusFilter) : 'active';
+}
+
+/** The list request for a filter: "all" sends no status (every status), any other sends its own. */
+export function listPath(filter: StatusFilter): string {
+  return `/subscriptions?limit=${PAGE_SIZE}${filter === 'all' ? '' : `&status=${filter}`}`;
+}
+
 /** The tenant can no longer be entered: the session asks /me again, and the interface returns to the selection. */
 export const TENANT_LOST = new Set(['not_a_member', 'no_active_tenant', 'tenant_not_active']);
 
@@ -56,7 +73,12 @@ export const TENANT_LOST = new Set(['not_a_member', 'no_active_tenant', 'tenant_
  * screen's one error path — never a list that silently lost its actions.
  */
 export function SubscriptionsScreen() {
-  const [state, setState] = useState<State>({ status: 'loading' });
+  const [params, setParams] = useSearchParams();
+  const filter = filterOf(params);
+  // The answer, with the filter it answers: until the one for the filter in force arrives, the screen is loading — a
+  // filter changed by Back shows no list of the filter before it.
+  const [loaded, setLoaded] = useState<{ filter: StatusFilter; state: State }>({ filter, state: { status: 'loading' } });
+  const state: State = loaded.filter === filter ? loaded.state : { status: 'loading' };
   const [canWrite, setCanWrite] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
@@ -65,28 +87,33 @@ export function SubscriptionsScreen() {
   useEffect(() => {
     const abort = new AbortController();
     Promise.all([
-      getJson<ScopedList<SubscriptionItem>>(`/subscriptions?limit=${PAGE_SIZE}`, abort.signal),
+      getJson<ScopedList<SubscriptionItem>>(listPath(filter), abort.signal),
       getJson<ScopedList<ClientItem>>(`/subscriptions/clients?limit=${CLIENTS_LIMIT}`, abort.signal),
       getPermissions(abort.signal),
     ]).then(
       ([subscriptions, clients, permissions]) => {
         setCanWrite(permissions.has(PERMISSION.subscriptionsWrite));
-        setState({ status: 'ready', data: { subscriptions, clients } });
+        setLoaded({ filter, state: { status: 'ready', data: { subscriptions, clients } } });
       },
       (error: unknown) => {
         if (abort.signal.aborted || isAbort(error)) return;
         const code = error instanceof ApiError ? error.code : null;
         if (code && TENANT_LOST.has(code)) revalidate().catch(() => undefined);
-        setState({ status: 'error', code });
+        setLoaded({ filter, state: { status: 'error', code } });
       },
     );
     return () => abort.abort();
-  }, [revalidate, reload]);
+  }, [revalidate, reload, filter]);
 
   if (state.status === 'error' && state.code === 'not_permitted') return <ForbiddenScreen />;
   return (
     <SubscriptionsView
       state={state}
+      filter={filter}
+      onFilter={(next) => {
+        setRefusal(null);
+        setParams(next === 'active' ? {} : { status: next });
+      }}
       refusal={refusal}
       // Shown only to a member who may write (OPEN_ITEMS 77): a viewer has no "New subscription" and no actions
       // column. The server is still the guard — a role changed elsewhere shows on the next load, and until then a
@@ -202,12 +229,20 @@ function RowActionsCell({
   );
 }
 
+/**
+ * The list for one filter. `state` is the answer for `filter`; `onFilter` asks for another one (the screen writes it
+ * to the address). Without `onFilter` the filter is shown and cannot be changed.
+ */
 export function SubscriptionsView({
   state,
+  filter,
+  onFilter,
   actions,
   refusal,
 }: {
   state: State;
+  filter: StatusFilter;
+  onFilter?: (filter: StatusFilter) => void;
   actions?: ListActions;
   refusal?: string | null;
 }) {
@@ -218,21 +253,63 @@ export function SubscriptionsView({
         <h1>{intl.formatMessage(messages.title)}</h1>
         {state.status === 'ready' && actions?.create()}
       </div>
+      <FilterControl filter={filter} onFilter={onFilter} />
       <ErrorAlert message={refusal ? intl.formatMessage(errorMessage(refusal)) : null} />
       {state.status === 'loading' && <p>{intl.formatMessage(messages.loading)}</p>}
       {state.status === 'error' && <p role="alert">{intl.formatMessage(errorMessage(state.code))}</p>}
-      {state.status === 'ready' && <SubscriptionsTable data={state.data} actions={actions} />}
+      {state.status === 'ready' && <SubscriptionsTable data={state.data} filter={filter} actions={actions} />}
     </main>
   );
 }
 
-function SubscriptionsTable({ data: { subscriptions, clients }, actions }: { data: SubscriptionsData; actions?: ListActions }) {
+const FILTER_LABEL: Record<StatusFilter, typeof messages.filterActive> = {
+  active: messages.filterActive,
+  renewed: messages.filterRenewed,
+  cancelled: messages.filterCancelled,
+  all: messages.filterAll,
+};
+
+/** One choice of four, as radio buttons (the arrow keys move between them), drawn as a segmented control. */
+function FilterControl({ filter, onFilter }: { filter: StatusFilter; onFilter?: (filter: StatusFilter) => void }) {
+  const intl = useIntl();
+  const name = useId();
+  return (
+    <fieldset className="status-filter">
+      <legend>{intl.formatMessage(messages.filterLabel)}</legend>
+      <div className="status-filter-options">
+        {FILTERS.map((value) => (
+          <label key={value}>
+            <input
+              type="radio"
+              name={name}
+              value={value}
+              checked={filter === value}
+              disabled={!onFilter}
+              onChange={() => onFilter?.(value)}
+            />
+            <span>{intl.formatMessage(FILTER_LABEL[value])}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function SubscriptionsTable({
+  data: { subscriptions, clients },
+  filter,
+  actions,
+}: {
+  data: SubscriptionsData;
+  filter: StatusFilter;
+  actions?: ListActions;
+}) {
   const intl = useIntl();
   const names = new Map(clients.items.map((c) => [c.id, c.name]));
   const today = localDay(new Date());
   return (
     <>
-      <Declaration subscriptions={subscriptions} clients={clients.visible_count} />
+      <Declaration subscriptions={subscriptions} clients={clients.visible_count} filter={filter} />
       <div className="data-table">
         <table>
           <thead>
@@ -285,20 +362,29 @@ function SubscriptionsTable({ data: { subscriptions, clients }, actions }: { dat
   );
 }
 
-function Declaration({ subscriptions, clients }: { subscriptions: ScopedList<SubscriptionItem>; clients: number }) {
+/** What is shown, for the filter in force — counted after it, as the API counts (spec item m). */
+function Declaration({
+  subscriptions,
+  clients,
+  filter,
+}: {
+  subscriptions: ScopedList<SubscriptionItem>;
+  clients: number;
+  filter: StatusFilter;
+}) {
   const intl = useIntl();
   if (subscriptions.scope_mode === 'all')
     return (
       <p className="scope" data-scope-mode="all" data-total={subscriptions.total_count ?? undefined}>
-        {intl.formatMessage(messages.scopeAll, { subscriptions: subscriptions.visible_count })}
+        {intl.formatMessage(messages.scopeAll, { status: filter, subscriptions: subscriptions.visible_count })}
       </p>
     );
   // 'assigned': no total figure, in the text or in the markup.
   return (
     <p className="scope" data-scope-mode="assigned">
       {subscriptions.visible_count === 0
-        ? intl.formatMessage(messages.scopeAssignedEmpty)
-        : intl.formatMessage(messages.scopeAssigned, { clients, subscriptions: subscriptions.visible_count })}
+        ? intl.formatMessage(messages.scopeAssignedEmpty, { status: filter })
+        : intl.formatMessage(messages.scopeAssigned, { status: filter, clients, subscriptions: subscriptions.visible_count })}
     </p>
   );
 }

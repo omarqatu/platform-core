@@ -87,7 +87,8 @@ test('1. the actions cell: one line, its own row, in reach — both lists, every
       for (const path of ['/app/subscriptions', '/app/clients']) {
         await page.context().addCookies([{ name: 'lang', value: lang, url: BASE_URL }]);
         await page.setViewportSize({ width, height: 900 });
-        await page.goto(path);
+        // Every state at once: the subscription list under its "All" filter (item 4 shows "Active" by default).
+        await page.goto(path === '/app/subscriptions' ? `${path}?status=all` : path);
         await expect(page.locator('html')).toHaveAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
         await expect(page.locator('td.actions').first()).toBeVisible();
         await page.evaluate(() => window.scrollTo(0, 0));

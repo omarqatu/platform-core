@@ -24,6 +24,13 @@ Every text of the interface uses these terms — the English `defaultMessage` in
 | cancelling a subscription | إلغاء الاشتراك | Cancel subscription |
 | a cancelled subscription | ملغى | Cancelled |
 | a renewed subscription | مجدَّد | Renewed |
+| the list's filter: active subscriptions | النشطة | Active |
+| the list's filter: renewed subscriptions | المجدَّدة | Renewed |
+| the list's filter: cancelled subscriptions | الملغاة | Cancelled |
+| the list's filter: every status | الكل | All |
+
+The filter names a plural (الاشتراكات), so its Arabic is the feminine of the row's own word: a row is «ملغى», the
+filter that shows such rows is «الملغاة».
 
 The original T8 screen rendered by Api (`src/Modules.Subscriptions/SubscriptionScreen.cs`) keeps "المستأجر": it is
 part of a merged proof and is not edited (OPEN_ITEMS 29).

@@ -1,11 +1,13 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import type { Lang } from '../../i18n/locale';
 import { SessionProvider } from '../../session/SessionProvider';
 import {
   DUE_SOON_DAYS,
+  filterOf,
+  listPath,
   localDay,
   subscriptionStatus,
   SubscriptionsScreen,
@@ -13,6 +15,7 @@ import {
   type ClientItem,
   type ListActions,
   type ScopedList,
+  type StatusFilter,
   type SubscriptionItem,
 } from './SubscriptionsScreen';
 
@@ -38,7 +41,7 @@ const subscriptions = (n: number): SubscriptionItem[] =>
 function show(lang: Lang, subs: ScopedList<SubscriptionItem>, cs = list(clients, subs.scope_mode)) {
   return render(
     <I18nProvider initial={lang}>
-      <SubscriptionsView state={{ status: 'ready', data: { subscriptions: subs, clients: cs } }} />
+      <SubscriptionsView state={{ status: 'ready', data: { subscriptions: subs, clients: cs } }} filter="all" />
     </I18nProvider>,
   ).container;
 }
@@ -124,7 +127,7 @@ describe('an API refusal', () => {
     const shown = (lang: Lang, code: string | null) => {
       const view = render(
         <I18nProvider initial={lang}>
-          <SubscriptionsView state={{ status: 'error', code }} />
+          <SubscriptionsView state={{ status: 'error', code }} filter="all" />
         </I18nProvider>,
       );
       const text = view.getByRole('alert').textContent;
@@ -177,6 +180,7 @@ describe('the lifecycle on the list (Amendment 01 §2.9)', () => {
         <MemoryRouter>
           <SubscriptionsView
             state={{ status: 'ready', data: { subscriptions: list(items, 'all'), clients: list(clients, 'all') } }}
+            filter="all"
             actions={listActions}
           />
         </MemoryRouter>
@@ -267,7 +271,7 @@ describe('the lifecycle on the list (Amendment 01 §2.9)', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Cancel VPS' }));
 
     expect(confirm).toHaveBeenCalledWith(
-      'Cancel VPS? It stays in the list with its history, and it cannot be edited or renewed afterwards.',
+      'Cancel VPS? It is kept with its history, under “Cancelled”, and it cannot be edited or renewed afterwards.',
     );
     expect(cancel).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
@@ -371,5 +375,183 @@ describe('the actions follow the permission (GET /me/scope)', () => {
     await screen.findByRole('alert');
     expect(screen.queryByText('VPS')).toBeNull();
     expect(screen.queryByRole('table')).toBeNull();
+  });
+});
+
+// The project owner's item 4: the list shows one lifecycle status at a time, "active" by default, and says what it shows.
+describe('the status filter', () => {
+  it('reads the address: "active" unless it names another the interface knows; and asks the API for exactly that', () => {
+    const of = (query: string) => filterOf(new URLSearchParams(query));
+    expect(of('')).toBe('active');
+    expect(of('status=active')).toBe('active');
+    expect(of('status=renewed')).toBe('renewed');
+    expect(of('status=cancelled')).toBe('cancelled');
+    expect(of('status=all')).toBe('all');
+    expect(of('status=expired')).toBe('active');
+    expect(of('status=')).toBe('active');
+    expect(listPath('active')).toBe('/subscriptions?limit=50&status=active');
+    expect(listPath('renewed')).toBe('/subscriptions?limit=50&status=renewed');
+    expect(listPath('cancelled')).toBe('/subscriptions?limit=50&status=cancelled');
+    expect(listPath('all')).toBe('/subscriptions?limit=50');
+  });
+
+  const declared = (lang: Lang, filter: StatusFilter, subs: ScopedList<SubscriptionItem>) => {
+    const view = render(
+      <I18nProvider initial={lang}>
+        <SubscriptionsView state={{ status: 'ready', data: { subscriptions: subs, clients: list(clients, subs.scope_mode) } }} filter={filter} />
+      </I18nProvider>,
+    );
+    const text = view.container.querySelector('.scope')!.textContent;
+    view.unmount();
+    return text;
+  };
+
+  // Counted after the filter (spec item m), and naming it; under 'assigned', never a total (T8.2).
+  it.each<[StatusFilter, string, string, string]>([
+    [
+      'active',
+      "You are shown the organization's active subscriptions: 3 subscriptions.",
+      'You are shown only the active subscriptions of the clients assigned to you: 2 clients, 3 subscriptions.',
+      'You are shown only the active subscriptions of the clients assigned to you, and they have none now.',
+    ],
+    [
+      'renewed',
+      "You are shown the organization's renewed subscriptions: 3 subscriptions.",
+      'You are shown only the renewed subscriptions of the clients assigned to you: 2 clients, 3 subscriptions.',
+      'You are shown only the renewed subscriptions of the clients assigned to you, and they have none.',
+    ],
+    [
+      'cancelled',
+      "You are shown the organization's cancelled subscriptions: 3 subscriptions.",
+      'You are shown only the cancelled subscriptions of the clients assigned to you: 2 clients, 3 subscriptions.',
+      'You are shown only the cancelled subscriptions of the clients assigned to you, and they have none.',
+    ],
+    [
+      'all',
+      "You are shown all of the organization's subscriptions: 3 subscriptions.",
+      'You are shown only the subscriptions of the clients assigned to you: 2 clients, 3 subscriptions.',
+      'You are shown only the subscriptions of the clients assigned to you, and they have none now.',
+    ],
+  ])('declares what %s shows, in English', (filter, all, assigned, none) => {
+    expect(declared('en', filter, list(subscriptions(3), 'all'))).toBe(all);
+    expect(declared('en', filter, list(subscriptions(3), 'assigned'))).toBe(assigned);
+    expect(declared('en', filter, list([], 'assigned'))).toBe(none);
+  });
+
+  it.each<[StatusFilter, string, string, string]>([
+    [
+      'active',
+      'تُعرض لك اشتراكات الجهة النشطة: 3 اشتراكات.',
+      'تُعرض لك الاشتراكات النشطة للعملاء المُسندين إليك فقط: عميلان، 3 اشتراكات.',
+      'تُعرض لك الاشتراكات النشطة للعملاء المُسندين إليك فقط، ولا اشتراكات نشطة لديهم الآن.',
+    ],
+    [
+      'renewed',
+      'تُعرض لك اشتراكات الجهة المجدَّدة: 3 اشتراكات.',
+      'تُعرض لك الاشتراكات المجدَّدة للعملاء المُسندين إليك فقط: عميلان، 3 اشتراكات.',
+      'تُعرض لك الاشتراكات المجدَّدة للعملاء المُسندين إليك فقط، ولا اشتراكات مجدَّدة لديهم.',
+    ],
+    [
+      'cancelled',
+      'تُعرض لك اشتراكات الجهة الملغاة: 3 اشتراكات.',
+      'تُعرض لك الاشتراكات الملغاة للعملاء المُسندين إليك فقط: عميلان، 3 اشتراكات.',
+      'تُعرض لك الاشتراكات الملغاة للعملاء المُسندين إليك فقط، ولا اشتراكات ملغاة لديهم.',
+    ],
+    [
+      'all',
+      'تُعرض لك كل اشتراكات الجهة: 3 اشتراكات.',
+      'تُعرض لك اشتراكات العملاء المُسندين إليك فقط: عميلان، 3 اشتراكات.',
+      'تُعرض لك اشتراكات العملاء المُسندين إليك فقط، ولا اشتراكات لديهم الآن.',
+    ],
+  ])('declares what %s shows, in Arabic, with no total figure for an assigned member', (filter, all, assigned, none) => {
+    expect(declared('ar', filter, list(subscriptions(3), 'all'))).toBe(all);
+    const text = declared('ar', filter, list(subscriptions(3), 'assigned', 3));
+    expect(text).toBe(assigned);
+    expect(text).not.toMatch(ARABIC_INDIC_DIGITS);
+    expect(declared('ar', filter, list([], 'assigned'))).toBe(none);
+  });
+
+  // The routed screen: the filter is in the address, the request follows it, and the answer shown is the one for it.
+  function routed(initial: string) {
+    const requests: string[] = [];
+    let at = '';
+    function Where() {
+      const location = useLocation();
+      at = location.pathname + location.search;
+      return null;
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input).replace(/^\/api/, '');
+        const path = url.split('?')[0]!;
+        if (path === '/me') return Response.json({ username: 'sara', active_tenant: { tenant_id: 't', name: 'Al-Amin' } });
+        if (path === '/me/scope') return Response.json({ scope_mode: 'all', can_manage_scope: false, assignments: [], permissions: ['subscriptions.read'] });
+        if (path === '/subscriptions/clients') return Response.json(list(clients, 'all'));
+        if (path === '/subscriptions') {
+          requests.push(url);
+          const status = new URLSearchParams(url.split('?')[1]).get('status');
+          return Response.json(list([{ ...subscriptions(1)[0]!, service_name: `Row of ${status ?? 'every status'}` }], 'all'));
+        }
+        return new Response(null, { status: 404 });
+      }),
+    );
+    render(
+      <I18nProvider initial="en">
+        <MemoryRouter initialEntries={[initial]}>
+          <SessionProvider>
+            <SubscriptionsScreen />
+            <Where />
+          </SessionProvider>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    return { requests, at: () => at };
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('opens on "Active", asks for active rows only, and writes nothing in the address', async () => {
+    const { requests, at } = routed('/app/subscriptions');
+
+    await screen.findByText('Row of active');
+    expect(requests).toEqual(['/subscriptions?limit=50&status=active']);
+    expect((screen.getByRole('radio', { name: 'Active' }) as HTMLInputElement).checked).toBe(true);
+    expect(at()).toBe('/app/subscriptions');
+  });
+
+  it('changes the filter into the address and asks again; "All" asks with no status', async () => {
+    const { requests, at } = routed('/app/subscriptions');
+    await screen.findByText('Row of active');
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Renewed' }));
+    await screen.findByText('Row of renewed');
+    expect(at()).toBe('/app/subscriptions?status=renewed');
+    expect(screen.getByText("You are shown the organization's renewed subscriptions: 1 subscription.")).toBeDefined();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'All' }));
+    await screen.findByText('Row of every status');
+    expect(at()).toBe('/app/subscriptions?status=all');
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Active' }));
+    await screen.findByText('Row of active');
+    expect(at()).toBe('/app/subscriptions');
+    expect(requests).toEqual([
+      '/subscriptions?limit=50&status=active',
+      '/subscriptions?limit=50&status=renewed',
+      '/subscriptions?limit=50',
+      '/subscriptions?limit=50&status=active',
+    ]);
+  });
+
+  it('opens on the filter the address names, and shows no rows of another filter while it loads', async () => {
+    routed('/app/subscriptions?status=cancelled');
+
+    await screen.findByText('Row of cancelled');
+    expect((screen.getByRole('radio', { name: 'Cancelled' }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: 'Renewed' }));
+    // The answer for "cancelled" is not shown under "renewed": the screen is loading until its own answer arrives.
+    expect(screen.queryByText('Row of cancelled')).toBeNull();
+    await waitFor(() => expect(screen.getByText('Row of renewed')).toBeDefined());
   });
 });

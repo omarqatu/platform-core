@@ -129,10 +129,11 @@ export const messages = defineMessages<Values>({
   renewLabel: { id: 'subscriptions.list.renewLabel', defaultMessage: 'Renew {service}' },
   cancelSubscription: { id: 'subscriptions.list.cancelSubscription', defaultMessage: 'Cancel subscription' },
   cancelLabel: { id: 'subscriptions.list.cancelLabel', defaultMessage: 'Cancel {service}' },
-  // Said plainly: cancelling keeps the row and its history, and nothing about it can be changed afterwards.
+  // Said plainly: cancelling keeps the row and its history — it leaves the default "Active" list for "Cancelled" — and
+  // nothing about it can be changed afterwards.
   confirmCancel: {
     id: 'subscriptions.list.confirmCancel',
-    defaultMessage: 'Cancel {service}? It stays in the list with its history, and it cannot be edited or renewed afterwards.',
+    defaultMessage: 'Cancel {service}? It is kept with its history, under “Cancelled”, and it cannot be edited or renewed afterwards.',
   },
   working: { id: 'subscriptions.list.working', defaultMessage: 'Working…' },
   // The row's actions button (RowActions): which row's actions it opens.

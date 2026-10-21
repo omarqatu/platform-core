@@ -52,7 +52,7 @@ test('2. several memberships: choose, see the data, switch — no row of the fir
 
   await expect(page.getByTestId('identity-organization')).toHaveText('Maan');
   await expect(page.locator('.scope')).toHaveText(
-    'You are shown only the subscriptions of the clients assigned to you, and they have none now.',
+    'You are shown only the active subscriptions of the clients assigned to you, and they have none now.',
   );
   await expect(page.getByRole('cell', { name: AL_AMIN_ROW })).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { seen: string[] }).seen)).toEqual([]);
