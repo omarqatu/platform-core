@@ -5,6 +5,7 @@ import { ApiError, getJson, isAbort } from '../../api/client';
 import { messages as common } from '../../components/messages';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { errorMessage } from '../../i18n/apiErrors';
+import { useStayed } from '../../navigation/useStayed';
 import { safeNext } from '../../session/next';
 import { enterable, useSession, type TenantChoice } from '../../session/SessionProvider';
 import { messages } from './messages';
@@ -28,18 +29,9 @@ export function TenantSelectScreen() {
   const [entering, setEntering] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const autoEntered = useRef(false);
-  // Whether the user is still here (OPEN_ITEMS 94). An entry that answers after the user has gone somewhere else — a
-  // link in the shell, the browser's back — must not take them back. Two signals, because one is late: the router
-  // renders a new location inside a transition, so for a moment the user has navigated (the address has changed, at
-  // once) while this screen is still mounted; and the address is not the router's in memory (tests), where unmounting
-  // is the signal.
-  const here = useRef(true);
-  useEffect(() => {
-    here.current = true;
-    return () => {
-      here.current = false;
-    };
-  }, []);
+  // An entry that answers after the user has gone somewhere else — a link in the shell, the browser's back — must
+  // not take them back (OPEN_ITEMS 94; navigation/useStayed).
+  const begin = useStayed();
 
   useEffect(() => {
     const abort = new AbortController();
@@ -51,8 +43,7 @@ export function TenantSelectScreen() {
   }, []);
 
   const enter = async (tenant: TenantChoice) => {
-    const from = window.location.href;
-    const stayed = () => here.current && window.location.href === from;
+    const stayed = begin();
     setEntering(tenant.tenant_id);
     setError(null);
     try {
