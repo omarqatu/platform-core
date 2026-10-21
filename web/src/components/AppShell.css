@@ -102,6 +102,7 @@
 }
 
 .shell-controls {
+  flex-wrap: wrap;
   gap: var(--space-2);
   margin-inline-start: auto;
 }
@@ -353,13 +354,15 @@
   transform: scaleX(-1);
 }
 
-/* Narrower: the brand's name goes, the buttons keep their icon and a hidden label (still their accessible name). */
+/* Narrower: the brand's name goes, the buttons — and the link among them — keep their icon and a hidden label (still
+   their accessible name). */
 @media (max-width: 1120px) {
   .topbar .brand-name {
     display: none;
   }
 
-  .btn .label {
+  .btn .label,
+  .shell-controls .btn-link .label {
     position: absolute;
     inline-size: 1px;
     block-size: 1px;
@@ -373,6 +376,11 @@
 @media (max-width: 800px) {
   .topbar {
     padding-inline: var(--space-4);
+  }
+
+  /* So the six controls fit one row at 390 px; a narrower screen wraps them. */
+  .shell-controls {
+    gap: var(--space-1);
   }
 
   .shell.with-sidebar {

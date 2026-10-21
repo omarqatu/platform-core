@@ -126,3 +126,33 @@ test('2. a viewer is offered nothing to do, on either list', async ({ page }) =>
   await expect(page.getByRole('columnheader', { name: 'Actions' })).toHaveCount(0);
   await expect(page.locator('.row-actions-button')).toHaveCount(0);
 });
+
+// OPEN_ITEMS 93: at phone width the page is never wider than the screen — the top bar's controls fit it — so the
+// heading and the scope declaration are whole, in both languages, on both lists. The organization is empty: the bar
+// is the same whatever the list holds.
+test('3. at 390 px the page does not scroll sideways, and the heading and the scope declaration are whole', async ({ page }) => {
+  const owner = await ownOrganization('no-sideways');
+  await signIn(page, owner.username, owner.password);
+  await expect(page).toHaveURL(/\/app\/subscriptions$/);
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  for (const lang of LANGS)
+    for (const path of ['/app/subscriptions', '/app/clients']) {
+      await page.context().addCookies([{ name: 'lang', value: lang, url: BASE_URL }]);
+      await page.goto(path);
+      await expect(page.locator('html')).toHaveAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+      await expect(page.locator('p.scope')).toBeVisible();
+
+      const where = `${path}, ${lang}`;
+      const seen = await page.evaluate(() => {
+        const inside = (selector: string) => {
+          const box = document.querySelector(selector)!.getBoundingClientRect();
+          return box.left >= 0 && box.right <= document.documentElement.clientWidth;
+        };
+        return { scrollWidth: document.documentElement.scrollWidth, heading: inside('.shell-content h1'), scope: inside('p.scope') };
+      });
+      expect(seen.scrollWidth, `${where}: no sideways scroll`).toBe(390);
+      expect(seen.heading, `${where}: the heading whole`).toBe(true);
+      expect(seen.scope, `${where}: the scope declaration whole`).toBe(true);
+    }
+});

@@ -231,9 +231,20 @@ Closed by the org-entry-race PR:
   `startTransition`, so the address changes at once while the old screen stays mounted for a moment — the
   unmount-only version of the fix still lost the click 2 of 20 times; in a `MemoryRouter` the address never changes
   and unmounting is the signal. The organization is entered either way. Proven: a vitest that holds the selection open
-  and clicks while it waits (lost 10/10 on the old code, kept 10/10 now — on `MemoryRouter`, so it proves the unmount
-  path); on the §16 Docker path `password.spec.ts` › "4. change" 4/20 red on `main` (`fb54f74`) and 20/20 green with
+  and clicks while it waits, on each router (on the old code lost 10/10 on both; on `BrowserRouter`, the address
+  guard's, also 10/10 on the unmount-only version; kept 10/10 on both now); on the §16 Docker path `password.spec.ts` › "4. change" 4/20 red on `main` (`fb54f74`) and 20/20 green with
   the fix, the probe that clicks at once 0 lost in 40, and the full e2e 25/25. The password test itself is unchanged.
+
+Closed by the shell-overflow PR:
+- **93.** On a phone the page is no longer wider than the screen. The cause: at ≤ 1120 px the top bar hides its
+  buttons' labels with `.btn .label`, but "Change password" is a link (`.btn-link`), so its label stayed (116 px in
+  Arabic, 152 px in English), and `.shell-controls` could not wrap: the document was 432 px wide in Arabic and 465 px in
+  English at a 390 px viewport, the heading and the scope declaration cut in Arabic. Now, in `AppShell.css` only, the
+  link's label is hidden by the same rule (still its accessible name). At ≤ 800 px the controls' gap is 4 px, so all six
+  fit one row at 390 px in both languages; and `.shell-controls` wraps on a narrower screen (360 px: two rows, no
+  sideways scroll). At 390 px `scrollWidth` is 390 and the bar 137 px tall. 1280 px is unchanged: the screenshots before
+  and after are byte-identical. Proven by `row-actions.spec.ts` › "3. at 390 px the page does not scroll sideways"
+  (both lists, ar and en). It fails on `main` with 432.
 
 ## For the project owner — a decision after T8
 
@@ -1169,17 +1180,6 @@ Closed by the org-entry-race PR:
   Existing cancelled rows would need their date from the audit log in the same migration, or none. **Decided by the
   project owner:** not in this group (no migrations here); a later group.
 
-### 93. On a phone the whole page is wider than the screen — the top bar overflows
-
-- **Origin:** the row-actions PR (2026-10-21), measured while checking the actions column at 390 px.
-- **The finding:** at a 390 px viewport, `div.shell-controls` (the top bar's controls) spans past the viewport: the
-  document is **432 px** wide in Arabic (the controls at −42..374 px) and **465 px** in English (16..465 px), so the
-  page scrolls sideways. In Arabic it clips the start of every screen: the heading "الاشتراكات" and the scope
-  declaration are cut at the right edge. **Present on `main`** (`d2be7c5`), with the same numbers — the row-actions PR
-  touches no shell file.
-- **What closes it:** a one-file fix in `AppShell.css` at phone width, its own PR (`fix/shell-overflow`), with a 390 px
-  before and after in both languages. By the project owner's decision, after the row-actions PR.
-
 ### 95. The lists' columns are too tight on a phone, and the ISO date will tighten them further
 
 - **Origin:** the row-actions PR (2026-10-21), the project owner's note while reviewing it.
@@ -1191,6 +1191,9 @@ Closed by the org-entry-race PR:
   removes the date's wrapping and takes its width from the other columns, so the service name will wrap more, not
   less. Whoever builds item 5 decides the columns at phone width with it (a minimum width for the name, which columns
   a phone shows, or a stacked row) rather than discovering it.
+- **Seen again in the shell-overflow PR (2026-10-21):** at 390 px the subscription list's "Status" column is cut
+  down to "Stat" in its English header. Its status badges are cut too, in both languages ("نشط" shows only in part).
+  It is the same squeeze, inside the table's own sideways scroll; the page itself no longer scrolls sideways (item 93).
 
 ### 96. Seven other places navigate after an `await` without checking the user is still there
 
@@ -1203,8 +1206,11 @@ Closed by the org-entry-race PR:
   `AcceptInvitationScreen.tsx:69/70`, `ResetPasswordScreen.tsx:68`.
 - **How much it matters:** none of them has been seen to lose a navigation; each waits on one request a user is
   unlikely to leave mid-way. The forms' "save, then back to the list" is the likeliest to meet it. Not changed in the
-  PR that found it, which was kept to one file by the project owner's decision; to apply with a shared helper, or
-  screen by screen as each is next touched.
+  PR that found it, which was kept to one file by the project owner's decision.
+- **Plan (project owner, 2026-10-21):** its own PR, after PR ب, not before. Extract `stayed()` into a shared hook,
+  apply it at the seven sites, and add one test per site on the org-entry-race pattern: the request held open, the
+  navigation made while it waits, and on `BrowserRouter` the click and the answer inside one `act()`, so the address
+  guard is what keeps the navigation.
 
 ## For the next version of the document — not for the code
 
