@@ -246,6 +246,31 @@ Closed by the shell-overflow PR:
   and after are byte-identical. Proven by `row-actions.spec.ts` › "3. at 390 px the page does not scroll sideways"
   (both lists, ar and en). It fails on `main` with 432.
 
+Closed by the list-filter-dates PR:
+- **78.** The end date has a picker now, and its text stays yyyy-MM-dd. `components/DateField.tsx`, reusable by any
+  vertical: the text field (left-to-right, the numeric keypad, the hyphens written as the digits are typed,
+  Arabic-Indic digits taken as Western) and beside it a 44 px button (`components.dateField.pick`) that calls
+  `showPicker()` on a hidden `<input type="date">` and writes the day picked into the text as ISO. Where
+  `showPicker()` is missing or refused, that date input lies transparent over the button instead. It is used on the
+  subscription form (create and edit) and the renew screen. **The native field was rejected as what the user reads,
+  on Chromium's evidence:** on Linux (Playwright's Chromium) `value="2027-03-07"` shows as `2027/03/07` in both an
+  `ar` and an `en-US` page, and an empty one shows `يوم/شهر/سنة` even on the `en-US` page. The field follows the
+  browser's own language, not the page's, and is never `yyyy-MM-dd`; its value is always ISO. **iOS Safari is
+  unverified** (item 97).
+- **95.** A list fits a phone's width. Under 600 px `.data-table` keeps at most three columns: the row's name, one
+  value of fixed width, the actions. A secondary column folds into the column it belongs to, as a second line there
+  (`.cell-fold`), and its own column goes (`.col-folded`): on the subscription list the client folds under the
+  service and the status under the date. Both copies are in the markup and each is `display:none` where the other
+  shows, so a screen reader meets the value once. The actions column keeps its name for assistive technology only
+  (`.th-label`; the header was wider than its 44 px button). Its notes wrap inside it and the button keeps its
+  44 px; the "Expired since …" note is hidden at that width, because the same row shows the date and the "Expired"
+  badge beside it (the button and renew-first stay). Cells take 0.4rem of side padding. At 390 px the subscription
+  table was 592 px wide in a 342 px container in Arabic; now its narrowest width leaves 69–85 px to spare in either
+  language, with the longest badge («قريب الانتهاء») and the longest note shown. `list-filter-dates.spec.ts` › 4
+  wants 24 px to spare, not a bare fit: with the expired note shown the table fitted here with 7 px and was 8 px over
+  on CI's fonts. No value is lost: a very long service name still wraps over several lines, in the space left to
+  it.
+
 ## For the project owner — a decision after T8
 
 ### 27. The measurement threshold is exceeded: choose between the two declared alternatives
@@ -850,16 +875,6 @@ Closed by the shell-overflow PR:
 - **The same question will meet `plans_read`** (Amendment 01 §3, §4.1) when `plans` is built: it names `job_runner`
   too, and the same two roads apply.
 
-### 78. The subscription form's end date is a text field, not a date picker
-
-- **Origin:** the stage (a) PR, 2026-10-17.
-- **Why text:** the interface shows Western digits in Arabic (`ar-u-nu-latn`, web/README). A native
-  `<input type="date">` draws its value in the browser's own locale, which the page does not control, so in an
-  Arabic browser it may show Arabic-Indic digits. The field is therefore `yyyy-MM-dd` text written left-to-right,
-  with its example under it, a check that the day exists, and Arabic-Indic digits converted as they are typed.
-- **What would close it:** a picker the interface draws itself, in `ar-u-nu-latn`, with Gregorian month names — a
-  component decision for the design system, not for this form alone.
-
 ### 79. `subscriptions.clients.write` is narrowed at creation by the second axis, not by the permission
 
 - **Origin:** the stage (b) PR, 2026-10-18. Proven on PostgreSQL 18.6 **before** the stage was designed around it.
@@ -1180,21 +1195,6 @@ Closed by the shell-overflow PR:
   Existing cancelled rows would need their date from the audit log in the same migration, or none. **Decided by the
   project owner:** not in this group (no migrations here); a later group.
 
-### 95. The lists' columns are too tight on a phone, and the ISO date will tighten them further
-
-- **Origin:** the row-actions PR (2026-10-21), the project owner's note while reviewing it.
-- **The finding:** at 390 px the subscription list's first row is 73.8 px because a short service name, "A service 1",
-  wraps onto **three** lines, and the date onto two ("January 2, 2027") or three ("2 يناير 2027"). The actions cell is
-  one line. The table already scrolls sideways inside its container with the actions column pinned, so nothing is out
-  of reach — but the columns are squeezed, not laid out.
-- **Why it is recorded now:** the project owner's item 5 (group ب) shows every date as `yyyy-MM-dd` with `nowrap`. That
-  removes the date's wrapping and takes its width from the other columns, so the service name will wrap more, not
-  less. Whoever builds item 5 decides the columns at phone width with it (a minimum width for the name, which columns
-  a phone shows, or a stacked row) rather than discovering it.
-- **Seen again in the shell-overflow PR (2026-10-21):** at 390 px the subscription list's "Status" column is cut
-  down to "Stat" in its English header. Its status badges are cut too, in both languages ("نشط" shows only in part).
-  It is the same squeeze, inside the table's own sideways scroll; the page itself no longer scrolls sideways (item 93).
-
 ### 96. Seven other places navigate after an `await` without checking the user is still there
 
 - **Origin:** the org-entry-race PR (2026-10-21), by the project owner's note that item 94 is a pattern, not one
@@ -1211,6 +1211,49 @@ Closed by the shell-overflow PR:
   apply it at the seven sites, and add one test per site on the org-entry-race pattern: the request held open, the
   navigation made while it waits, and on `BrowserRouter` the click and the answer inside one `act()`, so the address
   guard is what keeps the navigation.
+
+### 97. iOS Safari's date picker is unverified — needs a device
+
+- **Origin:** the list-filter-dates PR (2026-10-21). Item 6 (DateField) shipped without iOS evidence: no iPhone was
+  available, and the project owner decided not to wait (item 78 above).
+- **What is open:** only how iOS Safari draws its own picker in Arabic: the digits of its wheels (0–9 or ٠–٩), and
+  whether the calendar is Gregorian. Both are system UI, outside the page. The value it returns is ISO by the HTML
+  standard, and DateField writes only an ISO day into its text, so the stored and shown value does not depend on it.
+- **What to check, on an iPhone set to Arabic, in Safari:** the probe page
+  (https://claude.ai/artifact/T1FSGL9MeU8E6S59rTB5NF, private to the project owner), its four checks, with a
+  screenshot after each:
+  1. how `<input type="date" value="2027-03-07">` is drawn, and its open picker (digits, calendar);
+  2. a button calling `showPicker()` on a hidden date input: whether it exists, any error, the value after a pick.
+     The page runs inside a claude.ai frame, where a browser may refuse `showPicker()`; the app is not framed, so an
+     error there does not settle it;
+  3. the fallback, a transparent date input over a button: the value after a pick;
+  4. the browser: user agent, language, Intl's locale, calendar and numbering system.
+- **What closes it:** the screenshots. If the wheels show ٠–٩, the project owner decides whether system UI in the
+  device's digits is acceptable; nothing in the page changes either way unless check 2 and 3 both fail.
+
+### 98. The hand-made screenshots of the subscription screens are out of date
+
+- **Origin:** the list-filter-dates PR (2026-10-21), found while updating the guides.
+- **What is stale:** in `docs/screens/`, the list — `identity-subscriptions-*`, `web-subscriptions-*`,
+  `subscriptions-rtl-assigned`, `subscriptions-list-actions-*` — shows no filter and dates as "January 2, 2027" (and,
+  in all but the last, no actions menu); the form — `subscription-new-*`, `subscription-new-refused-*`,
+  `subscription-edit-*` — shows the end date as a bare text field. `docs/DEVELOPER_GUIDE.md` §15 says they are made
+  by hand.
+- **Not done here:** the PR changes no screenshot. Remaking them is the same hand work as the first set, in both
+  languages, and the client and password screens have none yet either (§15).
+
+### 99. DateField: an edit inside the date puts the caret at the end
+
+- **Origin:** the list-filter-dates PR (2026-10-21), a known limit of item 6, recorded by the project owner's
+  decision.
+- **What happens:** `typeDay` reformats the whole text on every edit (the digits, then the hyphens written back), and
+  React sets the new value, so the browser moves the caret to the end. Changing a digit in the middle — the month of
+  `2027-03-07` — works, and leaves the caret after the day; the next key lands there, not where the user was.
+- **What is unaffected:** typing from empty, deleting from the end, pasting a whole day, and the picker — the usual
+  ways. Nothing wrong is saved: the text is checked (`isDay`) before it is sent, and the server checks it again.
+- **What would close it:** keep the caret's place across the reformat — count the digits before the caret, and put
+  the caret after the same number of digits in the new text (`setSelectionRange` after the render). A vitest typing
+  into the middle, and the same in `list-filter-dates.spec.ts` › 3.
 
 ## For the next version of the document — not for the code
 

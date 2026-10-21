@@ -143,29 +143,44 @@ test('2. a subscription is renewed into a new row and cancelled, and neither tou
     { service_name: 'VPS', ends_on: '2027-03-31', status: 'renewed', renews: false, client: 'Nour Co' },
     { service_name: 'VPS', ends_on: '2028-03-31', status: 'active', renews: true, client: 'Nour Co' },
   ]);
-  // The renewed row keeps its place in the list, marked, and offers nothing to do to it.
-  await expect(page.getByText('Renewed', { exact: true })).toBeVisible();
+  // The list shows "Active" by default (item 4): the new row, alone. The renewed one is kept under "Renewed", marked,
+  // and offers nothing to do to it.
+  const rows = page.locator('tbody tr');
+  await expect(rows).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Actions for VPS' })).toHaveCount(1);
+  await page.getByRole('radio', { name: 'Renewed' }).check();
+  await expect(page).toHaveURL(/\/app\/subscriptions\?status=renewed$/);
+  await expect(rows).toHaveCount(1);
+  // The badge is in the row twice — its column's, and the copy folded under the date for phone width (item 95) — and
+  // one of them is shown.
+  await expect(rows.getByText('Renewed', { exact: true }).filter({ visible: true })).toHaveCount(1);
   await expect(page.getByText('Renewed, no actions')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Actions for VPS' })).toHaveCount(0);
+  await page.getByRole('radio', { name: 'Active' }).check();
+  await expect(page).toHaveURL(/\/app\/subscriptions$/);
 
-  // Cancelling asks first, and keeps the row.
+  // Cancelling asks first, and keeps the row: it leaves "Active" for "Cancelled".
   page.once('dialog', (dialog) => {
     expect(dialog.message()).toBe(
-      'Cancel VPS? It stays in the list with its history, and it cannot be edited or renewed afterwards.',
+      'Cancel VPS? It is kept with its history, under “Cancelled”, and it cannot be edited or renewed afterwards.',
     );
     return dialog.accept();
   });
   await page.getByRole('button', { name: 'Actions for VPS' }).click();
   await page.getByRole('menuitem', { name: 'Cancel VPS' }).click();
 
-  await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
+  await expect(rows).toHaveCount(0);
   expect(await subscriptions(owner.tenantId)).toEqual([
     expect.objectContaining({ ends_on: '2027-03-31', status: 'renewed' }),
     expect.objectContaining({ ends_on: '2028-03-31', status: 'cancelled' }),
   ]);
-  // Nothing is left to act on, and nothing was deleted.
+  await page.getByRole('radio', { name: 'Cancelled' }).check();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.getByText('Cancelled', { exact: true }).filter({ visible: true })).toHaveCount(1);
+  // Nothing is left to act on, and nothing was deleted: "All" shows both rows.
+  await page.getByRole('radio', { name: 'All' }).check();
   await expect(page.getByRole('button', { name: /^Actions for VPS/ })).toHaveCount(0);
-  await expect(page.locator('tbody tr')).toHaveCount(2);
+  await expect(rows).toHaveCount(2);
   // And the client is untouched by either act.
   expect(await clients(owner.tenantId)).toEqual([expect.objectContaining({ name: 'Nour Co', is_active: true })]);
 });

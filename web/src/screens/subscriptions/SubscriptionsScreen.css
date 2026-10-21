@@ -12,10 +12,6 @@
   background: color-mix(in srgb, var(--brand) 9%, var(--surface));
 }
 
-.subscriptions .date {
-  font-variant-numeric: tabular-nums;
-}
-
 /* The title and the way to a new subscription, on one line. */
 .subscriptions .heading {
   display: flex;
@@ -23,4 +19,97 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+}
+
+/* The filter: four radio buttons drawn as one segmented control, the choice marked by more than its color. */
+.subscriptions .status-filter {
+  margin: 0;
+  margin-block-end: var(--space-3);
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.subscriptions .status-filter legend {
+  margin-block-end: var(--space-2);
+  padding: 0;
+  font-size: var(--type-label-size);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.subscriptions .status-filter-options {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.subscriptions .status-filter-options label {
+  position: relative;
+  display: inline-flex;
+  min-block-size: 44px;
+}
+
+.subscriptions .status-filter-options label + label {
+  border-inline-start: 1px solid var(--border);
+}
+
+/* The radio stays the control (focus, arrows, its name), stretched over its label and drawn by the label. */
+.subscriptions .status-filter-options input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.subscriptions .status-filter-options span {
+  display: inline-flex;
+  align-items: center;
+  padding-inline: var(--space-4);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.subscriptions .status-filter-options input:checked + span {
+  background: color-mix(in srgb, var(--brand) 12%, var(--surface));
+  color: var(--brand);
+  box-shadow: inset 0 -3px 0 var(--brand);
+}
+
+.subscriptions .status-filter-options input:focus-visible + span {
+  outline: 2px solid var(--brand);
+  outline-offset: -4px;
+}
+
+/* Phone width: the four choices fill the row on one line in both languages, each as wide as its word needs and the
+   rest shared out — equal shares would clip the longest ("Cancelled") at 360 px. */
+@media (max-width: 600px) {
+  .subscriptions .status-filter-options {
+    display: flex;
+    flex-wrap: nowrap;
+    inline-size: 100%;
+  }
+
+  .subscriptions .status-filter-options label {
+    flex: 1 1 auto;
+  }
+
+  .subscriptions .status-filter-options span {
+    inline-size: 100%;
+    justify-content: center;
+    padding-inline: var(--space-2);
+    white-space: nowrap;
+  }
+}
+
+/* The narrowest phones (320 px): a smaller word, so the four still fit. */
+@media (max-width: 340px) {
+  .subscriptions .status-filter-options span {
+    padding-inline: var(--space-1);
+    font-size: var(--type-label-size);
+  }
 }

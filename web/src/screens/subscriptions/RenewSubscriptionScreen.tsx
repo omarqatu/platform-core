@@ -2,13 +2,15 @@ import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useIntl } from 'react-intl';
 import { Link, useNavigate, useParams } from 'react-router';
 import { ApiError, getJson, isAbort, request } from '../../api/client';
+import { DateField } from '../../components/DateField';
+import { Day } from '../../components/Day';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { errorMessage } from '../../i18n/apiErrors';
 import { useSession } from '../../session/SessionProvider';
 import { ForbiddenScreen, NotFoundScreen } from '../status/StatusScreens';
 import { messages } from './formMessages';
-import { isDay, westernDigits, type SubscriptionDetail } from './subscriptionForm';
-import { formatDay, LIST_PATH, TENANT_LOST } from './SubscriptionsScreen';
+import { isDay, type SubscriptionDetail } from './subscriptionForm';
+import { LIST_PATH, TENANT_LOST } from './SubscriptionsScreen';
 import './SubscriptionFormScreen.css';
 
 export const RENEW_PATH = '/app/subscriptions/:id/renew';
@@ -108,23 +110,19 @@ function RenewForm({ subscription, onRefusal }: { subscription: SubscriptionDeta
         <div className="field" data-field="currentEnd">
           <label htmlFor={idOf('currentEnd')}>{intl.formatMessage(messages.renewCurrentEnd)}</label>
           <output id={idOf('currentEnd')} className="readonly">
-            <time dateTime={subscription.ends_on}>{formatDay(intl.formatDate, subscription.ends_on)}</time>
+            <Day day={subscription.ends_on} />
           </output>
         </div>
         <div className="field" data-field="endsOn">
           <label htmlFor={idOf('endsOn')}>{intl.formatMessage(messages.renewNewEnd)}</label>
-          <input
+          <DateField
             id={idOf('endsOn')}
             name="endsOn"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            dir="ltr"
             value={endsOn}
-            aria-invalid={error ? true : undefined}
-            aria-describedby={[`${idOf('endsOn')}-hint`, error ? `${idOf('endsOn')}-error` : null].filter(Boolean).join(' ')}
-            onChange={(e) => {
-              setEndsOn(westernDigits(e.target.value));
+            invalid={error !== null}
+            describedBy={[`${idOf('endsOn')}-hint`, error ? `${idOf('endsOn')}-error` : null].filter(Boolean).join(' ')}
+            onChange={(day) => {
+              setEndsOn(day);
               setError(null);
             }}
           />

@@ -4,6 +4,11 @@
  * what is wrong beside the field before the round trip.
  */
 
+import { isDay } from '../../components/day';
+
+// The calendar-day helpers live with DateField (components/day.ts); the screens still import them from here.
+export { isDay, westernDigits } from '../../components/day';
+
 export interface SubcategoryItem {
   id: string;
   code: string;
@@ -80,29 +85,8 @@ export type FieldErrors = Partial<Record<keyof FormValues, FieldError>>;
 
 const MAX_TEXT = 256; // service_name and provider (SubscriptionEndpoints)
 const MAX_URL = 2048;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const COST = /^\d{1,11}(\.\d{1,3})?$/; // numeric(14,3)
 const CURRENCY = /^[A-Z]{3}$/; // ISO 4217
-
-/**
- * Western digits, whatever keyboard typed them: Arabic-Indic (٠–٩) and Eastern Arabic-Indic (۰–۹) digits become
- * 0–9, and the Arabic decimal separator (٫) a point. The interface shows Western digits in Arabic too (web/README),
- * and the fields the server parses — the date and the cost — accept nothing else.
- */
-export function westernDigits(text: string): string {
-  return text.replace(/[٠-٩۰-۹٫]/g, (c) => {
-    if (c === '٫') return '.';
-    const code = c.charCodeAt(0);
-    return String(code - (code >= 0x06f0 ? 0x06f0 : 0x0660));
-  });
-}
-
-/** A real calendar day written yyyy-MM-dd — 2027-02-30 is not one. */
-export function isDay(text: string): boolean {
-  if (!DATE.test(text)) return false;
-  const date = new Date(`${text}T00:00:00Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(text);
-}
 
 function isWebAddress(text: string): boolean {
   try {

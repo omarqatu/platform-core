@@ -1,0 +1,60 @@
+/* DateField: the day's text, and beside it the way to the browser's picker. Logical properties only. */
+.date-field {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.date-field > input[type='text'] {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.date-field-pick {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+
+/* The component's own button, so it looks the same on any screen: 44 px, a touch target. */
+.date-field-button {
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.date-field-button:hover {
+  background: var(--surface-soft);
+}
+
+/* The date input the picker belongs to: out of sight under the button, or — where showPicker() cannot be used —
+   transparent over it, the same size, so the tap is its own. */
+.date-field-native {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.date-field-native.overlay {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.date-field-pick:has(.overlay:focus-visible) {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}

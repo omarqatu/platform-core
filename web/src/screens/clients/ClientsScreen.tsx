@@ -195,7 +195,7 @@ function ClientsTable({ clients, actions }: { clients: ScopedList<ClientItem>; a
               <th scope="col">{intl.formatMessage(messages.columnStatus)}</th>
               {actions && (
                 <th scope="col" className="actions">
-                  {intl.formatMessage(messages.columnActions)}
+                  <span className="th-label">{intl.formatMessage(messages.columnActions)}</span>
                 </th>
               )}
             </tr>

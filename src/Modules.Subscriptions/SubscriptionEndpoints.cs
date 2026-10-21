@@ -76,6 +76,7 @@ public static partial class SubscriptionEndpoints
     private const int MaxProvider = 256;
     private const int MaxLoginUrl = 2048;
     private static readonly string[] BillingCycles = ["monthly", "yearly"];
+    private static readonly string[] Statuses = [Subscription.Active, Subscription.Renewed, Subscription.Cancelled];
 
     public static void MapSubscriptionEndpoints(this IEndpointRouteBuilder app)
     {
@@ -169,12 +170,19 @@ public static partial class SubscriptionEndpoints
                     .ToList()));
             }, ct));
 
-        module.MapGet("", (int? offset, int? limit, SubscriptionsDbContext db, ISessionContextAccessor session, HttpContext http, CancellationToken ct) =>
+        // ?status= narrows the list to one lifecycle status; absent, it is every status. It is a constraint on the rows
+        // the caller already sees, not on who sees what — scope stays RLS's — so it goes on the query before the
+        // page, and visible_count and total_count are counted after it (spec item m). One value only: a repeated
+        // parameter binds as the values joined by commas and an empty one as "", and neither is a status.
+        module.MapGet("", (int? offset, int? limit, string? status, SubscriptionsDbContext db, ISessionContextAccessor session, HttpContext http, CancellationToken ct) =>
             InTenantAsync(http, db, session, async (c, t) =>
             {
                 var scope = await Permissions.RequireAsync(c, Read, t);
+                if (status is not null && !Statuses.Contains(status))
+                    return Results.Json(new { error = ApiErrorCodes.InvalidValue }, statusCode: StatusCodes.Status400BadRequest);
+                var rows = status is null ? c.Subscriptions : c.Subscriptions.Where(x => x.Status == status);
                 return Results.Ok(await ScopedList.PageAsync(scope,
-                    c.Subscriptions.OrderBy(x => x.Id).Select(x => new SubscriptionItem(x.Id, x.ScopeRefId, x.ServiceName, x.EndsOn, x.CategoryId, x.Status)),
+                    rows.OrderBy(x => x.Id).Select(x => new SubscriptionItem(x.Id, x.ScopeRefId, x.ServiceName, x.EndsOn, x.CategoryId, x.Status)),
                     offset, limit, t));
             }, ct));
 
