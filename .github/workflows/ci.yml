@@ -106,7 +106,7 @@ jobs:
 
       # Always a fresh container: T0.4 is a clean database, migrated with no manual steps.
       - name: Start PostgreSQL 18 (clean database)
-        run: docker compose up -d --wait postgres
+        run: docker compose up -d --wait postgres mailpit
 
       - name: Migrate as migrator (T0.4)
         run: dotnet run --project src/Migrations -c Release --no-build
@@ -141,6 +141,14 @@ jobs:
       # PROOF_SPEC §7: the seed contract, seeded by migrator before the tests (after the catalog checks).
       - name: Seed the contract (migrator)
         run: docker compose exec -T postgres psql -X -q -v ON_ERROR_STOP=1 -U migrator -d platform < tests/seed/seed-contract.sql
+
+      # The local mail catcher's provider row, BEFORE Api starts (group ب). PlatformProviderAccounts caches a
+      # resolved account for 5 minutes and caches a negative the same way, so a send before this row exists —
+      # the Conformance forgot tests are the first — would drop every message for the next five minutes,
+      # including the e2e's invitation. Not in tests/seed/seed-contract.sql: that is the published contract
+      # another implementation seeds, and a mail catcher is this harness's business.
+      - name: Seed the e2e e-mail provider (migrator)
+        run: docker compose exec -T postgres psql -X -q -v ON_ERROR_STOP=1 -U migrator -d platform < ci/e2e-email-provider.sql
 
       # [W] proofs for this implementation only (tests/Core.WhiteBoxTests/README.md).
       - name: White-box tests
@@ -220,7 +228,7 @@ jobs:
       # evidence of a failure destroys it instead.
       - name: Database logs on failure
         if: failure()
-        run: docker compose logs --tail 200 postgres
+        run: docker compose logs --tail 200 postgres mailpit
 
       - name: Api logs on failure
         if: failure()

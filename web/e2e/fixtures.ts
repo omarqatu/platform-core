@@ -139,3 +139,83 @@ export function membershipsOf(username: string, tenantId: string): Promise<numbe
     ),
   );
 }
+
+// ---- E-mail (group ب, OPEN_ITEMS 60). The platform really sends; the tests really read what arrived.
+
+export const MAILPIT_URL = process.env.E2E_MAILPIT_URL ?? 'http://127.0.0.1:8025';
+
+/** The settings key Api reads the SMTP credentials under in Development and CI (appsettings). */
+const MAILPIT_CREDENTIAL_REF = 'local-mailpit';
+
+/**
+ * The platform's e-mail provider row, seeded **as migrator and only here**.
+ *
+ * `provider_accounts` has no INSERT grant for any application role — not even provisioner (§3.8) — so nothing but
+ * a migration or this fixture can create it, and no migration seeds one: an installation names its own provider.
+ * It is deliberately not in `tests/seed/seed-contract.sql`, which is the published contract another
+ * implementation seeds; a local mail catcher is this harness's business, not the contract's.
+ *
+ * Its `credential_ref` names a settings key and never a secret (Amendment 01 §2.6): the row says *which* key, the
+ * settings hold the value. Idempotent, because every spec that sends mail calls it.
+ */
+export async function emailProviderIsMailpit() {
+  await asMigrator(async (c) => {
+    await c.query(
+      `INSERT INTO provider_accounts (id, tenant_id, channel, provider_code, sender_id, credential_ref, is_active, created_at)
+       VALUES ($1, NULL, 'email', 'smtp', 'platform@e2e.test', $2, true, now())
+       ON CONFLICT (tenant_id, channel) DO UPDATE
+         SET provider_code = 'smtp', sender_id = 'platform@e2e.test', credential_ref = $2, is_active = true`,
+      [randomUUID(), MAILPIT_CREDENTIAL_REF],
+    );
+  });
+}
+
+export interface CaughtMessage {
+  ID: string;
+  To: { Address: string }[];
+  Subject: string;
+}
+
+/** Everything Mailpit is holding is thrown away, so a test reads only what its own run produced. */
+export async function clearMailbox() {
+  const response = await fetch(`${MAILPIT_URL}/api/v1/messages`, { method: 'DELETE' });
+  if (!response.ok) throw new Error(`mailpit: could not clear the mailbox (${response.status})`);
+}
+
+/**
+ * The message that arrived for an address, waited for rather than assumed: the send is deliberately off the
+ * request's path (`INotificationDispatch`), so the API has already answered by the time it leaves.
+ */
+export async function waitForMessage(to: string, timeoutMs = 15_000): Promise<CaughtMessage> {
+  const deadline = Date.now() + timeoutMs;
+  let seen = 0;
+  while (Date.now() < deadline) {
+    const response = await fetch(`${MAILPIT_URL}/api/v1/messages?limit=200`);
+    if (response.ok) {
+      const body = (await response.json()) as { messages: CaughtMessage[] };
+      seen = body.messages.length;
+      const match = body.messages.find((m) => m.To.some((t) => t.Address.toLowerCase() === to.toLowerCase()));
+      if (match) return match;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`mailpit: no message for ${to} within ${timeoutMs} ms (${seen} other message(s) in the box)`);
+}
+
+/** A caught message's plain-text body. */
+export async function messageBody(id: string): Promise<string> {
+  const response = await fetch(`${MAILPIT_URL}/api/v1/message/${id}`);
+  if (!response.ok) throw new Error(`mailpit: could not read message ${id} (${response.status})`);
+  const body = (await response.json()) as { Text?: string; HTML?: string };
+  return body.Text ?? body.HTML ?? '';
+}
+
+/**
+ * The acceptance link out of an invitation e-mail — **the path the product actually uses**. An e2e that read the
+ * token from the API response would skip delivery entirely, which is the part OPEN_ITEMS 60 exists for.
+ */
+export function acceptLinkIn(body: string): string {
+  const match = body.match(/https?:\/\/\S*\/app\/invitations\/accept#tenant=[^\s]+/);
+  if (!match) throw new Error(`no acceptance link in the message body:\n${body}`);
+  return match[0];
+}

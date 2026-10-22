@@ -597,6 +597,24 @@ var ordered = from m in db.Memberships where m.TenantId == tenantId ...
 `current_setting('app.tenant_id')`) and `GET /api/members`. Both carry the comment above. If a third arrives, it
 follows this table — it does not re-open the question.
 
+**The clearest illustration of the difference sits in one method**, `MemberAdministration.RequireUnderLimitsAsync`
+(OPEN_ITEMS 106). It counts invitations twice, and the two counts are deliberately not symmetrical:
+
+```csharp
+// Per inviter: invited_by names WHICH ROWS — a subject constraint.
+.CountAsync(i => i.InvitedBy == session.UserId && i.CreatedAt > now - limits.PerInviterWindow, ct)
+
+// Per organization: no tenant named at all. invitations_tenant_read is
+// tenant_id = app.tenant_id with no self branch, so RLS has already scoped it.
+// Adding `i.TenantId == tenantId` here would be scope filtering — the forbidden kind.
+.CountAsync(i => i.CreatedAt > now - limits.PerTenantWindow, ct)
+```
+
+Why the same file needs both: `memberships` carries two permissive policies that widen past the tenant, so a
+query about "this organization's members" must say so. `invitations` carries one, which does not, so a query
+about "this organization's invitations" must say nothing. **The table a query reads decides which it is** — not
+the shape of the question, and not habit.
+
 **Everything else on `memberships` is safe for a reason worth knowing**, because the reason is not the query:
 
 | Consumer | Why it is safe |
@@ -1387,6 +1405,15 @@ essentials:
   - **At phone width**: the name, the status and the actions; the roles fold under the name and the scope under
     the status. Measured at 390 px on the running interface — 125 px to spare in Arabic, 58 px in English, against
     the 24 px the rule wants (§16).
+- **The second axis, end to end** (`web/e2e/second-axis.spec.ts`, OPEN_ITEMS 100): the one spec that walks the
+  whole thing through screens only — invite, the e-mail, acceptance from the mailed link, the password, signing
+  in, mode `assigned`, two of four clients assigned, and then what the employee sees. It **starts from the
+  message Mailpit caught, never from the token the API also returns**: a test reading the response would skip
+  the delivery OPEN_ITEMS 60 exists for. It also pins what he does *not* see — no third or fourth client, no
+  subscription of theirs, no total in the text or the markup (T8.2), no Members link, and `Not permitted` at
+  `/app/members` with no `data-membership` anywhere on the page. Mailpit runs in `docker-compose.yml` for
+  Development and CI only; the provider row is seeded as migrator by the e2e fixture, and the seed contract is
+  untouched (OPEN_ITEMS 107).
 - **The scope and assignments screen** (PLATFORM_CORE §4.8; OPEN_ITEMS 100): `/app/members/:id/scope`, reached
   from a member row with `core.scope.manage`. The second axis, which until this screen was proven in the database
   and demonstrable nowhere else. Four things on it are the architecture, not the layout:
