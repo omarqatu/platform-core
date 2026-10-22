@@ -1324,6 +1324,26 @@ Closed by the navigate-after-await PR:
   list (the filter is on subscription status, not client status), and creating a subscription for a disabled
   client is allowed with no warning at selection. Neither is in this group.
 
+### 109. A provider row added while Api is running is not seen for up to five minutes
+
+- **Origin:** group (ب) PR 5, found by CI going red and reproduced on PostgreSQL 18.6 both ways.
+- **The behaviour:** `Core.Notifications.PlatformProviderAccounts` holds a resolved platform account for
+  `PlatformProviderOptions.CacheFor` (`[5 minutes]`) — **and holds a negative result the same way**. So the first
+  send after Api starts, if no `provider_accounts` row exists yet, caches "no account", and **every send for the
+  next five minutes is dropped with a log line and nothing else**. Measured: with the row absent at the first
+  send, then seeded, a second send still delivered nothing and logged the negative twice; with the row present
+  before Api started, the same send delivered.
+- **The cache is deliberate and stays** (item 51): the shorter the `forgot` path's work, the better its
+  constant-time floor holds. It is not a defect, and nothing here changes it.
+- **The operational rule this records:** **after seeding or changing a `provider_accounts` row, restart Api** —
+  or wait out the TTL. It bites hardest the first time a provider is added, which is exactly what a deployment
+  does. The group's report carries it as a step of the manual walk (item 107).
+- **Left open for a future group to decide, not built now:** whether a negative entry should have a shorter TTL
+  than a positive one, or whether the resolver should offer an invalidation path for the moment a row is
+  written. Both are changes to a path whose timing item 51 constrains, so neither is a free change.
+- **How CI avoids it:** `ci/e2e-email-provider.sql` seeds the row *before* Api starts, which is the ordering the
+  cache requires rather than a workaround for it.
+
 ### 101. "Resend an invitation" does not exist — the one reason the token is still in the response
 
 - **Origin:** group (ب) PR 1, and the project owner's decision of 2026-10-21 on the invitation e-mail.

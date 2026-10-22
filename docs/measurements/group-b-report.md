@@ -60,9 +60,19 @@ origin — but the SMTP conversation with Gmail itself, its authentication, and 
 handling does anything unexpected to an invitation, are untested by construction: a local mail catcher cannot
 test a remote provider.
 
-**So the first real invitation after deployment is a manual verification step** (the project owner, 2026-10-21):
-he invites a real address and walks the Ahmad sequence himself — invitation, e-mail, acceptance from the link,
-password, sign-in, mode `assigned`, two clients assigned, and the two visible with nothing of the others.
+**So the first real invitation after deployment is a manual verification step** (the project owner, 2026-10-21),
+and it has four parts in this order:
+
+1. **Deploy with `Invitations__PublicOrigin`.** Api refuses to start without it (PR 4); `docker-compose.prod.yml`
+   sets it from `PUBLIC_HOST`.
+2. **Seed the Gmail `provider_accounts` row**, its `credential_ref` naming a settings key and never the app
+   password itself (Amendment 01 §2.6).
+3. **Restart Api.** Not optional: `PlatformProviderAccounts` caches a *negative* result for five minutes, so a
+   row added while Api is running is not seen until the TTL expires, and every send until then is dropped with
+   a log line (OPEN_ITEMS 109). Skip this and the first real invitation may simply vanish — **and Gmail would
+   take the blame for something that never reached it.** This is the step that CI going red taught us.
+4. **Invite a real address and walk the Ahmad sequence** — invitation, e-mail, acceptance from the link,
+   password, sign-in, mode `assigned`, two clients assigned, and the two visible with nothing of the others.
 
 **This group is done *pending* that walk, not done.** If the walk fails, it fails in the one layer no test here
 reaches, and the failure belongs to this group.
