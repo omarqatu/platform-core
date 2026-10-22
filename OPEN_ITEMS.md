@@ -675,6 +675,23 @@ Closed by the navigate-after-await PR:
   `INotificationSender` in place, sending it is a small change — but not a free one: it decides what the e-mail
   says in both languages, and it must keep the link out of `audit_log` (M2/b), which is a surface this task did
   not open. Left out deliberately rather than half-done.
+- **Closed by the group (ب) PR of 2026-10-21.** `POST /members/invitations` hands the message to
+  `INotificationDispatch`, which sends it outside the request. What the decisions settled:
+  - **bilingual, Arabic first** (the project owner, 2026-10-21): an invitee has no account, so `users.language`
+    does not exist for them and their language is genuinely unknown. Guessing it from the inviter's would be
+    guessing.
+  - **the link is `AcceptanceLink`**, one definition now shared with `Ops create-tenant` so the two cannot drift,
+    with the token in the **fragment** — no access log, no `Referer`.
+  - **the origin refuses to boot**: `Invitations:PublicOrigin` has no default and Api will not start without an
+    absolute one, the guard `Ops` already had (see item 105 for the recovery link, which still has none).
+  - **nothing stores or logs it**: there is no outbox (`notification_log` does not exist — item 89), and the
+    sender, the dispatcher and the message itself write neither the recipient nor the body. Pinned by
+    `InvitationEmailTests`, whose log assertion was seen failing on a planted careless error line.
+  - **`NotificationMessage.Headers`** exists and is dormant (the project owner, 2026-10-21): Gmail SMTP rewrites
+    no links, but the guard must outlive the provider — a relay that rewrites links by default would put the
+    token through its own servers, and a dashboard setting is something somebody has to remember.
+- **Still open beside it:** items 101 (no way to re-issue, which is why the token is still returned once), 102
+  (the recovery e-mail is English only) and 106's two numbers.
 - **Related:** items 22 and 44.
 
 ### 61. `Test28c_EveryEntityTypeInsert_SendsNoReturning` covers 19 of 21 entity types — and the real hole is A1's
@@ -1346,10 +1363,19 @@ Closed by the navigate-after-await PR:
 - **Harmless until group (ب):** nothing is sent today — no `Notifications:Email` settings and no
   `provider_accounts` row in any environment — so item 60 is what turns this into outbound mail to addresses of
   the sender's choosing. The exposure is created by this group's PR 4, not inherited.
-- **Being built in PR 4** (the project owner's decision: the PR that creates the exposure closes it): a
-  per-inviter window counted from `invitations.invited_by` and `created_at` on the same transaction — no new
-  table, no new grant, no new error code (`too_many_attempts` exists) — with the number marked `[—]` as the
-  limiter's are. Production sends through Gmail SMTP, whose own daily quota the limit also protects.
+- **Built, and closed here.** Two limits, both on the request's own transaction before the write, both counted
+  from `invitations` — no new table, no new grant, no new error code (`too_many_attempts` already existed):
+  - **per inviter, `[10]` in `[1 hour]`**, counted on `invited_by`, which names the rows because that is whose
+    behaviour it bounds;
+  - **per organization, `[30]` in `[24 hours]`** (the project owner's addition, 2026-10-21), counted with **no
+    tenant named at all**: `invitations_tenant_read` has already scoped it, and naming one would be the code
+    filtering what the database filters (DEVELOPER_GUIDE §6). A per-inviter window alone multiplies by the number
+    of inviters, while the provider's quota is per sending account — production sends through one Gmail account
+    shared by every tenant.
+- **Both numbers are marked `[—]` and settle at launch**, like the login limiter's (items 16 and 54). They live in
+  `Core.Provisioning.InvitationSettings`, bound from the `Invitations` section.
+- **Every invitation created in the window counts**, whatever became of it: an accepted or withdrawn one still
+  sent a message. Conformance `InvitationLimitTests`.
 
 ## For the next version of the document — not for the code
 

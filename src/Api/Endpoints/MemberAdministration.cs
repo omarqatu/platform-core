@@ -7,6 +7,10 @@ namespace Api.Endpoints;
 
 public sealed record CreatedInvitation(Guid InvitationId, string Token, DateTime ExpiresAt);
 
+/// <summary>Too many invitations in the window, by this inviter or by this organization (OPEN_ITEMS 106).</summary>
+public sealed class TooManyInvitationsException(int limit, TimeSpan window)
+    : InvalidOperationException($"Refused: more than {limit} invitations in {window} (PLATFORM_CORE §4.5, OPEN_ITEMS 106).");
+
 /// <summary>
 /// Managing members (PLATFORM_CORE v1.16 §3.10, §4.5) in two layers, like scope administration:
 /// <list type="number">
@@ -72,13 +76,48 @@ public static class MemberAdministration
     }
 
     public static async Task<CreatedInvitation> InviteAsync(CoreDbContext db, SessionContext session, string email, Guid roleId,
-        string intendedScopeMode, CancellationToken ct)
+        string intendedScopeMode, InvitationSettings limits, CancellationToken ct)
     {
         var scope = RequireManage(db);
         // An 'all' invitation also takes the scope permission (item f); the database refuses it on its own too.
         if (intendedScopeMode == "all" && !scope.CanManageScope)
             throw new NotPermittedException(ScopeResolver.ManageScope);
+        await RequireUnderLimitsAsync(db, session, limits, ct);
         return await WriteInvitationAsync(db, session, email, roleId, intendedScopeMode, ct);
+    }
+
+    /// <summary>
+    /// The two invitation limits (OPEN_ITEMS 106), on this request's own transaction, before the write.
+    /// <para>
+    /// Until invitations were delivered by e-mail this endpoint sent nothing and needed no limit; the PR that
+    /// made it send is the one that closed the hole it opened. A holder of <c>core.members.manage</c> would
+    /// otherwise be able to send unlimited mail to addresses of their choosing, through the platform's own
+    /// sending account.
+    /// </para>
+    /// <para>
+    /// Both counts read <c>invitations</c>, which needs no new grant and no new table — and note the difference
+    /// between them. The per-inviter count names <c>invited_by</c> because that is **which rows it is about**.
+    /// The tenant-wide count names no tenant at all: <c>invitations_tenant_read</c> is
+    /// <c>tenant_id = app.tenant_id</c> with no self branch, so RLS has already scoped it, and adding a predicate
+    /// would be the code filtering what the database filters (DEVELOPER_GUIDE §6).
+    /// </para>
+    /// <para>
+    /// Every invitation created in the window counts, whatever became of it: an accepted or withdrawn one still
+    /// sent a message. The answer is <c>429 too_many_attempts</c>, the code the login limiter already uses.
+    /// </para>
+    /// </summary>
+    public static async Task RequireUnderLimitsAsync(CoreDbContext db, SessionContext session, InvitationSettings limits,
+        CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var byThisInviter = await db.Invitations
+            .CountAsync(i => i.InvitedBy == session.UserId && i.CreatedAt > now - limits.PerInviterWindow, ct);
+        if (byThisInviter >= limits.PerInviter)
+            throw new TooManyInvitationsException(limits.PerInviter, limits.PerInviterWindow);
+
+        var byThisTenant = await db.Invitations.CountAsync(i => i.CreatedAt > now - limits.PerTenantWindow, ct);
+        if (byThisTenant >= limits.PerTenant)
+            throw new TooManyInvitationsException(limits.PerTenant, limits.PerTenantWindow);
     }
 
     public static async Task RevokeAsync(CoreDbContext db, Guid invitationId, CancellationToken ct)

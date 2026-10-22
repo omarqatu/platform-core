@@ -923,9 +923,38 @@ Body: `tenant_id`, `token`, and — if the caller is not signed in — the new a
 5. Last: the invitation is updated `WHERE status = 'pending'`. If two acceptances race, the second updates zero rows
    and its whole transaction rolls back.
 
-The token is 32 random bytes (base64url). Only its SHA-256 is stored. In the proof the token is returned to the
-inviter in the API response — **delivery by email is a launch condition, not built** (OPEN_ITEMS 22). The interface's
-link is `/app/invitations/accept#tenant=<id>&token=<token>`; the fragment never reaches the server or a referrer.
+The token is 32 random bytes (base64url). Only its SHA-256 is stored. The link is
+`/app/invitations/accept#tenant=<id>&token=<token>` — **one definition, `Core.Provisioning.AcceptanceLink`**,
+shared by `Ops create-tenant` and by the e-mail, so the two cannot drift. The fragment never reaches the server
+or a referrer.
+
+### Delivery by e-mail (OPEN_ITEMS 60, closed)
+
+`POST /api/members/invitations` hands the message to `INotificationDispatch`, which sends it outside the request.
+
+- **Bilingual, Arabic first** (`Core.Provisioning.InvitationEmail`). Every other text is written once per language
+  and chosen by the reader's setting — but an invitee has no account, so `users.language` does not exist for them
+  and their language is unknown. Guessing it from the inviter's would be guessing. (The recovery e-mail is still
+  English only and hardcoded: OPEN_ITEMS 102.)
+- **`Invitations:PublicOrigin` has no default and Api refuses to start without an absolute one** — the guard
+  `Ops create-tenant` already had. A template falling back to a bare path sends a link nobody can click,
+  silently, and the only person who finds out is the invitee who cannot join. The recovery link still works that
+  way (OPEN_ITEMS 105).
+- **Nothing stores or logs it.** There is no outbox — `notification_log` does not exist (OPEN_ITEMS 89) — and the
+  message, the dispatcher and the sender write neither the recipient nor the body. `InvitationEmailTests` pins
+  that, and its log assertion was seen failing on a planted careless error line.
+- **Two rate limits**, because the change that made this endpoint send is the one that opened the hole: `[10]`
+  per inviter per `[1 hour]` (counted on `invited_by`) and `[30]` per organization per `[24 hours]` (counted with
+  no tenant named — `invitations_tenant_read` has scoped it already). Both `429 too_many_attempts`, both marked
+  assumptions that settle at launch (OPEN_ITEMS 106).
+- **`NotificationMessage.Headers` is dormant on purpose.** Production sends through Gmail SMTP, which rewrites no
+  links and has no dashboard to switch tracking off in, so nothing sets it. It exists because the guard must
+  outlive the provider: a relay that rewrites links by default — SendGrid, Mailgun, Postmark all can — would put
+  the token through its own servers, and the fragment would not save it. Disabling tracking per message is a
+  header, and a header needs somewhere to live before anyone needs it.
+- **The token is still returned to its creator**, once, and shown once on the success panel. It goes the day
+  re-issuing an invitation exists (OPEN_ITEMS 101): the send is fire-and-forget, so without it a dropped message
+  would leave an invitation nobody can accept.
 
 ---
 
@@ -1243,7 +1272,7 @@ and a mapping here — do not return 500s for expected situations.
 | `PUT /api/members/{id}/status` | normal | `core.members.manage` |
 | `POST /api/members/{id}/roles` | normal | `core.members.manage` |
 | `DELETE /api/members/{id}/roles/{roleId}` | normal | `core.members.manage` |
-| `POST /api/members/invitations` | normal | `core.members.manage` (+ `core.scope.manage` for `all`) |
+| `POST /api/members/invitations` | normal | `core.members.manage` (+ `core.scope.manage` for `all`). Sends the invitation e-mail (bilingual, the link's token in the fragment) and is **rate limited twice**: `[10]` per inviter per `[1 hour]`, `[30]` per organization per `[24 hours]`, both `429 too_many_attempts`, both marked assumptions (OPEN_ITEMS 106). The token is still in the response, once, until re-issuing exists (OPEN_ITEMS 101) |
 | `POST /api/members/invitations/{id}/revoke` | normal | `core.members.manage` |
 | `POST /api/me/leave` | normal | own membership |
 | `GET /api/audit-log` | normal | `core.audit.read`, and `scope_all` (policy) |

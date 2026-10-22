@@ -1,6 +1,9 @@
 using Core;
 using Core.Data;
+using Core.Notifications;
+using Core.Provisioning;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Api.Endpoints;
 
@@ -156,13 +159,26 @@ public static class MemberEndpoints
         // The response is the same whether a person with the email exists or not (Test 11): nothing is looked up.
         // The token is returned to the inviter — the proof sends no message (declared in the PR).
         members.MapPost("/members/invitations", async (InvitationRequest body, CoreDbContext db, ISessionContextAccessor session,
-            CancellationToken ct) =>
+            INotificationDispatch dispatch, IOptions<InvitationSettings> invitations, CancellationToken ct) =>
         {
             if (db.Scope is null)
                 return NoActiveTenant();
             if (body is not { Email: { Length: > 0 and <= MaxEmail } email, RoleId: { } roleId, IntendedScopeMode: "all" or "assigned" })
                 return InvalidValue();
-            var created = await MemberAdministration.InviteAsync(db, session.Current, email, roleId, body.IntendedScopeMode, ct);
+            var settings = invitations.Value;
+            var created = await MemberAdministration.InviteAsync(db, session.Current, email, roleId, body.IntendedScopeMode, settings, ct);
+
+            // The link goes out of this process and nowhere else (OPEN_ITEMS 60). Handed to the dispatcher, which
+            // sends it outside the request, so the provider's round trip is not on this path; nothing here waits
+            // on it, and nothing here logs the address or the body. Api refuses to start without an origin, so
+            // TryOrigin cannot fail by this line.
+            settings.TryOrigin(out var origin);
+            var link = AcceptanceLink.For(origin, session.Current.TenantId!.Value, created.Token);
+            dispatch.Enqueue(InvitationEmail.For(email, link, created.ExpiresAt));
+
+            // The token is still returned to its creator, once, and the screen shows it once (OPEN_ITEMS 101):
+            // the send is fire-and-forget and there is no way to re-issue an invitation yet, so removing it
+            // would make a dropped message an invitation nobody can accept. It goes when re-issuing arrives.
             return Results.Json(new { invitation_id = created.InvitationId, token = created.Token, expires_at = created.ExpiresAt },
                 statusCode: StatusCodes.Status201Created);
         });

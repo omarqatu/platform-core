@@ -80,6 +80,19 @@ LoginLimits.ParseDelaySeconds(delaySequence.Value);
 // timing from saying whether the address has an account (OPEN_ITEMS 51). Marked assumptions, like the limiter's.
 builder.Services.Configure<ForgotPasswordSettings>(builder.Configuration.GetSection("Identity:ForgotPassword"));
 
+// Invitations (OPEN_ITEMS 60, 106): the origin the acceptance link is built on, and the two rate limits.
+builder.Services.Configure<InvitationSettings>(builder.Configuration.GetSection("Invitations"));
+
+// The origin has no default and Api refuses to start without a valid one — the guard `Ops create-tenant` has,
+// for the same reason: a template that falls back to a bare path sends a link nobody can click, silently, and
+// the only person who finds out is the invitee who cannot join. (The recovery link still works that way:
+// OPEN_ITEMS 105.) Checked here so a misconfigured deployment stops at boot, not at the first invitation.
+var invitationSettings = builder.Configuration.GetSection("Invitations").Get<InvitationSettings>() ?? new InvitationSettings();
+if (!invitationSettings.TryOrigin(out _))
+    throw new InvalidOperationException(
+        "Invitations:PublicOrigin must be set to the platform's origin, e.g. https://platform.example.com "
+        + "(an absolute http or https URL with no path). The invitation e-mail's acceptance link is built on it.");
+
 // The sender (Amendment 01 §5.5): one implementation per channel, email first (D3). The account comes from the
 // platform's provider_accounts row and the secret from the settings key its credential_ref names — never from
 // the database (§2.6). The dispatcher takes the provider round trip off the request path, which is what lets

@@ -17,6 +17,13 @@ namespace Core.WhiteBoxTests;
 [Collection(WhiteBoxCollection.Name)]
 public class T4_ProvisioningTests(WhiteBoxFixture fixture)
 {
+
+    /// <summary>
+    /// The invitation limits (OPEN_ITEMS 106), at their configured defaults. A signature change, not a change of
+    /// claim: these tests create one or two invitations, far under 10 per inviter and 30 per organization, and
+    /// the permission check still runs before the counts — so T4.13's "refused with no database command" holds.
+    /// </summary>
+    private static readonly InvitationSettings Limits = new();
     private static BootstrapRequest Request(string label)
     {
         var tag = Guid.CreateVersion7().ToString("N")[^12..];
@@ -92,7 +99,7 @@ public class T4_ProvisioningTests(WhiteBoxFixture fixture)
 
         await using var app = WhiteBoxFixture.Context(appUserSource, recorder);
         var email = $"wb-t4-10-{Guid.CreateVersion7():N}@white-box.test";
-        var invited = await UnitOfWork.RunAsync(app, owner, (c, ct) => MemberAdministration.InviteAsync(c, owner, email, viewer, "assigned", ct));
+        var invited = await UnitOfWork.RunAsync(app, owner, (c, ct) => MemberAdministration.InviteAsync(c, owner, email, viewer, "assigned", Limits, ct));
         await using var accepting = ProvisionerContext(provisionerSource, recorder);
         var accepted = await Acceptance.RunAsync(accepting, new AcceptRequest(boot.TenantId, invited.Token,
             new NewAccount(email, "Invitee", "wb-t4-10-" + Guid.CreateVersion7().ToString("N")[^12..], "wb-password")), null);
@@ -102,7 +109,7 @@ public class T4_ProvisioningTests(WhiteBoxFixture fixture)
         await using (var leaving = WhiteBoxFixture.Context(appUserSource, recorder))
             await UnitOfWork.RunAsync(leaving, member, (c, ct) => MemberAdministration.LeaveAsync(c, ct));
         await using (var inviting = WhiteBoxFixture.Context(appUserSource, recorder))
-            invited = await UnitOfWork.RunAsync(inviting, owner, (c, ct) => MemberAdministration.InviteAsync(c, owner, email, viewer, "all", ct));
+            invited = await UnitOfWork.RunAsync(inviting, owner, (c, ct) => MemberAdministration.InviteAsync(c, owner, email, viewer, "all", Limits, ct));
         await using var returning = ProvisionerContext(provisionerSource, recorder);
         var returned = await Acceptance.RunAsync(returning, new AcceptRequest(boot.TenantId, invited.Token, null), accepted.UserId);
 

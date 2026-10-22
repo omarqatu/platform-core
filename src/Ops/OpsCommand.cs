@@ -117,17 +117,9 @@ public static class OpsCommand
         return 0;
     }
 
-    /// <summary>The interface's acceptance link (DEVELOPER_GUIDE §9): tenant and token in the fragment, never sent to a server.</summary>
-    internal static string AcceptLink(Uri origin, Guid tenantId, string token) =>
-        $"{origin.GetLeftPart(UriPartial.Authority)}/app/invitations/accept#tenant={tenantId:D}&token={token}";
+    // The link's shape and the origin's rule live in Core (AcceptanceLink): the e-mail that POST
+    // /members/invitations sends carries the same link, and two definitions of it would drift.
+    internal static string AcceptLink(Uri origin, Guid tenantId, string token) => AcceptanceLink.For(origin, tenantId, token);
 
-    internal static bool TryPublicOrigin(string? value, out Uri origin)
-    {
-        origin = null!;
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme is not ("https" or "http")
-            || uri.AbsolutePath != "/" || uri.Query.Length > 0 || uri.Fragment.Length > 0 || uri.UserInfo.Length > 0)
-            return false;
-        origin = uri;
-        return true;
-    }
+    internal static bool TryPublicOrigin(string? value, out Uri origin) => AcceptanceLink.TryParseOrigin(value, out origin);
 }

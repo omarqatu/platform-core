@@ -17,6 +17,13 @@ namespace Core.WhiteBoxTests;
 [Collection(WhiteBoxCollection.Name)]
 public class AcceptanceMatchTests(WhiteBoxFixture fixture)
 {
+
+    /// <summary>
+    /// The invitation limits (OPEN_ITEMS 106), at their configured defaults. A signature change, not a change of
+    /// claim: these tests create one or two invitations, far under 10 per inviter and 30 per organization, and
+    /// the permission check still runs before the counts — so T4.13's "refused with no database command" holds.
+    /// </summary>
+    private static readonly InvitationSettings Limits = new();
     // The application's rule and the index's are one: for each address, EmailAddress.Normalize equals
     // PostgreSQL's lower(btrim(…)) — spaces trimmed (and only spaces: btrim's default), case unified.
     [Theory]
@@ -155,7 +162,7 @@ public class AcceptanceMatchTests(WhiteBoxFixture fixture)
         var email = $"{label}-{Tag()}@white-box.test";
         await using var app = WhiteBoxFixture.Context(appUserSource);
         var invited = await UnitOfWork.RunAsync(app, owner,
-            (c, ct) => MemberAdministration.InviteAsync(c, owner, (invitedAs ?? (e => e))(email), viewer, "assigned", ct));
+            (c, ct) => MemberAdministration.InviteAsync(c, owner, (invitedAs ?? (e => e))(email), viewer, "assigned", Limits, ct));
         return (boot.TenantId, invited.Token, email);
     }
 
