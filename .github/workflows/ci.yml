@@ -142,6 +142,14 @@ jobs:
       - name: Seed the contract (migrator)
         run: docker compose exec -T postgres psql -X -q -v ON_ERROR_STOP=1 -U migrator -d platform < tests/seed/seed-contract.sql
 
+      # The local mail catcher's provider row, BEFORE Api starts (group ب). PlatformProviderAccounts caches a
+      # resolved account for 5 minutes and caches a negative the same way, so a send before this row exists —
+      # the Conformance forgot tests are the first — would drop every message for the next five minutes,
+      # including the e2e's invitation. Not in tests/seed/seed-contract.sql: that is the published contract
+      # another implementation seeds, and a mail catcher is this harness's business.
+      - name: Seed the e2e e-mail provider (migrator)
+        run: docker compose exec -T postgres psql -X -q -v ON_ERROR_STOP=1 -U migrator -d platform < ci/e2e-email-provider.sql
+
       # [W] proofs for this implementation only (tests/Core.WhiteBoxTests/README.md).
       - name: White-box tests
         run: dotnet test tests/Core.WhiteBoxTests -c Release --no-build --logger "console;verbosity=normal"
