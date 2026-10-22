@@ -8,6 +8,10 @@ namespace Conformance;
 // app.membership_id unset, app.can_manage_scope = false, app.can_manage_members = false. The trial job counts the
 // subscriptions ending within 30 days and writes one audit line per tenant. Seed: Al-Amin's 20 subscriptions end on
 // 2027-01-02…06, Maan's 6 likewise, so as of 2026-12-15 every one of them is within 30 days.
+[CollectionDefinition(Name, DisableParallelization = true)]
+public class JobRunnerVisibilityCollection { public const string Name = "job-runner-visibility"; }
+
+[Collection(JobRunnerVisibilityCollection.Name)]
 public class T7_BackgroundJobTests
 {
     private static readonly DateOnly AsOf = new(2026, 12, 15);
