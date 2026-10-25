@@ -1,5 +1,6 @@
 using Core;
 using Core.Data;
+using Core.Identity;
 using Core.Provisioning;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +11,13 @@ public sealed record CreatedInvitation(Guid InvitationId, string Token, DateTime
 /// <summary>Too many invitations in the window, by this inviter or by this organization (OPEN_ITEMS 106).</summary>
 public sealed class TooManyInvitationsException(int limit, TimeSpan window)
     : InvalidOperationException($"Refused: more than {limit} invitations in {window} (PLATFORM_CORE §4.5, OPEN_ITEMS 106).");
+
+/// <summary>
+/// The invitation is addressed to someone already active or disabled in this organization (the project owner's item
+/// 35, group ج). Acceptance would refuse them already_member after the message had gone out; this refuses first.
+/// </summary>
+public sealed class AlreadyMemberException()
+    : InvalidOperationException("Refused: the address belongs to an active or disabled member of this organization.");
 
 /// <summary>
 /// Managing members (PLATFORM_CORE v1.16 §3.10, §4.5) in two layers, like scope administration:
@@ -82,6 +90,7 @@ public static class MemberAdministration
         // An 'all' invitation also takes the scope permission (item f); the database refuses it on its own too.
         if (intendedScopeMode == "all" && !scope.CanManageScope)
             throw new NotPermittedException(ScopeResolver.ManageScope);
+        await RequireNotAMemberAsync(db, session, email, ct);
         await RequireUnderLimitsAsync(db, session, limits, ct);
         return await WriteInvitationAsync(db, session, email, roleId, intendedScopeMode, ct);
     }
@@ -118,6 +127,38 @@ public static class MemberAdministration
         var byThisTenant = await db.Invitations.CountAsync(i => i.CreatedAt > now - limits.PerTenantWindow, ct);
         if (byThisTenant >= limits.PerTenant)
             throw new TooManyInvitationsException(limits.PerTenant, limits.PerTenantWindow);
+    }
+
+    /// <summary>
+    /// An invitation to someone who is already here, refused at creation rather than left to collide at acceptance
+    /// (item 35). Active or disabled only: a member who <b>left</b> returns by an invitation (§3.10 D9), and a disabled
+    /// one is enabled instead.
+    /// <para>
+    /// <b>Test 11 is untouched:</b> the read is this organization's memberships, never the platform's people. The
+    /// address is compared under <see cref="EmailAddress"/>'s rule, in persons_email_normalized_key's own expression
+    /// written out, as acceptance compares it (LINQ's <c>Trim()</c> is another rule). Nothing here reveals anything to
+    /// its caller: holding <c>core.members.manage</c>, they already read every member's address at <c>GET /members</c>.
+    /// </para>
+    /// <para>
+    /// <c>m.TenantId == tenantId</c> is the question's <b>subject</b>, not the isolation — RLS is the isolation, and is
+    /// intact. memberships carries two permissive SELECT policies: <c>membership_tenant_read</c> (this tenant's) and
+    /// <c>membership_self</c> (the caller's own, in every tenant). Without the line, an inviter who is themselves a
+    /// member elsewhere would be refused when inviting their own address here, matched by their membership in the
+    /// other organization — the reason <c>GET /members</c> and LastMemberGuards carry the same line (DEVELOPER_GUIDE §6).
+    /// </para>
+    /// </summary>
+    public static async Task RequireNotAMemberAsync(CoreDbContext db, SessionContext session, string email, CancellationToken ct)
+    {
+        var tenantId = session.TenantId!.Value;
+        var address = EmailAddress.Normalize(email);
+        var here = await (
+            from p in db.Persons.FromSql($"SELECT * FROM persons WHERE lower(btrim(email)) = {address}")
+            join u in db.Users on p.Id equals u.PersonId
+            join m in db.Memberships on u.Id equals m.UserId
+            where m.TenantId == tenantId && (m.Status == "active" || m.Status == "disabled")
+            select m.Id).AnyAsync(ct);
+        if (here)
+            throw new AlreadyMemberException();
     }
 
     public static async Task RevokeAsync(CoreDbContext db, Guid invitationId, CancellationToken ct)

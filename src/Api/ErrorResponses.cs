@@ -48,12 +48,14 @@ public sealed class ErrorResponses(RequestDelegate next, ILogger<ErrorResponses>
                 case Core.Provisioning.InvitationRefusedException refused:
                     return (refused.Code switch
                     {
-                        ApiErrorCodes.InvalidRequest => StatusCodes.Status400BadRequest,
+                        ApiErrorCodes.InvalidRequest or ApiErrorCodes.InvalidValue => StatusCodes.Status400BadRequest,
                         ApiErrorCodes.AccountExists or ApiErrorCodes.UsernameTaken => StatusCodes.Status409Conflict,
                         _ => StatusCodes.Status403Forbidden,
                     }, refused.Code);
                 // Too many invitations in the window, by this inviter or by this organization (OPEN_ITEMS 106).
                 // The login limiter's code, because it says the same thing to the caller: wait and try again.
+                case Endpoints.AlreadyMemberException:
+                    return (StatusCodes.Status409Conflict, ApiErrorCodes.AlreadyMember);
                 case Endpoints.TooManyInvitationsException:
                     return (StatusCodes.Status429TooManyRequests, ApiErrorCodes.TooManyAttempts);
                 // Items a and g (3.10): the change would leave no active owner / no active 'all' membership.

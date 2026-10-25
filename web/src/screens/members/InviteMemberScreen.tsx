@@ -8,6 +8,7 @@ import { useLocale } from '../../i18n/I18nProvider';
 import { useStayed } from '../../navigation/useStayed';
 import { getPermissions, PERMISSION } from '../../session/permissions';
 import { useAuthenticated } from '../../session/SessionProvider';
+import { isEmailShape } from '../clients/clientForm';
 import { ForbiddenScreen } from '../status/StatusScreens';
 import { LIST_PATH } from './MembersScreen';
 import { formMessages } from './formMessages';
@@ -46,6 +47,7 @@ export function InviteMemberScreen() {
   const [mode, setMode] = useState<'all' | 'assigned'>('assigned');
   const [sending, setSending] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [emailInvalid, setEmailInvalid] = useState(false);
   const [created, setCreated] = useState<Created | null>(null);
 
   useEffect(() => {
@@ -68,6 +70,13 @@ export function InviteMemberScreen() {
     event.preventDefault();
     if (load.status !== 'ready') return;
     setRefusal(null);
+    // The address first, before a round trip (item 35): the screen helps, the server decides — and the server's
+    // invalid_value below lands on the same field, for what only it can see (an address that parses as two).
+    if (!isEmailShape(email.trim())) {
+      setEmailInvalid(true);
+      return;
+    }
+    setEmailInvalid(false);
     setSending(true);
     const stayed = begin();
     try {
@@ -79,7 +88,9 @@ export function InviteMemberScreen() {
       if (stayed()) setCreated(body);
     } catch (e) {
       if (isAbort(e)) return;
-      setRefusal(e instanceof ApiError ? e.code : null);
+      const code = e instanceof ApiError ? e.code : null;
+      if (code === 'invalid_value') setEmailInvalid(true);
+      else setRefusal(code);
     } finally {
       setSending(false);
     }
@@ -91,7 +102,15 @@ export function InviteMemberScreen() {
     <main className="member-form">
       <h1>{intl.formatMessage(formMessages.inviteTitle)}</h1>
       <p className="lede">{intl.formatMessage(formMessages.inviteLede)}</p>
-      <ErrorAlert message={refusal ? intl.formatMessage(errorMessage(refusal)) : null} />
+      <ErrorAlert
+        message={
+          refusal === 'already_member'
+            ? intl.formatMessage(formMessages.alreadyMember)
+            : refusal
+              ? intl.formatMessage(errorMessage(refusal))
+              : null
+        }
+      />
       {load.status === 'loading' && <p>{intl.formatMessage(formMessages.loading)}</p>}
       {load.status === 'error' && <p role="alert">{intl.formatMessage(errorMessage(load.code))}</p>}
       {load.status === 'ready' && (
@@ -104,8 +123,18 @@ export function InviteMemberScreen() {
             dir="ltr"
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            aria-invalid={emailInvalid || undefined}
+            aria-describedby={emailInvalid ? 'invite-email-error' : undefined}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setEmailInvalid(false);
+            }}
           />
+          {emailInvalid && (
+            <p id="invite-email-error" className="field-error">
+              {intl.formatMessage(formMessages.emailInvalid)}
+            </p>
+          )}
 
           <label htmlFor="invite-role">{intl.formatMessage(formMessages.role)}</label>
           <select id="invite-role" required value={roleId} onChange={(e) => setRoleId(e.target.value)}>

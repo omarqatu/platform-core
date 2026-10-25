@@ -45,6 +45,10 @@ public static class ProvisioningEndpoints
                     Password: { Length: > 0 and <= MaxPassword } password,
                 })
                 return InvalidRequest();
+            // The address rule too (item 35): this route creates an account, and an account whose address cannot
+            // receive mail is one whose password can never be recovered.
+            if (!EmailAddress.IsSendable(email))
+                return InvalidRequest();
             // The password rule holds here too (OPEN_ITEMS 62). This route exists in Development and CI only
             // (T4.17), which is exactly why it is easy to forget — and it is what creates the accounts the
             // tests sign in as, so leaving it out would mean the suite proves the rule on accounts the rule

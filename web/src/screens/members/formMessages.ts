@@ -7,6 +7,8 @@ type Values = {
   inviteTitle: NoMessageValues;
   inviteLede: NoMessageValues;
   email: NoMessageValues;
+  emailInvalid: NoMessageValues;
+  alreadyMember: NoMessageValues;
   role: NoMessageValues;
   chooseRole: NoMessageValues;
   scope: NoMessageValues;
@@ -44,6 +46,13 @@ export const formMessages = defineMessages<Values>({
       'They receive a link and choose to accept it. No one is added to this organization until they do, and the link stops working after seven days.',
   },
   email: { id: 'members.invite.email', defaultMessage: 'E-mail address' },
+  emailInvalid: { id: 'members.invite.emailInvalid', defaultMessage: 'Enter one e-mail address, such as name@example.com.' },
+  // already_member's own message speaks to the invitee at acceptance; the inviter needs to hear what to do instead.
+  alreadyMember: {
+    id: 'members.invite.alreadyMember',
+    defaultMessage:
+      'This address already belongs to a member of this organization. A disabled member is enabled from the member list, not invited again.',
+  },
   role: { id: 'members.invite.role', defaultMessage: 'Role' },
   chooseRole: { id: 'members.invite.chooseRole', defaultMessage: 'Choose a role' },
   scope: { id: 'members.invite.scope', defaultMessage: 'What they will see' },

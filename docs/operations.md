@@ -68,6 +68,39 @@ CALL prune_password_reset_tokens();
   this only clears the history afterwards. An unused token is already dead to the reset path once
   `expires_at` has passed.
 
+## Clearing an undeliverable invitation (item 35, group ج)
+
+Until group ج, `POST /api/members/invitations` accepted any text as the address. Two such invitations exist in
+production — to `adnan` and to `hasan` — and nothing ever arrived: the sender threw on each, and the dispatcher
+dropped it with a log line. **They are still live:** the creator's screen showed the link once, and anyone holding a
+copy can open it and create an account whose address is `adnan`, which no recovery e-mail can ever reach. Withdraw
+them before anything else — the action already exists, and it needs no database access.
+
+**1. Find them** — read-only, as `migrator`. The pattern is `clients_email_check`'s own, which the invitation path
+applies from group ج on:
+```bash
+docker exec -i platform-core-postgres-1 psql -X -U migrator -d platform -c \
+  "SELECT t.name, i.email, i.status, i.created_at::date, i.expires_at < now() AS expired
+     FROM invitations i JOIN tenants t ON t.id = i.tenant_id
+    WHERE btrim(i.email) !~ '^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+\$'
+    ORDER BY i.created_at;"
+```
+→ the two rows, `pending`. Any other row is the same case and gets the same step.
+
+**2. Withdraw each one, in the interface** — signed in as a member manager of that organization: **Members** → the
+**Invitations** table → the row's actions → **Withdraw**, and confirm. The row stays, its status becomes
+`revoked`, and the link stops working (§3.10 D8 — withdrawn, never deleted). An invitation whose date has passed
+shows *expired* and offers no action: the acceptance path already refuses it, and it needs nothing.
+
+**3. Check** — step 1 again: each row now `revoked` (or `expired` true). Optionally, the drops in Api's log, which
+carry no address (no log line in the sender ever does):
+```bash
+docker logs platform-core-api-1 2>&1 | grep -c 'sender threw; the message was dropped'
+```
+From group ج on, the sender refuses such a recipient itself, with
+`The recipient of an Email message is not one deliverable address; nothing was sent.` at error level — and the API
+refuses the invitation before it is written, so this section should not be needed again.
+
 ## The test server: platform.ask-palestine.com
 
 A runbook to follow in order, over SSH, from a phone if need be. **None of it has been run yet** — it was written

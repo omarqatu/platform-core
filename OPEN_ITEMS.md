@@ -1356,6 +1356,10 @@ Closed by the navigate-after-await PR:
   cache or URL afterwards.
 - **Not built:** re-issuing an invitation. It is a new write path the amendment does not describe, and its
   absence is the only thing justifying the concession above. Settle them together.
+- **A test depends on this absence (group ج, item 110):** `T4_14_DisabledOrActiveMember_Accepting_Refused` and
+  `ExistingAccount_AnActiveMembership_IsRefused` reach the acceptance's `already_member` guard only because two
+  pending invitations to one address are allowed — creation now refuses an address already active or disabled
+  here. Whoever builds resend must keep a reachable path to that guard, or move these tests to one.
 
 ### 102. The invitation e-mail is bilingual; the recovery e-mail is English only, hardcoded
 
@@ -1431,6 +1435,55 @@ Closed by the navigate-after-await PR:
   `Core.Provisioning.InvitationSettings`, bound from the `Invitations` section.
 - **Every invitation created in the window counts**, whatever became of it: an accepted or withdrawn one still
   sent a message. Conformance `InvitationLimitTests`.
+
+## From group (ج) — four findings from the project owner's walk (2026-10-24)
+
+### 110. An invitation's address was never checked — and one invitation could reach two people
+
+- **Origin:** the project owner's list, item 35. Omar invited `adnan`, then `hasan`, in production: no `@`, no
+  domain, both accepted, both sent nowhere.
+- **The larger finding, from probing the sender:** `POST /api/members/invitations` accepted
+  `a@x.com, b@y.com`, and .NET's `MailMessage(string, string)` reads that string as a list — the acceptance link
+  went to **both** addresses. The limit of item 106 counts invitations, not recipients, so a comma multiplied it,
+  and the second address was one nobody chose to invite. `a b@x.com` was sent to `b@x.com`; a display name was sent
+  to the address inside it. And `adnan` made the sender **throw** `FormatException` out of `new MailMessage`,
+  outside its `try` — breaking `INotificationSender`'s own contract; the dispatcher's catch-all dropped it with
+  `The Email sender threw; the message was dropped.`
+- **Closed by this group (PR 1).** One rule, `Core.Identity.EmailAddress.IsSendable`: `clients_email_check`'s own
+  pattern, within its length, and `MailAddress` parsing back to the trimmed input character for character, with no
+  display name. Applied at:
+  - `POST /api/members/invitations` — `400 invalid_value`, no row, nothing queued;
+  - the acceptance — an invitation **already stored** with such an address is refused `400 invalid_value`, no
+    account and no membership (the two production rows are live until withdrawn; the refusal does not wait on
+    that — `docs/operations.md` › *Clearing an undeliverable invitation* still clears them);
+  - the sender — `Failed("malformed recipient")` and `LogError`, never thrown, never with the address; the
+    message is built from the parsed `MailAddress`, so exactly one recipient reaches the provider;
+  - `Ops create-tenant --owner-email` and `POST /api/provision/tenants` (Development and CI only), which had the
+    same hole;
+  - the invite screen, at the field, before the round trip; the server's `invalid_value` lands on the same field.
+- **And an address that is already here:** an invitation to an address whose person is **active or disabled** in
+  this organization is refused at creation, `409 already_member` — it would have collided at acceptance, after the
+  message went out. `left` stays invitable (§3.10 D9). Test 11 is untouched: the read is this organization's
+  members, which the inviter already reads at `GET /members`, never the platform's people.
+- **Three tests changed, declared in the PR** (the project owner's decisions of 2026-10-25):
+  `ExistingAccount_AnotherAddress_IsRefused_NoMembership` lost its space-inside case (now refused at creation;
+  the claim stays on the acceptance side in `NewAccount_AnotherAddress_IsRefused_NothingCreated`);
+  `T4_14_DisabledOrActiveMember_Accepting_Refused` and `ExistingAccount_AnActiveMembership_IsRefused` create their
+  second invitation before the person joins (item 101 records why that path must stay reachable).
+- **Proof:** Conformance `InvitationAddressTests`, white-box `SenderRecipientTests` (a loopback SMTP that records
+  every `RCPT TO`) and `EmailShapeTests`, Vitest `InviteMemberScreen.test.tsx`, e2e `invitation-address.spec.ts`.
+
+### 111. The application's address shape is stricter than `clients_email_check` — by one declared difference
+
+- **Origin:** group (ج) PR 1, the project owner's decision of 2026-10-25.
+- **The difference:** `EmailAddress.ShapePattern` is the constraint's text character for character —
+  `EmailShapeTests` reads it from `pg_get_constraintdef` and compares — but .NET reads `[:space:]` inside a bracket
+  as seven literal characters, so the application substitutes `\s` for it, in one place, derived and not retyped.
+  PostgreSQL's `[:space:]` is the six ASCII spaces; .NET's `\s` also matches Unicode spaces.
+- **Its direction:** the application refuses an address the constraint would accept (one with, say, a no-break
+  space inside), never the reverse. That direction only is acceptable; a change that made .NET looser than the
+  constraint is a defect. Recorded in DEVELOPER_GUIDE §15 too.
+- **Nothing to build.** It is open only so that whoever touches either side knows the two are pinned together.
 
 ## For the next version of the document — not for the code
 

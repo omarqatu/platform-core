@@ -82,6 +82,11 @@ public static class Acceptance
             throw new InvitationRefusedException(ApiErrorCodes.InvalidInvitation, $"the invitation is {invitation.Status}");
         if (invitation.ExpiresAt <= now)
             throw new InvitationRefusedException(ApiErrorCodes.InvitationExpired, "the invitation has expired");
+        // An address creation would refuse today (item 35) — the rows written before it did. Accepting one would
+        // register an account whose address no recovery e-mail can reach, or join someone else's account to it.
+        // Refused here too, so the server's refusal does not wait on anyone withdrawing those rows.
+        if (!EmailAddress.IsSendable(invitation.Email))
+            throw new InvitationRefusedException(ApiErrorCodes.InvalidValue, "the invitation's address is not one deliverable address");
 
         var email = authenticatedUser is { } user
             ? await (from u in db.Users where u.Id == user join p in db.Persons on u.PersonId equals p.Id select p.Email).SingleAsync(ct)

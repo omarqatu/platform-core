@@ -106,12 +106,17 @@ public class T4_AcceptanceTests
     }
 
     // An active membership in the tenant already → refused (3): already_member, the token still pending.
+    // Declared exception (item 35, the project owner's decision of 2026-10-25): the second invitation was created
+    // after the person joined until group ج, which creation now refuses. It is created while they are not yet a
+    // member — two invitations pending to one address, the first accepted — the path that still reaches this guard.
     [Fact]
     public async Task ExistingAccount_AnActiveMembership_IsRefused()
     {
         using var world = await World.BootstrapAsync("acc-active");
-        using var member = await world.JoinAsync("acc-active-member", "viewer", "assigned");
-        var (invitation, token) = await InviteAsync(world, member.Email.ToUpperInvariant(), "viewer", "all");
+        (Guid Invitation, string Token) second = default;
+        using var member = await world.JoinAsync("acc-active-member", "viewer", "assigned",
+            async email => second = await InviteAsync(world, email.ToUpperInvariant(), "viewer", "all"));
+        var (invitation, token) = second;
 
         await AssertRefusedAsync(await World.AcceptAsync(member.Browser, world.TenantId, token), HttpStatusCode.Forbidden, "already_member");
         Assert.Equal("pending", await StatusOfInvitationAsync(invitation));
@@ -146,10 +151,21 @@ public class T4_AcceptanceTests
         "{0}@t4.test.other",          // the address as a prefix of another
     };
 
+    // The invitation is created with each of these, so each must be an address the invitation path accepts. Until
+    // group ج this test ran on OtherAddresses, whose "{0} @t4.test" — a space inside — is now refused at creation
+    // (item 35, InvitationAddressTests). Declared exception, the project owner's decision of 2026-10-25: the
+    // mismatch claim stays here with two valid addresses and in T4_LifecycleTests.T4_3; the space-inside claim
+    // stays on the acceptance side, in NewAccount_AnotherAddress_IsRefused_NothingCreated, whose data is unchanged.
+    public static TheoryData<string> OtherInvitationAddresses => new()
+    {
+        "  {0}-OTHER@T4.TEST ",      // another address, in another case, with spaces around it
+        "{0}@t4.test.other",          // the address as a prefix of another
+    };
+
     // Signed in, the invitation addressed to someone else: email_mismatch from the API, no membership, the token
     // still pending.
     [Theory]
-    [MemberData(nameof(OtherAddresses))]
+    [MemberData(nameof(OtherInvitationAddresses))]
     public async Task ExistingAccount_AnotherAddress_IsRefused_NoMembership(string pattern)
     {
         using var world = await World.BootstrapAsync("acc-mismatch");

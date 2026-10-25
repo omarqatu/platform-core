@@ -1252,7 +1252,8 @@ The rule: anything "across my tenants" is a fan-out of per-tenant transactions, 
 |---|---|---|
 | `MissingMembershipScopeException` | 500 | `membership_scope_missing` |
 | `NoActiveMembershipException` | 403 | `not_a_member` |
-| `InvitationRefusedException` | 400 / 409 / 403 | its own code (`invalid_invitation`, `email_mismatch`, `account_exists`, …) |
+| `InvitationRefusedException` | 400 / 409 / 403 | its own code: 400 for `invalid_request` and `invalid_value` (an invitation stored with an undeliverable address, OPEN_ITEMS 110), 409 for `account_exists` and `username_taken`, 403 for the rest (`invalid_invitation`, `email_mismatch`, `already_member`, …) |
+| `AlreadyMemberException` | 409 | `already_member` — an invitation created for an address already active or disabled in this organization (OPEN_ITEMS 110); the same code is 403 at acceptance |
 | `LastMemberException` | 409 | `last_owner` / `last_all_member` |
 | `RoleTemplatesUnavailableException` | 500 | `role_templates_unavailable` |
 | `SessionExpiredException` | 401 | `session_expired` — the cookie's stamp is not the user's current one |
@@ -1290,7 +1291,7 @@ and a mapping here — do not return 500s for expected situations.
 | `PUT /api/members/{id}/status` | normal | `core.members.manage` |
 | `POST /api/members/{id}/roles` | normal | `core.members.manage` |
 | `DELETE /api/members/{id}/roles/{roleId}` | normal | `core.members.manage` |
-| `POST /api/members/invitations` | normal | `core.members.manage` (+ `core.scope.manage` for `all`). Sends the invitation e-mail (bilingual, the link's token in the fragment) and is **rate limited twice**: `[10]` per inviter per `[1 hour]`, `[30]` per organization per `[24 hours]`, both `429 too_many_attempts`, both marked assumptions (OPEN_ITEMS 106). The token is still in the response, once, until re-issuing exists (OPEN_ITEMS 101) |
+| `POST /api/members/invitations` | normal | `core.members.manage` (+ `core.scope.manage` for `all`). Sends the invitation e-mail (bilingual, the link's token in the fragment) and is **rate limited twice**: `[10]` per inviter per `[1 hour]`, `[30]` per organization per `[24 hours]`, both `429 too_many_attempts`, both marked assumptions (OPEN_ITEMS 106). The token is still in the response, once, until re-issuing exists (OPEN_ITEMS 101). **The address is one deliverable address** (`EmailAddress.IsSendable`: `clients_email_check`'s shape, and `MailAddress` parsing back to the input itself — so never a list, a display name or a name with no domain), else `400 invalid_value`, no row, nothing queued; an address **active or disabled in this organization** is `409 already_member` (OPEN_ITEMS 110) — `left` stays invitable, and Test 11 holds: the one lookup is this organization's members |
 | `POST /api/members/invitations/{id}/revoke` | normal | `core.members.manage` |
 | `POST /api/me/leave` | normal | own membership |
 | `GET /api/audit-log` | normal | `core.audit.read`, and `scope_all` (policy) |
@@ -1308,8 +1309,8 @@ and a mapping here — do not return 500s for expected situations.
 >    admits every membership of the tenant to any member of it, so an assigned member learns the organization's
 >    size the moment this endpoint answers them anything — an empty page and a bare count included. The refusal
 >    therefore carries no scope declaration. Whether the database should hold this line itself is OPEN_ITEMS 103.
-| `POST /api/provision/tenants` | provisioner | Development / CI only |
-| `POST /api/invitations/accept` | provisioner | the invitee |
+| `POST /api/provision/tenants` | provisioner | Development / CI only. The address rule of `POST /api/members/invitations` applies (`400 invalid_request`) |
+| `POST /api/invitations/accept` | provisioner | the invitee. An invitation **stored** with an undeliverable address — written before the rule existed — is refused `400 invalid_value`, nothing created (OPEN_ITEMS 110) |
 | `GET /api/subscriptions/clients` | module | `subscriptions.read` |
 | `GET /api/subscriptions` | module | `subscriptions.read` — `?status=active\|renewed\|cancelled` narrows it to one status (absent: every status; anything else, an empty or a repeated value included: `400 invalid_value`). A constraint on the visible rows, not scope: the declaration's counts are after it |
 | `POST /api/subscriptions` | module | `subscriptions.write` |
@@ -1395,6 +1396,16 @@ essentials:
     never a membership (§0), and "invite" reads like "add" to anyone who has used other software. "All clients" is
     offered **disabled with its reason** rather than hidden — unlike an action, a missing radio option would make
     the question look as though it had only one answer.
+  - **The address is checked before the round trip, and the server decides** (OPEN_ITEMS 110). The form refuses an
+    address outside `clients_email_check`'s shape at the field (`isEmailShape`, shared with the client form), and the
+    server's `invalid_value` — for what only it can see, an address that parses as two recipients — lands on the
+    same field. `already_member` gets the inviter's own message ("…enabled from the member list, not invited
+    again"): the error catalogue's text for that code speaks to the invitee at acceptance.
+
+    > **A declared difference (OPEN_ITEMS 111):** the server's pattern is `clients_email_check`'s own text,
+    > compared character for character by `EmailShapeTests`, but .NET reads `[:space:]` inside a bracket literally,
+    > so `EmailAddress` substitutes `\s` — which also matches Unicode spaces. The application is therefore
+    > **stricter** than the constraint, never looser; that direction only is acceptable.
 
     > **A declared exception to "hidden, never shown and then refused"** (the project owner, 2026-10-21). That rule
     > governs **actions**: a button that answers 403 wastes the person's time and teaches them to distrust the
