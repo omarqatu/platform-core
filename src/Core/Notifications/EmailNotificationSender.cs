@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Mail;
+using Core.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -54,6 +55,17 @@ public sealed class EmailNotificationSender(
         if (message.Channel != NotificationChannel.Email)
             return NotificationDelivery.Failed($"this sender serves {NotificationChannel.Email}, not {message.Channel}");
 
+        // Exactly one recipient, the one given (item 35). Measured before this line existed: "adnan" threw
+        // FormatException out of new MailMessage, outside the try below — this class broke its own contract — and
+        // "a@x.com, b@y.com" was parsed as two recipients and sent to both. Refused here, before any provider is
+        // looked up, and loudly; never with the address, which no log here carries.
+        if (!EmailAddress.IsSendable(message.Recipient))
+        {
+            log.LogError("The recipient of an {Channel} message is not one deliverable address; nothing was sent.", message.Channel);
+            return NotificationDelivery.Failed("malformed recipient");
+        }
+        var recipient = new MailAddress(message.Recipient.Trim(' '));
+
         var account = await accounts.ForAsync(NotificationChannel.Email, cancellationToken);
         if (account is null)
         {
@@ -76,8 +88,11 @@ public sealed class EmailNotificationSender(
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(options.Value.Timeout);
 
-        using var mail = new MailMessage(account.SenderId, message.Recipient, message.Subject, message.Body)
+        // The parsed address, never the string: MailMessage(string, string) reads a string as a list.
+        using var mail = new MailMessage(new MailAddress(account.SenderId), recipient)
         {
+            Subject = message.Subject,
+            Body = message.Body,
             IsBodyHtml = false,
         };
         // Dormant today: Gmail SMTP rewrites no links, so no caller sets a header. Applied here rather than left

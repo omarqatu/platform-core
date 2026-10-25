@@ -1,5 +1,6 @@
 using Core;
 using Core.Data;
+using Core.Identity;
 using Core.Notifications;
 using Core.Provisioning;
 using Microsoft.EntityFrameworkCore;
@@ -156,14 +157,20 @@ public static class MemberEndpoints
             return Results.NoContent();
         });
 
-        // The response is the same whether a person with the email exists or not (Test 11): nothing is looked up.
+        // The response is the same whether a person with the email exists on the platform or not (Test 11): the one
+        // lookup is this organization's own members (MemberAdministration.RequireNotAMemberAsync), which its caller
+        // already reads at GET /members.
         // The token is returned to the inviter — the proof sends no message (declared in the PR).
         members.MapPost("/members/invitations", async (InvitationRequest body, CoreDbContext db, ISessionContextAccessor session,
             INotificationDispatch dispatch, IOptions<InvitationSettings> invitations, CancellationToken ct) =>
         {
             if (db.Scope is null)
                 return NoActiveTenant();
-            if (body is not { Email: { Length: > 0 and <= MaxEmail } email, RoleId: { } roleId, IntendedScopeMode: "all" or "assigned" })
+            // One deliverable address, or nothing is written and nothing is queued (item 35): a name with no domain is
+            // a row nobody can receive, and "a@x.com, b@y.com" is a link sent to two people — and one invitation
+            // counted by the limit of OPEN_ITEMS 106.
+            if (body is not { Email: { Length: > 0 and <= MaxEmail } email, RoleId: { } roleId, IntendedScopeMode: "all" or "assigned" }
+                || !EmailAddress.IsSendable(email))
                 return InvalidValue();
             var settings = invitations.Value;
             var created = await MemberAdministration.InviteAsync(db, session.Current, email, roleId, body.IntendedScopeMode, settings, ct);

@@ -1,4 +1,5 @@
 using Core.Data;
+using Core.Identity;
 using Core.Provisioning;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -85,7 +86,9 @@ public static class OpsCommand
             values[options[i]] = options[i + 1];
         }
         if (values.GetValueOrDefault("--name") is not { Length: > 0 and <= MaxText } name
-            || values.GetValueOrDefault("--owner-email") is not { Length: > 0 and <= MaxText } ownerEmail)
+            || values.GetValueOrDefault("--owner-email") is not { Length: > 0 and <= MaxText } ownerEmail
+            // The owner invitation is sent to this address (item 35): one deliverable address, or nothing is written.
+            || !EmailAddress.IsSendable(ownerEmail))
         {
             await stderr.WriteLineAsync(Usage);
             return 1;

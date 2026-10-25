@@ -33,9 +33,18 @@ export type FieldErrors = Partial<Record<keyof FormValues, FieldError>>;
 
 const MAX_NAME = 256; // SubscriptionEndpoints.MaxClientName
 const MAX_EMAIL = 320; // SubscriptionEndpoints.MaxEmail
-const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/; // clients_email_check's shape — the server's EmailAddress.ShapePattern
 const PHONE = /^\+[1-9][0-9]{1,14}$/; // E.164
 const TELEGRAM = /^-?[0-9]{1,20}$/; // a group's chat id is negative
+
+/**
+ * Whether a trimmed address has the one shape the server accepts (`EmailAddress.IsSendable`, the database's
+ * `clients_email_check`). The screen's help, never the rule: the server also refuses what parses as more than one
+ * recipient, and its `invalid_value` is shown at the field the same way.
+ */
+export function isEmailShape(email: string): boolean {
+  return EMAIL.test(email);
+}
 
 /**
  * Western digits, whatever keyboard typed them — the same conversion the subscription form applies to its date and
@@ -63,7 +72,7 @@ export function validate(values: FormValues): FieldErrors {
   if (!name) errors.name = 'required';
   else if (name.length > MAX_NAME) errors.name = 'tooLong';
   if (email.length > MAX_EMAIL) errors.email = 'tooLong';
-  else if (email && !EMAIL.test(email)) errors.email = 'email';
+  else if (email && !isEmailShape(email)) errors.email = 'email';
   if (phone && !PHONE.test(phone)) errors.phoneE164 = 'phone';
   if (telegram && !TELEGRAM.test(telegram)) errors.telegramChatId = 'telegram';
   return errors;
