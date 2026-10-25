@@ -1252,7 +1252,8 @@ The rule: anything "across my tenants" is a fan-out of per-tenant transactions, 
 |---|---|---|
 | `MissingMembershipScopeException` | 500 | `membership_scope_missing` |
 | `NoActiveMembershipException` | 403 | `not_a_member` |
-| `InvitationRefusedException` | 400 / 409 / 403 | its own code (`invalid_invitation`, `email_mismatch`, `account_exists`, …) |
+| `InvitationRefusedException` | 400 / 409 / 403 | its own code: 400 for `invalid_request` and `invalid_value` (an invitation stored with an undeliverable address, OPEN_ITEMS 110), 409 for `account_exists` and `username_taken`, 403 for the rest (`invalid_invitation`, `email_mismatch`, `already_member`, …) |
+| `AlreadyMemberException` | 409 | `already_member` — an invitation created for an address already active or disabled in this organization (OPEN_ITEMS 110); the same code is 403 at acceptance |
 | `LastMemberException` | 409 | `last_owner` / `last_all_member` |
 | `RoleTemplatesUnavailableException` | 500 | `role_templates_unavailable` |
 | `SessionExpiredException` | 401 | `session_expired` — the cookie's stamp is not the user's current one |
