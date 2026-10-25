@@ -107,6 +107,24 @@ export function MembersScreen() {
     [revalidate],
   );
 
+  // Sign-in help changes nothing on the list, so it does not reload it; the row says it was sent (item 37).
+  const signInHelp = useCallback(
+    async (member: MemberItem) => {
+      setRefusal(null);
+      try {
+        await request('POST', `/members/${member.membership_id}/sign-in-help`);
+        return true;
+      } catch (e) {
+        if (isAbort(e)) return false;
+        const code = e instanceof ApiError ? e.code : null;
+        setRefusal(code);
+        if (code && TENANT_LOST.has(code)) revalidate().catch(() => undefined);
+        return false;
+      }
+    },
+    [revalidate],
+  );
+
   if (state.status === 'error' && state.code === 'not_permitted') return <ForbiddenScreen />;
   return (
     <MembersView
@@ -115,6 +133,7 @@ export function MembersScreen() {
       refusal={refusal}
       setStatus={(member, status) => act('PUT', `/members/${member.membership_id}/status`, { status })}
       withdraw={(invitation) => act('POST', `/members/invitations/${invitation.id}/revoke`)}
+      signInHelp={signInHelp}
     />
   );
 }
@@ -125,9 +144,11 @@ export interface ViewProps {
   refusal?: string | null;
   setStatus?: (member: MemberItem, status: 'active' | 'disabled') => void | Promise<void>;
   withdraw?: (invitation: InvitationItem) => void | Promise<void>;
+  /** Sign-in help (item 37); resolves true once the server has accepted it. */
+  signInHelp?: (member: MemberItem) => boolean | void | Promise<boolean | void>;
 }
 
-export function MembersView({ state, held, refusal, setStatus, withdraw }: ViewProps) {
+export function MembersView({ state, held, refusal, setStatus, withdraw, signInHelp }: ViewProps) {
   const intl = useIntl();
   return (
     <main className="members">
@@ -146,7 +167,7 @@ export function MembersView({ state, held, refusal, setStatus, withdraw }: ViewP
       {state.status === 'error' && <p role="alert">{intl.formatMessage(errorMessage(state.code))}</p>}
       {state.status === 'ready' && (
         <>
-          <MembersTable members={state.data.members} held={held} setStatus={setStatus} />
+          <MembersTable members={state.data.members} held={held} setStatus={setStatus} signInHelp={signInHelp} />
           {held.members && state.data.invitations && (
             <InvitationsTable invitations={state.data.invitations} withdraw={withdraw} />
           )}
@@ -162,7 +183,17 @@ const STATUS = {
   left: { tone: 'neutral' as BadgeTone, message: messages.statusLeft },
 } satisfies Record<MemberItem['status'], { tone: BadgeTone; message: typeof messages.statusActive }>;
 
-function MembersTable({ members, held, setStatus }: { members: ScopedList<MemberItem>; held: MemberActions; setStatus?: ViewProps['setStatus'] }) {
+function MembersTable({
+  members,
+  held,
+  setStatus,
+  signInHelp,
+}: {
+  members: ScopedList<MemberItem>;
+  held: MemberActions;
+  setStatus?: ViewProps['setStatus'];
+  signInHelp?: ViewProps['signInHelp'];
+}) {
   const intl = useIntl();
   const { lang } = useLocale();
   // Any action at all needs a permission; with none there is no actions column, as the client list does it.
@@ -178,6 +209,11 @@ function MembersTable({ members, held, setStatus }: { members: ScopedList<Member
           <thead>
             <tr>
               <th scope="col">{intl.formatMessage(messages.columnName)}</th>
+              {/* What the member signs in with (item 37): the first thing a manager needs when someone cannot. At
+                  phone width it folds under the name, as the roles do (§15). */}
+              <th scope="col" className="col-folded">
+                {intl.formatMessage(messages.columnUsername)}
+              </th>
               {/* At phone width the roles fold under the name and the scope under the status (§15). */}
               <th scope="col" className="col-folded">
                 {intl.formatMessage(messages.columnRoles)}
@@ -201,13 +237,22 @@ function MembersTable({ members, held, setStatus }: { members: ScopedList<Member
           <tbody>
             {members.items.map((member) => {
               const roles = <Roles member={member} lang={lang} />;
+              // A username is Latin text read left to right in either language (<ltr>'s reason, kept on a
+              // data attribute here because the cell's own text is the value).
+              const username = (
+                <bdi dir="ltr" data-username="" className="username">
+                  {member.username}
+                </bdi>
+              );
               const scope = <Scope member={member} />;
               return (
                 <tr key={member.membership_id} data-membership={member.membership_id}>
                   <td>
                     <bdi dir="auto">{member.full_name}</bdi>
+                    <span className="cell-fold">{username}</span>
                     <span className="cell-fold">{roles}</span>
                   </td>
+                  <td className="col-folded">{username}</td>
                   <td className="col-folded">{roles}</td>
                   <td>
                     <Badge tone={STATUS[member.status].tone}>
@@ -219,7 +264,7 @@ function MembersTable({ members, held, setStatus }: { members: ScopedList<Member
                   {actions && (
                     <td className="actions">
                       <div className="row-actions">
-                        <MemberRowActions member={member} held={held} setStatus={setStatus} />
+                        <MemberRowActions member={member} held={held} setStatus={setStatus} signInHelp={signInHelp} />
                       </div>
                     </td>
                   )}
@@ -266,9 +311,20 @@ function Scope({ member }: { member: MemberItem }) {
  *   screen states that instead of offering actions that would come back 403;
  * - **a member who has left** — their membership is over; they return by accepting a new invitation (§4.5).
  */
-function MemberRowActions({ member, held, setStatus }: { member: MemberItem; held: MemberActions; setStatus?: ViewProps['setStatus'] }) {
+function MemberRowActions({
+  member,
+  held,
+  setStatus,
+  signInHelp,
+}: {
+  member: MemberItem;
+  held: MemberActions;
+  setStatus?: ViewProps['setStatus'];
+  signInHelp?: ViewProps['signInHelp'];
+}) {
   const intl = useIntl();
   const [pending, setPending] = useState(false);
+  const [sent, setSent] = useState(false);
   if (pending) return <span className="row-note">{intl.formatMessage(messages.working)}</span>;
   if (member.is_self) return <span className="row-note">{intl.formatMessage(messages.ownMembership)}</span>;
   if (member.status === 'left') return <span className="row-note">{intl.formatMessage(messages.hasLeft)}</span>;
@@ -279,6 +335,14 @@ function MemberRowActions({ member, held, setStatus }: { member: MemberItem; hel
     setPending(true);
     await setStatus?.(member, status);
     setPending(false);
+  };
+
+  const help = async () => {
+    if (!globalThis.confirm(intl.formatMessage(messages.confirmSignInHelp, { member: name }))) return;
+    setPending(true);
+    const accepted = await signInHelp?.(member);
+    setPending(false);
+    if (accepted) setSent(true);
   };
 
   const items: RowAction[] = [];
@@ -300,6 +364,16 @@ function MemberRowActions({ member, held, setStatus }: { member: MemberItem; hel
       accessibleName: intl.formatMessage(messages.manageScopeLabel, { member: name }),
       icon: 'layers',
       to: `${LIST_PATH}/${member.membership_id}/scope`,
+    });
+  // Sign-in help for an active member only: anyone else would be sent to a page that cannot help them, and the
+  // server refuses them not_permitted (item 37). Offered only when there is a handler, as disabling is.
+  if (held.members && signInHelp && member.status === 'active')
+    items.push({
+      key: 'sign-in-help',
+      label: intl.formatMessage(messages.signInHelp),
+      accessibleName: intl.formatMessage(messages.signInHelpLabel, { member: name }),
+      icon: 'lock',
+      onSelect: () => void help(),
     });
   if (held.members && setStatus)
     items.push(
@@ -323,7 +397,12 @@ function MemberRowActions({ member, held, setStatus }: { member: MemberItem; hel
   // A button that opens nothing is a fault, not an empty state. The column above is gone in this case too; this
   // is the second guard, so a future permission combination cannot reintroduce it by itself.
   if (items.length === 0) return null;
-  return <RowActions label={intl.formatMessage(messages.actionsFor, { member: name })} actions={items} />;
+  return (
+    <>
+      {sent && <span className="row-note">{intl.formatMessage(messages.signInHelpSent)}</span>}
+      <RowActions label={intl.formatMessage(messages.actionsFor, { member: name })} actions={items} />
+    </>
+  );
 }
 
 function InvitationsTable({ invitations, withdraw }: { invitations: ScopedList<InvitationItem>; withdraw?: ViewProps['withdraw'] }) {

@@ -82,6 +82,9 @@ builder.Services.Configure<ForgotPasswordSettings>(builder.Configuration.GetSect
 
 // Invitations (OPEN_ITEMS 60, 106): the origin the acceptance link is built on, and the two rate limits.
 builder.Services.Configure<InvitationSettings>(builder.Configuration.GetSection("Invitations"));
+// Sign-in help's two limits, in memory (item 37, OPEN_ITEMS 112): one limiter for the process.
+builder.Services.AddSingleton(new SignInHelpLimiter(
+    builder.Configuration.GetSection("SignInHelp").Get<SignInHelpSettings>() ?? new SignInHelpSettings()));
 
 // The origin has no default and Api refuses to start without a valid one — the guard `Ops create-tenant` has,
 // for the same reason: a template that falls back to a bare path sends a link nobody can click, silently, and

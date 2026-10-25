@@ -49,14 +49,18 @@ test('1. the members table names what each member signs in with', async ({ page 
   await page.getByRole('link', { name: 'Members' }).click();
 
   await expect(page.getByRole('columnheader', { name: 'Username' })).toBeVisible();
-  await expect(page.getByRole('row', { name: /Aya/ }).getByText(aya.username, { exact: true })).toBeVisible();
+  // The column's own cell — the row also carries a folded copy for phone width, as it does for the roles.
+  await expect(page.getByRole('row', { name: /Aya/ }).getByRole('cell', { name: aya.username, exact: true })).toBeVisible();
 });
 
 test('2. sign-in help: the member receives their username and the forgot-password page, and the act is audited', async ({ page }) => {
   await emailProviderIsMailpit();
-  await clearMailbox();
   const owner = await ownOrganization('help-sent');
   const aya = await memberOf(owner);
+  // Aya's invitation went to the same address: wait for it, then empty the box, so the one message read below
+  // is the one this test sends.
+  await waitForMessage(aya.email);
+  await clearMailbox();
   await enterAsOwner(page, owner);
   await page.getByRole('link', { name: 'Members' }).click();
 

@@ -103,7 +103,7 @@ describe('sign-in help', () => {
   });
 
   it('asks first, saying what is sent and what is not, and sends on yes', () => {
-    const confirm = vi.fn(() => true);
+    const confirm = vi.fn((message?: string) => Boolean(message) || true);
     vi.stubGlobal('confirm', confirm);
     const { signInHelp } = show([member()], MEMBERS_ONLY);
     fireEvent.click(screen.getByRole('button', { name: 'Actions for Ahmad' }));

@@ -870,6 +870,7 @@ The `Write…` methods are public precisely so the white-box tests can call laye
 |---|---|---|---|
 | Invite | `POST /api/members/invitations` | `core.members.manage`; an `all` invitation also needs `core.scope.manage` | `invitations_insert` |
 | Revoke an invitation | `POST /api/members/invitations/{id}/revoke` | `core.members.manage` | `pending` → `revoked` only |
+| Sign-in help | `POST /api/members/{id}/sign-in-help` | `core.members.manage` | an **active** member, not oneself; no write but its `audit_log` line (OPEN_ITEMS 112) |
 | Disable / re-enable a member | `PUT /api/members/{id}/status` | `core.members.manage`, **not on yourself** | `active` ↔ `disabled` only |
 | Add / remove a role | `POST /api/members/{id}/roles`, `DELETE /api/members/{id}/roles/{roleId}` | `core.members.manage`, not on yourself | restrictive `membership_roles_manage_*` |
 | Leave | `POST /api/me/leave` | yourself, no permission | own row `active` → `left` |
@@ -1293,6 +1294,7 @@ and a mapping here — do not return 500s for expected situations.
 | `DELETE /api/members/{id}/roles/{roleId}` | normal | `core.members.manage` |
 | `POST /api/members/invitations` | normal | `core.members.manage` (+ `core.scope.manage` for `all`). Sends the invitation e-mail (bilingual, the link's token in the fragment) and is **rate limited twice**: `[10]` per inviter per `[1 hour]`, `[30]` per organization per `[24 hours]`, both `429 too_many_attempts`, both marked assumptions (OPEN_ITEMS 106). The token is still in the response, once, until re-issuing exists (OPEN_ITEMS 101). **The address is one deliverable address** (`EmailAddress.IsSendable`: `clients_email_check`'s shape, and `MailAddress` parsing back to the input itself — so never a list, a display name or a name with no domain), else `400 invalid_value`, no row, nothing queued; an address **active or disabled in this organization** is `409 already_member` (OPEN_ITEMS 110) — `left` stays invitable, and Test 11 holds: the one lookup is this organization's members |
 | `POST /api/members/invitations/{id}/revoke` | normal | `core.members.manage` |
+| `POST /api/members/{id}/sign-in-help` | normal | `core.members.manage`. Queues a bilingual e-mail to the member's own address with their username and the forgot-password page — **no token**; the member starts the recovery themselves. One `audit_log` line, `sign_in_help_sent` (entity `memberships`, payload `{"channel":"email"}`). `403 not_permitted` for a membership that is not active, not this organization's, or the caller's own — a deliberate reuse of the code `PUT …/status` answers a `left` membership; `400 invalid_value` for an undeliverable address (as acceptance, OPEN_ITEMS 110); `429 too_many_attempts` past `[1]` per member per `[15 minutes]` or `[20]` per organization per `[24 hours]`, both marked assumptions, **in memory** (OPEN_ITEMS 112). `204` |
 | `POST /api/me/leave` | normal | own membership |
 | `GET /api/audit-log` | normal | `core.audit.read`, and `scope_all` (policy) |
 
@@ -1384,6 +1386,20 @@ essentials:
   - **No scope declaration sentence**, unlike the subscription and client lists. The second axis does not narrow
     this list (OPEN_ITEMS 104), and whoever may not read it is refused the endpoint outright, so there is no
     partial view to declare. The count is stated plainly instead.
+
+    > **A declared exception to PROOF_SPEC T8.2 / Test 19** (OPEN_ITEMS 104). The members list shows a total to a
+    > manager whose own scope is `assigned`. This is a declared exception to PROOF_SPEC T8.2 / Test 19, decided by
+    > the project owner on 2026-10-25: the second axis scopes clients and the rows that point at them, not
+    > memberships, so the member count is not information outside an assigned manager's scope. The `ScopedList`
+    > contract is unchanged; `total_count` stays `null` on every scoped list. Any future surface that counts clients
+    > or scoped entities for an assigned member is still a failure.
+  - **The username is a column** (item 37), next to the name and folded under it at phone width: it is what a
+    member signs in with, and the first thing a manager needs when one cannot. It is Latin text, so it is set
+    left to right in both languages (`<bdi dir="ltr">`).
+  - **Sign-in help** (item 37, OPEN_ITEMS 112) is a row action for an **active** member, with member management:
+    a confirmation that says what is sent and what is not, then a row note, "Sent". The member receives their
+    username and the forgot-password page, never a token: a manager can point someone at recovery, never hold
+    it. Like disabling, the action is offered only where the screen passes its handler.
   - **Two rows never have a menu, and say why**: the caller's own (every write policy here carries "not the
     actor's own membership", so the database refuses it) and a member who has left. An empty actions cell cannot
     be told from a fault.
