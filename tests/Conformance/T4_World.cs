@@ -134,11 +134,15 @@ public sealed class World : IDisposable
         signedIn.Client.PostAsJsonAsync("/invitations/accept", new { tenant_id = tenant, token });
 
     /// <summary>A new person joins: invited by the owner, accepts as a new account, signs in, selects the tenant.</summary>
-    public async Task<Member> JoinAsync(string label, string roleCode, string mode)
+    /// <param name="beforeAccepting">Run with the address after the invitation exists and before it is accepted —
+    /// while the person is not yet a member, so a second invitation to them can still be created (item 35).</param>
+    public async Task<Member> JoinAsync(string label, string roleCode, string mode, Func<string, Task>? beforeAccepting = null)
     {
         var (username, email, password) = Account(label);
         var (invited, _, token) = await InviteAsync(Owner, email, roleCode, mode);
         Assert.Equal(HttpStatusCode.Created, invited.StatusCode);
+        if (beforeAccepting is not null)
+            await beforeAccepting(email);
         using (var anonymous = new Browser())
             Assert.Equal(HttpStatusCode.NoContent, (await AcceptNewAsync(anonymous, TenantId, token, email, username, password)).StatusCode);
         var user = await ScalarAsync("SELECT id FROM users WHERE username = @u", ("u", username));

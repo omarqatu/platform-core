@@ -388,17 +388,27 @@ public class T4_LifecycleTests
         Assert.Equal(1, await Seed.CountAsMigratorAsync("SELECT count(*) FROM scope_assignments WHERE membership_id = @m AND active", ("m", member.MembershipId)));
     }
 
+    // Declared exception (item 35, the project owner's decision of 2026-10-25): each second invitation was created
+    // after the person joined until group ج, which creation now refuses. Each is created while they are not yet a
+    // member — two invitations pending to one address, the first accepted — the path that still reaches this guard.
     [Fact]
     public async Task T4_14_DisabledOrActiveMember_Accepting_Refused()
     {
         using var world = await World.BootstrapAsync("t4-14-refused");
-        using var active = await world.JoinAsync("t4-14-active", "viewer", "assigned");
-        using var disabled = await world.JoinAsync("t4-14-disabled", "viewer", "assigned");
+        var second = new Dictionary<string, (Guid Invitation, string Token)>();
+        async Task InviteAgain(string email)
+        {
+            var (response, invitation, token) = await world.InviteAsync(world.Owner, email, "admin", "all");
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            second[email] = (invitation, token);
+        }
+        using var active = await world.JoinAsync("t4-14-active", "viewer", "assigned", InviteAgain);
+        using var disabled = await world.JoinAsync("t4-14-disabled", "viewer", "assigned", InviteAgain);
         Assert.Equal(HttpStatusCode.NoContent, (await world.Owner.Browser.PutAsync($"/members/{disabled.MembershipId}/status", new { status = "disabled" })).Status);
 
         foreach (var member in new[] { active, disabled })
         {
-            var (_, invitation, token) = await world.InviteAsync(world.Owner, member.Email, "admin", "all");
+            var (invitation, token) = second[member.Email];
             var response = await World.AcceptAsync(member.Browser, world.TenantId, token);
 
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);

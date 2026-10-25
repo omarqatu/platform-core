@@ -129,6 +129,41 @@ public class InvitationAddressTests
         Assert.Equal(a.EnumerateObject().Select(p => (p.Name, p.Value.ValueKind)), b.EnumerateObject().Select(p => (p.Name, p.Value.ValueKind)));
     }
 
+    // ---- Acceptance: an invitation already stored with an undeliverable address (the two production rows).
+
+    // Refused at acceptance too, not only at creation: "the server refuses" must not wait on someone withdrawing the
+    // rows (the project owner's decision of 2026-10-25). The row is planted as migrator — creation refuses it now —
+    // in this test's own organization, and committed: the Api reads on its own connection, so a row inside the
+    // test's rolled-back transaction would be invisible to it. Without the refusal, the new account is created
+    // with the undeliverable address as its own, and no recovery e-mail can ever reach it.
+    [Theory]
+    [InlineData("adnan-{0}")]
+    [InlineData("a-{0}@b35.test, b-{0}@b35.test")]
+    public async Task AStoredUndeliverableAddress_IsRefusedAtAcceptance_NothingCreated(string pattern)
+    {
+        using var world = await World.BootstrapAsync("b35-accept");
+        var email = string.Format(pattern, World.Tag());
+        var token = "b35-" + Guid.NewGuid().ToString("N");
+        var invitation = Guid.CreateVersion7();
+        await World.ExecuteAsMigratorAsync(
+            "INSERT INTO invitations (id, tenant_id, email, role_id, token_hash, status, invited_by, expires_at, created_at, intended_scope_mode) " +
+            "VALUES (@i, @t, @e, @r, @h, 'pending', @u, now() + interval '7 days', now(), 'assigned')",
+            ("i", invitation), ("t", world.TenantId), ("e", email), ("r", await world.RoleAsync("viewer")),
+            ("h", Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token)))),
+            ("u", world.Owner.UserId));
+        var (username, _, password) = World.Account("b35-accept-invitee");
+
+        using var anonymous = new Browser();
+        var response = await World.AcceptNewAsync(anonymous, world.TenantId, token, email, username, password);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("invalid_value", (await anonymous.JsonAsync(response)).GetProperty("error").GetString());
+        Assert.Equal(0, await Seed.CountAsMigratorAsync("SELECT count(*) FROM users WHERE username = @u", ("u", username)));
+        Assert.Equal(0, await Seed.CountAsMigratorAsync("SELECT count(*) FROM persons WHERE email = @e", ("e", email)));
+        Assert.Equal(1, await Seed.CountAsMigratorAsync("SELECT count(*) FROM memberships WHERE tenant_id = @t", ("t", world.TenantId))); // the owner
+        Assert.Equal("pending", (string)(await World.ScalarObjectAsync("SELECT status FROM invitations WHERE id = @i", ("i", invitation)))!);
+    }
+
     private static async Task AssertRefusedAsync(World world, HttpResponseMessage response, HttpStatusCode status, string code)
     {
         Assert.Equal(status, response.StatusCode);

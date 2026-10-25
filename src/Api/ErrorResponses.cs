@@ -48,7 +48,7 @@ public sealed class ErrorResponses(RequestDelegate next, ILogger<ErrorResponses>
                 case Core.Provisioning.InvitationRefusedException refused:
                     return (refused.Code switch
                     {
-                        ApiErrorCodes.InvalidRequest => StatusCodes.Status400BadRequest,
+                        ApiErrorCodes.InvalidRequest or ApiErrorCodes.InvalidValue => StatusCodes.Status400BadRequest,
                         ApiErrorCodes.AccountExists or ApiErrorCodes.UsernameTaken => StatusCodes.Status409Conflict,
                         _ => StatusCodes.Status403Forbidden,
                     }, refused.Code);
