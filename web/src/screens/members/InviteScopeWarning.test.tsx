@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../i18n/I18nProvider';
+import { SessionProvider } from '../../session/SessionProvider';
 import { InviteMemberScreen } from './InviteMemberScreen';
 
 /**
@@ -36,6 +37,8 @@ function api() {
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input).replace(/^\/api/, '');
+      // The success panel reads the session (the link's tenant), so the screen is rendered inside one.
+      if (path === '/me') return json(200, { username: 'omar', active_tenant: { tenant_id: 't1', name: 'Al-Amin' } });
       if (path === '/roles') return json(200, { items: ROLES });
       if (path === '/me/scope')
         return json(200, { scope_mode: 'all', can_manage_scope: true, assignments: [], permissions: ['core.members.manage', 'core.scope.manage'] });
@@ -50,7 +53,9 @@ async function open() {
   render(
     <I18nProvider initial="en">
       <MemoryRouter>
-        <InviteMemberScreen />
+        <SessionProvider>
+          <InviteMemberScreen />
+        </SessionProvider>
       </MemoryRouter>
     </I18nProvider>,
   );
@@ -104,5 +109,6 @@ describe('InviteMemberScreen — a manager with assigned clients', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send the invitation' }));
 
     await waitFor(() => expect(posts).toEqual([{ email: 'aya@x.test', role_id: 'admin', intended_scope_mode: 'assigned' }]));
+    expect(await screen.findByRole('heading', { name: 'The invitation is on its way' })).toBeTruthy();
   });
 });
