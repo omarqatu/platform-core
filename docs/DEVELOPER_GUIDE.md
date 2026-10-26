@@ -1462,7 +1462,7 @@ essentials:
     admin see two clients" a week later. The invite form says the same at selection, and sends either way. The
     rule is one function (`scopeWarning.ts`), decided by permission from `GET /roles`, never by a role's name, so
     every vertical's roles are covered; a read-only role with `all` is the ordinary auditor's case and is not
-    warned about. The roles screen does not warn: a member manager alone cannot see the mode.
+    warned about. The roles screen does not warn: a member manager alone cannot see the mode (OPEN_ITEMS 116).
 
   Two more things it states rather than leaves to be guessed. `GET /subscriptions/clients` is itself under the
   second axis, so **a manager whose own mode is `assigned` is offered only their own clients** — correct, since

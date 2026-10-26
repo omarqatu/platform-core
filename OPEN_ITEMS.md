@@ -1548,9 +1548,18 @@ Closed by the navigate-after-await PR:
   - **the scope screen:** one line whenever the state holds, on load too;
   - **`GET /roles`** carries each role's `permissions`. Who may call it is unchanged (`core.members.manage` or
     `core.scope.manage`), and nothing new is disclosed — measured as Rami on PostgreSQL 18.6.
-- **Not covered:** the roles screen, where giving an `assigned` member a managing role would be the same
-  combination reached from the other axis. A member manager alone cannot read the mode there
-  (`membership_scope_read`), so the screen has nothing to warn with.
+- **Not covered here:** the roles screen — item 116.
+
+### 116. The roles screen cannot warn about a managing role given to an `assigned` member
+
+- **Origin:** group (ج) PR 3, building item 36 (item 115).
+- **The gap:** giving an `assigned` member a role that carries `core.members.manage` or `core.scope.manage` is the
+  same combination item 115 warns about, reached from the other axis. The roles screen needs only
+  `core.members.manage`, and a member manager who does not also manage scope cannot read a colleague's mode:
+  `membership_scope_read` admits a colleague's row only under `can_manage_scope` (§4.8, 1.8), and
+  `GET /api/members` answers `scope_mode: null` for them. With no mode, the screen has nothing to warn with.
+- **Open, not built:** a warning there would need the mode exposed to a members-only manager, which §4.8/1.8
+  deliberately withholds — a decision for the project owner, not an interface change.
 
 ## For the next version of the document — not for the code
 
