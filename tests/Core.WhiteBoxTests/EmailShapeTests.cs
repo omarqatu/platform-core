@@ -24,8 +24,8 @@ public class EmailShapeTests(WhiteBoxFixture fixture)
         // CHECK (((email ~ '<pattern>'::text) AND (length(email) <= <max>)))
         var match = Regex.Match(definition, @"email ~ '(?<pattern>[^']+)'::text\) AND \(length\(email\) <= (?<max>\d+)\)");
         Assert.True(match.Success, definition);
-        Assert.Equal(match.Groups["pattern"].Value, EmailAddress.ShapePattern);
-        Assert.Equal(int.Parse(match.Groups["max"].Value, System.Globalization.CultureInfo.InvariantCulture), EmailAddress.MaxLength);
+        Assert.Equal(EmailAddress.ShapePattern, match.Groups["pattern"].Value);
+        Assert.Equal(EmailAddress.MaxLength, int.Parse(match.Groups["max"].Value, System.Globalization.CultureInfo.InvariantCulture));
     }
 
     // The parse must give back the input itself — no display name, no list, nothing dropped before a space.

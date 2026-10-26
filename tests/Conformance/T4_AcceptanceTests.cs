@@ -113,10 +113,10 @@ public class T4_AcceptanceTests
     public async Task ExistingAccount_AnActiveMembership_IsRefused()
     {
         using var world = await World.BootstrapAsync("acc-active");
-        (Guid Invitation, string Token) second = default;
+        (Guid Invitation, string Token)? second = null;
         using var member = await world.JoinAsync("acc-active-member", "viewer", "assigned",
             async email => second = await InviteAsync(world, email.ToUpperInvariant(), "viewer", "all"));
-        var (invitation, token) = second;
+        var (invitation, token) = second ?? throw new InvalidOperationException("JoinAsync did not run beforeAccepting.");
 
         await AssertRefusedAsync(await World.AcceptAsync(member.Browser, world.TenantId, token), HttpStatusCode.Forbidden, "already_member");
         Assert.Equal("pending", await StatusOfInvitationAsync(invitation));
