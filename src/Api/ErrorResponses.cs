@@ -54,6 +54,10 @@ public sealed class ErrorResponses(RequestDelegate next, ILogger<ErrorResponses>
                     }, refused.Code);
                 // Too many invitations in the window, by this inviter or by this organization (OPEN_ITEMS 106).
                 // The login limiter's code, because it says the same thing to the caller: wait and try again.
+                case Endpoints.TooManySignInHelpException:
+                    return (StatusCodes.Status429TooManyRequests, ApiErrorCodes.TooManyAttempts);
+                case Endpoints.UndeliverableAddressException:
+                    return (StatusCodes.Status400BadRequest, ApiErrorCodes.InvalidValue);
                 case Endpoints.AlreadyMemberException:
                     return (StatusCodes.Status409Conflict, ApiErrorCodes.AlreadyMember);
                 case Endpoints.TooManyInvitationsException:

@@ -136,10 +136,13 @@ public sealed class World : IDisposable
     /// <summary>A new person joins: invited by the owner, accepts as a new account, signs in, selects the tenant.</summary>
     /// <param name="beforeAccepting">Run with the address after the invitation exists and before it is accepted —
     /// while the person is not yet a member, so a second invitation to them can still be created (item 35).</param>
-    public async Task<Member> JoinAsync(string label, string roleCode, string mode, Func<string, Task>? beforeAccepting = null)
+    /// <param name="by">Who invites — the owner unless named; a test that needs more members than one inviter's
+    /// allowance (OPEN_ITEMS 106) spreads them across several.</param>
+    public async Task<Member> JoinAsync(string label, string roleCode, string mode, Func<string, Task>? beforeAccepting = null,
+        Member? by = null)
     {
         var (username, email, password) = Account(label);
-        var (invited, _, token) = await InviteAsync(Owner, email, roleCode, mode);
+        var (invited, _, token) = await InviteAsync(by ?? Owner, email, roleCode, mode);
         Assert.Equal(HttpStatusCode.Created, invited.StatusCode);
         if (beforeAccepting is not null)
             await beforeAccepting(email);

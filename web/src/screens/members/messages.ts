@@ -6,6 +6,7 @@ type Values = {
   loading: NoMessageValues;
   count: { members: number };
   columnName: NoMessageValues;
+  columnUsername: NoMessageValues;
   columnStatus: NoMessageValues;
   columnRoles: NoMessageValues;
   columnScope: NoMessageValues;
@@ -30,6 +31,10 @@ type Values = {
   enable: NoMessageValues;
   enableLabel: { member: string };
   confirmDisable: { member: string };
+  signInHelp: NoMessageValues;
+  signInHelpLabel: { member: string };
+  confirmSignInHelp: { member: string };
+  signInHelpSent: NoMessageValues;
 
   invitationsTitle: NoMessageValues;
   invitationsNone: NoMessageValues;
@@ -62,6 +67,7 @@ export const messages = defineMessages<Values>({
     defaultMessage: '{members, plural, one {# member} other {# members}} in this organization.',
   },
   columnName: { id: 'members.list.columnName', defaultMessage: 'Name' },
+  columnUsername: { id: 'members.list.columnUsername', defaultMessage: 'Username' },
   columnStatus: { id: 'members.list.columnStatus', defaultMessage: 'Status' },
   columnRoles: { id: 'members.list.columnRoles', defaultMessage: 'Roles' },
   columnScope: { id: 'members.list.columnScope', defaultMessage: 'Scope' },
@@ -85,6 +91,16 @@ export const messages = defineMessages<Values>({
   disableLabel: { id: 'members.list.disableLabel', defaultMessage: 'Disable {member}' },
   enable: { id: 'members.list.enable', defaultMessage: 'Enable' },
   enableLabel: { id: 'members.list.enableLabel', defaultMessage: 'Enable {member}' },
+  signInHelp: { id: 'members.list.signInHelp', defaultMessage: 'Sign-in help' },
+  signInHelpLabel: { id: 'members.list.signInHelpLabel', defaultMessage: 'Sign-in help for {member}' },
+  // Says what is sent and what is not: a message with the username and the forgot-password page, never a new
+  // password and never a link that sets one (item 37 — the member starts the recovery themselves).
+  confirmSignInHelp: {
+    id: 'members.list.confirmSignInHelp',
+    defaultMessage:
+      'Send {member} an e-mail with their username and a link to the forgot-password page? Their password is not changed, and no link to set one is sent: they start that themselves.',
+  },
+  signInHelpSent: { id: 'members.list.signInHelpSent', defaultMessage: 'Sent' },
   confirmDisable: {
     id: 'members.list.confirmDisable',
     defaultMessage:

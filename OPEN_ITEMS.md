@@ -1399,6 +1399,13 @@ Closed by the navigate-after-await PR:
   form.
 - **To settle:** whether a list outside the second axis should declare something else — an explicit "not scoped" —
   or whether the declaration should stay uniform and be read as the caller's mode rather than the list's.
+- **Decided — a declared exception (the project owner, 2026-10-25, group ج PR 2):** the members list shows a total
+  to a manager whose own scope is `assigned`. This is a declared exception to PROOF_SPEC T8.2 / Test 19, decided
+  by the project owner on 2026-10-25: the second axis scopes clients and the rows that point at them, not
+  memberships, so the member count is not information outside an assigned manager's scope. The `ScopedList`
+  contract is unchanged; `total_count` stays `null` on every scoped list. Any future surface that counts clients
+  or scoped entities for an assigned member is still a failure. (Recorded in DEVELOPER_GUIDE §15 too. It does not
+  settle item 103.)
 
 ### 105. The recovery link's default is a relative path; `Ops` refuses to start without an absolute one
 
@@ -1484,6 +1491,48 @@ Closed by the navigate-after-await PR:
   space inside), never the reverse. That direction only is acceptable; a change that made .NET looser than the
   constraint is a defect. Recorded in DEVELOPER_GUIDE §15 too.
 - **Nothing to build.** It is open only so that whoever touches either side knows the two are pinned together.
+
+### 112. Sign-in help is built (item 37); its two limits live in Api's memory
+
+- **Origin:** the project owner's list, item 37, and his decisions of 2026-10-25.
+- **Closed by this group (PR 2):** the username column on the member list, and
+  `POST /api/members/{id}/sign-in-help` — a bilingual message to an active member's own address with their
+  username and the forgot-password page, **no token**, no new permission, no write on `password_reset_tokens`. The
+  act is one `audit_log` line, `sign_in_help_sent`, actor the manager, entity the membership, payload
+  `{"channel":"email"}`. Conformance and white-box `SignInHelpTests`, Vitest `MembersSignInHelp.test.tsx`, e2e
+  `sign-in-help.spec.ts` (through Mailpit).
+- **Open — the limits are in memory** (`Core.Identity.SignInHelpLimiter`, the project owner's decision): `[1]` per
+  member per `[15 minutes]` and `[20]` per organization per `[24 hours]`, both marked `[—]` and settled at launch
+  like item 106's. **They reset when Api restarts**, and **each Api instance counts on its own** if Api is ever run
+  as more than one. They could not be counted from `audit_log`, which holds every send: `audit_read` admits a
+  reader only under `scope_all`, so for a manager whose own mode is `assigned` the count would read zero, silently.
+  A durable limit needs either a table of its own or a read of `audit_log` that policy does not admit today.
+
+### 113. A role can be added to a member who has left
+
+- **Origin:** group (ج) PR 2, measured on PostgreSQL 18.6 while settling item 37's refusal code.
+- **The facts:** `POST /api/members/{id}/roles` on a `left` membership answers `204`, and the role link is written.
+  `membership_roles_manage_insert` checks `core.members.manage` and "not the actor's own membership" — and no
+  membership status. (`PUT …/status` on the same membership answers `403 not_permitted`:
+  `membership_tenant_update` admits `active` and `disabled` only.)
+- **What it does not do, read from the code:** a left member returns through an invitation (§3.10 D9) by
+  `Acceptance.ReturnAsync`, which **reactivates the same membership** and, as its first step, **deletes every
+  `membership_roles` row of it** (`membership_roles_provisioner_delete`) before inserting the invitation's role. So
+  a role added while the member was away does not survive their return, and while they are away the membership
+  grants nothing — a `left` membership resolves no scope. It is a write that means nothing, audited as one: a
+  cosmetic gap in the second layer, not a deferred escalation.
+- **Not built:** a status condition on the policy is a schema change and the project owner's decision.
+
+### 114. A member whose address cannot receive mail has no way to get one
+
+- **Origin:** group (ج) PR 2, from sign-in help's refusal (`400 invalid_value`).
+- **The finding:** an account created before item 35's rule could carry an undeliverable address. Sign-in help
+  refuses it, and forgot-password can never reach it either — and there is no endpoint that changes a person's
+  address. The member can still sign in with their password; they cannot recover it.
+- **Also blind from here:** forgot-password sends nothing when two active accounts share one address
+  (OPEN_ITEMS 57). `app_user` cannot see a person's accounts in other organizations, so sign-in help cannot detect
+  that case and sends the member to a page that will stay silent.
+- **Not built:** changing an address is a new write path no document describes.
 
 ## For the next version of the document — not for the code
 

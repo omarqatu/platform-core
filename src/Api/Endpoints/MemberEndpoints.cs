@@ -42,6 +42,9 @@ public static class MemberEndpoints
 {
     private const int MaxEmail = 256;
 
+    /// <summary>The forgot-password screen (web/src/screens/password/ForgotPasswordScreen.tsx), where recovery starts.</summary>
+    public const string ForgotPath = "/app/password/forgot";
+
     public static void MapMemberEndpoints(this IEndpointRouteBuilder app)
     {
         var members = app.MapGroup("").RequireAuthorization();
@@ -188,6 +191,21 @@ public static class MemberEndpoints
             // would make a dropped message an invitation nobody can accept. It goes when re-issuing arrives.
             return Results.Json(new { invitation_id = created.InvitationId, token = created.Token, expires_at = created.ExpiresAt },
                 statusCode: StatusCodes.Status201Created);
+        });
+
+        // Sign-in help (item 37): the member is sent their username and the forgot-password page, never a token.
+        // Queued for the dispatcher like the invitation, so the provider's round trip is not on this path, and
+        // nothing here logs the address or the body. Api refuses to start without an origin, so TryOrigin holds.
+        members.MapPost("/members/{membershipId:guid}/sign-in-help", async (Guid membershipId, CoreDbContext db,
+            ISessionContextAccessor session, SignInHelpLimiter limiter, INotificationDispatch dispatch,
+            IOptions<InvitationSettings> invitations, CancellationToken ct) =>
+        {
+            if (db.Scope is null)
+                return NoActiveTenant();
+            var recipient = await MemberAdministration.SignInHelpAsync(db, session.Current, membershipId, limiter, ct);
+            invitations.Value.TryOrigin(out var origin);
+            dispatch.Enqueue(SignInHelpEmail.For(recipient.Email, recipient.Username, new Uri(origin, ForgotPath).ToString()));
+            return Results.NoContent();
         });
 
         members.MapPost("/members/invitations/{invitationId:guid}/revoke", async (Guid invitationId, CoreDbContext db, CancellationToken ct) =>

@@ -19,6 +19,20 @@ public sealed class TooManyInvitationsException(int limit, TimeSpan window)
 public sealed class AlreadyMemberException()
     : InvalidOperationException("Refused: the address belongs to an active or disabled member of this organization.");
 
+/// <summary>Too many sign-in help messages in the window, to this member or from this organization (item 37).</summary>
+public sealed class TooManySignInHelpException()
+    : InvalidOperationException("Refused: the sign-in help limit for this member or this organization is reached (item 37).");
+
+/// <summary>
+/// The member's address cannot receive a message — written before item 35's rule existed. The same state answers
+/// the same code everywhere: 400 invalid_value, as acceptance answers an invitation stored with such an address.
+/// </summary>
+public sealed class UndeliverableAddressException()
+    : InvalidOperationException("Refused: the member's address is not one deliverable address (item 35).");
+
+/// <summary>Who sign-in help goes to: the member's own address, and the username they sign in with.</summary>
+public sealed record SignInHelpRecipient(string Email, string Username);
+
 /// <summary>
 /// Managing members (PLATFORM_CORE v1.16 §3.10, §4.5) in two layers, like scope administration:
 /// <list type="number">
@@ -159,6 +173,61 @@ public static class MemberAdministration
             select m.Id).AnyAsync(ct);
         if (here)
             throw new AlreadyMemberException();
+    }
+
+    /// <summary>The audit action of sign-in help (item 37): the one audit line not produced by a tracked write.</summary>
+    public const string SignInHelpAction = "sign_in_help_sent";
+
+    /// <summary>
+    /// Sign-in help (the project owner's item 37, group ج): a plain message to a member, pointing them at the
+    /// forgot-password page. No token, no new permission, no write on <c>password_reset_tokens</c> — the member starts
+    /// the recovery themselves (the precedent is the reasoning of the withdrawn <c>announce-migration</c>, Amendment
+    /// 01 §6/7: a precedent, not a reference in force).
+    /// <list type="number">
+    /// <item><c>core.members.manage</c>, first (5).</item>
+    /// <item>The target: an <b>active</b> membership of this organization, not the caller's own, whose user is active —
+    /// otherwise <c>403 not_permitted</c>, the code <c>PUT /members/{id}/status</c> answers a membership its policy
+    /// does not admit. The message would send anyone else to a page that cannot help them: forgot-password sends to
+    /// an active user only. A deliberate reuse, declared in the PR: the screen offers the action on active members
+    /// alone, so the code's other meaning never reaches anyone. <c>m.TenantId == tenantId</c> is the subject, as in
+    /// <c>GET /members</c> (<c>membership_self</c> admits the caller's memberships elsewhere).</item>
+    /// <item>The address: one deliverable address, or <c>400 invalid_value</c> (item 35).</item>
+    /// <item>The two limits (<see cref="SignInHelpLimiter"/>), taken only now, so a refusal above consumes nothing.</item>
+    /// <item>The audit line, <see cref="SignInHelpAction"/>, on the request's transaction (the project owner's
+    /// decision): the manager is the actor, the membership the entity, and the payload names the channel and nothing
+    /// else — no address, no username. A critical write: zero rows is an error, and nothing is sent without it.</item>
+    /// </list>
+    /// The caller queues the message after this returns; the send is the dispatcher's, off the request's path.
+    /// </summary>
+    public static async Task<SignInHelpRecipient> SignInHelpAsync(CoreDbContext db, SessionContext session, Guid membershipId,
+        SignInHelpLimiter limiter, CancellationToken ct)
+    {
+        var scope = RequireManage(db);
+        if (membershipId == scope.MembershipId)
+            throw new NotPermittedException(ScopeResolver.ManageMembers);
+        var tenantId = session.TenantId!.Value;
+        var target = await (
+            from m in db.Memberships
+            where m.Id == membershipId && m.TenantId == tenantId
+            join u in db.Users on m.UserId equals u.Id
+            join p in db.Persons on u.PersonId equals p.Id
+            select new { MembershipStatus = m.Status, UserStatus = u.Status, p.Email, u.Username }).SingleOrDefaultAsync(ct);
+        if (target is not { MembershipStatus: "active", UserStatus: "active" })
+            throw new NotPermittedException(ScopeResolver.ManageMembers);
+        if (!EmailAddress.IsSendable(target.Email))
+            throw new UndeliverableAddressException();
+        if (!limiter.TryTake(tenantId, membershipId, DateTime.UtcNow))
+            throw new TooManySignInHelpException();
+
+        var audit = db.Audit ?? throw new AuditContextMissingException("audit_log");
+        db.AuditLog.Add(new AuditEntry
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenantId, ActorId = audit.ActorId, ActorType = audit.ActorType,
+            Action = SignInHelpAction, EntityType = "memberships", EntityId = membershipId,
+            OldValue = null, NewValue = """{"channel":"email"}""", IpAddress = audit.IpAddress, CreatedAt = DateTime.UtcNow,
+        });
+        await CriticalWrite.SaveAsync(db, "audit_log " + SignInHelpAction, ct);
+        return new SignInHelpRecipient(target.Email.Trim(' '), target.Username);
     }
 
     public static async Task RevokeAsync(CoreDbContext db, Guid invitationId, CancellationToken ct)
