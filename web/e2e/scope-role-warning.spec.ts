@@ -64,6 +64,9 @@ test("2. an Admin's scope page says it, on load, while they see assigned clients
 
   const line = page.getByRole('status').filter({ hasText: 'Nour manages members or scope, but sees only their assigned clients.' });
   await expect(line).toBeVisible();
-  await page.getByRole('radio', { name: 'All clients' }).check();
+  // The radio saves at once (PUT …/mode) and shows the server's answer after the reload, so it is clicked and
+  // then awaited, not check()ed — check() wants the state changed before the round trip.
+  await page.getByRole('radio', { name: 'All clients' }).click();
+  await expect(page.getByRole('radio', { name: 'All clients' })).toBeChecked();
   await expect(line).toHaveCount(0);
 });

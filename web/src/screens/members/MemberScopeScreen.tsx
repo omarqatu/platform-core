@@ -10,7 +10,8 @@ import type { ClientItem } from '../clients/clientForm';
 import type { ScopedList } from '../subscriptions/SubscriptionsScreen';
 import { LIST_PATH } from './MembersScreen';
 import { scopeMessages } from './formMessages';
-import type { MemberItem } from './types';
+import { managesMembersOrScope } from './scopeWarning';
+import type { CatalogueRole, MemberItem } from './types';
 import './MembersScreen.css';
 
 /** GET /scope/memberships/{id}: the mode, and every assignment row — withdrawn ones included. */
@@ -23,7 +24,15 @@ type State =
   | { status: 'loading' }
   | { status: 'error'; code: string | null }
   | { status: 'self' }
-  | { status: 'ready'; member: MemberItem; scope: MemberScope; clients: ClientItem[]; ownScopeIsAssigned: boolean };
+  | {
+      status: 'ready';
+      member: MemberItem;
+      scope: MemberScope;
+      clients: ClientItem[];
+      ownScopeIsAssigned: boolean;
+      /** Item 36: whether one of the member's roles manages members or scope, from the role catalogue. */
+      managesMembersOrScope?: boolean;
+    };
 
 /**
  * A member's scope, and the clients assigned to them (PLATFORM_CORE §4.8) — the second axis, which until now was
@@ -60,8 +69,11 @@ export function MemberScopeScreen() {
       getJson<MemberScope>(`/scope/memberships/${membershipId}`, abort.signal),
       getJson<ScopedList<ClientItem>>('/subscriptions/clients?limit=200', abort.signal),
       getJson<{ scope_mode: 'all' | 'assigned' }>('/me/scope', abort.signal),
+      // The catalogue: which of the member's roles manage members or scope (item 36). Readable with
+      // core.scope.manage alone, which is all this screen requires.
+      getJson<{ items: CatalogueRole[] }>('/roles', abort.signal),
     ]).then(
-      ([members, scope, clients, own]) => {
+      ([members, scope, clients, own, catalogue]) => {
         const member = members.items.find((m) => m.membership_id === membershipId);
         if (!member) {
           setState({ status: 'error', code: 'not_permitted' });
@@ -72,7 +84,15 @@ export function MemberScopeScreen() {
           setState({ status: 'self' });
           return;
         }
-        setState({ status: 'ready', member, scope, clients: clients.items, ownScopeIsAssigned: own.scope_mode === 'assigned' });
+        const held = new Set(member.roles.map((role) => role.id));
+        setState({
+          status: 'ready',
+          member,
+          scope,
+          clients: clients.items,
+          ownScopeIsAssigned: own.scope_mode === 'assigned',
+          managesMembersOrScope: managesMembersOrScope(catalogue.items.filter((role) => held.has(role.id))),
+        });
       },
       (error: unknown) => {
         if (abort.signal.aborted || isAbort(error)) return;
@@ -176,6 +196,13 @@ export function ScopeForm({ state, saving, setMode, setAssigned }: ScopeFormProp
           <span>{intl.formatMessage(scopeMessages.modeAll)}</span>
         </label>
         <p className="field-note">{intl.formatMessage(underAll ? scopeMessages.modeAllNote : scopeMessages.modeAssignedNote)}</p>
+        {/* Item 36: whenever the state holds — on load too, so this page answers why an admin sees some clients
+            only. One status line on a page opened on purpose: never a prompt, never a block. */}
+        {!underAll && state.managesMembersOrScope && (
+          <p role="status" className="field-note field-warning" data-note="assigned-manager">
+            {intl.formatMessage(scopeMessages.assignedManager, { member: state.member.full_name })}
+          </p>
+        )}
       </fieldset>
 
       <h2>{intl.formatMessage(scopeMessages.assignmentsTitle)}</h2>

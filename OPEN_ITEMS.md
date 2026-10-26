@@ -1534,6 +1534,24 @@ Closed by the navigate-after-await PR:
   that case and sends the member to a page that will stay silent.
 - **Not built:** changing an address is a new write path no document describes.
 
+### 115. A role that manages members or scope, with assigned clients, is now said — never refused
+
+- **Origin:** the project owner's list, item 36: he invited an Admin with scope `assigned`, deliberately. It is
+  structurally correct — permission and scope are independent axes, and that independence is the design — but it
+  reads as a mistake: someone who manages members and roles yet sees two clients out of four.
+- **Closed by this group (PR 3).** A warning, never a block, decided by the project owner on 2026-10-26:
+  - **the rule:** one of the roles carries `core.members.manage` or `core.scope.manage`, and the scope is
+    `assigned` (`web/src/screens/members/scopeWarning.ts`). By permission, never by a role's name. Viewer + `all`
+    was considered and removed: a read-only role seeing everything is the ordinary auditor's case, and warning on a
+    deliberate common choice teaches people to dismiss warnings;
+  - **the invite form:** one line at selection; the invitation is sent either way;
+  - **the scope screen:** one line whenever the state holds, on load too;
+  - **`GET /roles`** carries each role's `permissions`. Who may call it is unchanged (`core.members.manage` or
+    `core.scope.manage`), and nothing new is disclosed — measured as Rami on PostgreSQL 18.6.
+- **Not covered:** the roles screen, where giving an `assigned` member a managing role would be the same
+  combination reached from the other axis. A member manager alone cannot read the mode there
+  (`membership_scope_read`), so the screen has nothing to warn with.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12

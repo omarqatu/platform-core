@@ -14,7 +14,15 @@ public sealed record InvitationRequest(string? Email, Guid? RoleId, string? Inte
 
 /// <summary>A role of the active tenant, named from the row the way a category is (name_ar/name_en are data).</summary>
 public sealed record RoleItem(Guid Id, string Code, string NameAr, string NameEn, bool IsSystem);
-public sealed record RolesResponse(IReadOnlyList<RoleItem> Items);
+
+/// <summary>
+/// A role as the catalogue shows it: <see cref="RoleItem"/> and the codes of the permissions it carries, sorted
+/// ordinally (item 36). The screens warn when a role holding core.members.manage or core.scope.manage is combined with
+/// scope 'assigned', and they read which roles do from here — by permission, never by a role's name. Only the
+/// catalogue carries them: <see cref="RoleItem"/>, inside a member, does not.
+/// </summary>
+public sealed record CatalogueRole(Guid Id, string Code, string NameAr, string NameEn, bool IsSystem, IReadOnlyList<string> Permissions);
+public sealed record RolesResponse(IReadOnlyList<CatalogueRole> Items);
 
 /// <summary>
 /// A membership as the member screens show it. <c>ScopeMode</c> is null where <c>membership_scope_read</c> admits
@@ -63,7 +71,17 @@ public static class MemberEndpoints
             MemberAdministration.RequireDirectory(db);
             var roles = await db.Roles.Where(r => r.IsActive).OrderBy(r => r.Code).ThenBy(r => r.Id)
                 .Select(r => new RoleItem(r.Id, r.Code, r.NameAr, r.NameEn, r.IsSystem)).ToListAsync(ct);
-            return Results.Ok(new RolesResponse(roles));
+            // The join Permissions.HeldAsync makes, for every role rather than the caller's. No grant and no policy
+            // is new: role_permissions (tenant_isolation) and permissions (permissions_read) were already readable
+            // by app_user in its own tenant — measured on PostgreSQL 18.6 as Rami, who holds core.scope.manage
+            // alone, before this was written. Nothing new is disclosed to whoever this endpoint admits.
+            var held = await (
+                from rp in db.RolePermissions
+                join p in db.Permissions on rp.PermissionId equals p.Id
+                select new { rp.RoleId, p.Code }).ToListAsync(ct);
+            var items = roles.Select(r => new CatalogueRole(r.Id, r.Code, r.NameAr, r.NameEn, r.IsSystem,
+                held.Where(h => h.RoleId == r.Id).Select(h => h.Code).Order(StringComparer.Ordinal).ToList())).ToList();
+            return Results.Ok(new RolesResponse(items));
         });
 
         // Who is in the organization. The permission check is the whole of PROOF_SPEC T8.2 here: the database admits

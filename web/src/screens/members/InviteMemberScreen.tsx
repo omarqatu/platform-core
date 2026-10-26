@@ -12,7 +12,8 @@ import { isEmailShape } from '../clients/clientForm';
 import { ForbiddenScreen } from '../status/StatusScreens';
 import { LIST_PATH } from './MembersScreen';
 import { formMessages } from './formMessages';
-import { roleName, type RoleItem } from './types';
+import { managesMembersOrScope } from './scopeWarning';
+import { roleName, type CatalogueRole } from './types';
 
 /** What POST /members/invitations answers: the invitation, and its token — once. */
 interface Created {
@@ -21,7 +22,7 @@ interface Created {
   expires_at: string;
 }
 
-type Load = { status: 'loading' } | { status: 'error'; code: string | null } | { status: 'ready'; roles: RoleItem[]; canScope: boolean };
+type Load = { status: 'loading' } | { status: 'error'; code: string | null } | { status: 'ready'; roles: CatalogueRole[]; canScope: boolean };
 
 /**
  * Inviting a member (PLATFORM_CORE §4.5/1, §3.10 D6). The address, the role, and the scope the invitation
@@ -52,7 +53,7 @@ export function InviteMemberScreen() {
 
   useEffect(() => {
     const abort = new AbortController();
-    Promise.all([getJson<{ items: RoleItem[] }>('/roles', abort.signal), getPermissions(abort.signal)]).then(
+    Promise.all([getJson<{ items: CatalogueRole[] }>('/roles', abort.signal), getPermissions(abort.signal)]).then(
       ([catalogue, permissions]) => {
         setLoad({ status: 'ready', roles: catalogue.items, canScope: permissions.has(PERMISSION.scopeManage) });
       },
@@ -97,6 +98,10 @@ export function InviteMemberScreen() {
   };
 
   if (created) return <Sent created={created} email={email} onDone={() => navigate(LIST_PATH)} />;
+
+  // Item 36: a role that manages members or scope, with assigned clients. Said at selection, never a block.
+  const chosen = load.status === 'ready' ? load.roles.filter((role) => role.id === roleId) : [];
+  const warnAssignedManager = mode === 'assigned' && managesMembersOrScope(chosen);
 
   return (
     <main className="member-form">
@@ -172,6 +177,11 @@ export function InviteMemberScreen() {
               </p>
             )}
             <p className="field-note">{intl.formatMessage(formMessages.scopeNote)}</p>
+            {warnAssignedManager && (
+              <p role="status" className="field-note field-warning">
+                {intl.formatMessage(formMessages.assignedManagerWarning)}
+              </p>
+            )}
           </fieldset>
 
           <div className="form-actions">

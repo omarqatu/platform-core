@@ -16,6 +16,7 @@ type Values = {
   scopeAssigned: NoMessageValues;
   scopeNote: NoMessageValues;
   scopeAllNeedsPermission: NoMessageValues;
+  assignedManagerWarning: NoMessageValues;
   send: NoMessageValues;
   sending: NoMessageValues;
   sentTitle: NoMessageValues;
@@ -57,6 +58,11 @@ export const formMessages = defineMessages<Values>({
   chooseRole: { id: 'members.invite.chooseRole', defaultMessage: 'Choose a role' },
   scope: { id: 'members.invite.scope', defaultMessage: 'What they will see' },
   scopeAll: { id: 'members.invite.scopeAll', defaultMessage: 'All clients' },
+  // Item 36: a warning, never a block — the combination is legitimate, and the person may well mean it.
+  assignedManagerWarning: {
+    id: 'members.invite.assignedManagerWarning',
+    defaultMessage: 'This role manages members or scope, but they will see only their assigned clients. If that is what you intend, continue.',
+  },
   scopeAssigned: { id: 'members.invite.scopeAssigned', defaultMessage: 'Assigned clients' },
   scopeNote: {
     id: 'members.invite.scopeNote',
@@ -109,11 +115,18 @@ export const scopeMessages = defineMessages<{
   withdrawnNote: NoMessageValues;
   assignLabel: { client: string };
   saving: NoMessageValues;
+  assignedManager: { member: string };
 }>({
   title: { id: 'members.scope.title', defaultMessage: "What {member} sees" },
   loading: { id: 'members.scope.loading', defaultMessage: 'Loading…' },
   back: { id: 'members.scope.back', defaultMessage: 'Back to the members' },
   modeLegend: { id: 'members.scope.modeLegend', defaultMessage: 'Scope' },
+  // Item 36: shown whenever the member manages members or scope with scope 'assigned' — on load too, so the page
+  // answers "why does this admin see two clients" a week later. Present tense: it describes the state.
+  assignedManager: {
+    id: 'members.scope.assignedManagerWarning',
+    defaultMessage: '{member} manages members or scope, but sees only their assigned clients. If that is what you intend, nothing more is needed.',
+  },
   modeAll: { id: 'members.scope.modeAll', defaultMessage: 'All clients' },
   modeAssigned: { id: 'members.scope.modeAssigned', defaultMessage: 'Assigned clients' },
   modeAllNote: {

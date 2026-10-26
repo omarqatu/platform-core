@@ -85,6 +85,11 @@
   margin-block-start: var(--space-2);
 }
 
+/* Item 36: the manager-with-assigned-clients line — a note in the warning colour, never an error. */
+.member-form .field-warning {
+  color: var(--warning);
+}
+
 .member-form .field-error {
   margin: 0;
   color: var(--danger);
