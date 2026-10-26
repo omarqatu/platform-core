@@ -1286,7 +1286,7 @@ and a mapping here — do not return 500s for expected situations.
 | `GET /api/scope/memberships/{id}` | normal | `core.scope.manage` — a colleague's mode and **every** assignment row, withdrawn ones included (§4.8: a row is disabled, never deleted). A membership this reader cannot see is `403 not_permitted`, as a hidden client is |
 | `PUT /api/scope/memberships/{id}/mode` | normal | `core.scope.manage` |
 | `PUT /api/scope/memberships/{id}/assignments/{scopeRefId}` | normal | `core.scope.manage` |
-| `GET /api/roles` | normal | `core.members.manage` **or** `core.scope.manage` — the tenant's active roles, named from the row (`name_ar`/`name_en`, data as a category's are). No scope declaration: a closed catalogue |
+| `GET /api/roles` | normal | `core.members.manage` **or** `core.scope.manage` — the tenant's active roles, named from the row (`name_ar`/`name_en`, data as a category's are), each with `permissions`: the codes it carries, sorted ordinally (item 36, OPEN_ITEMS 115). No new grant: `role_permissions` and `permissions` were already readable by `app_user` in its tenant, measured as Rami (`core.scope.manage` alone) on PostgreSQL 18.6. A member's roles inside `GET /api/members` do not carry them. No scope declaration: a closed catalogue |
 | `GET /api/members` | normal | `core.members.manage` **or** `core.scope.manage` — whoever assigns must see whom they assign to. `scope_mode` is `null` for a colleague where `membership_scope_read` admits no row, i.e. without `core.scope.manage` (§4.8/1.8) — the interface renders no column at all from that, never an empty one |
 | `GET /api/members/invitations` | normal | `core.members.manage` — never `core.scope.manage`: the addresses an organization has approached are a member-management matter. The token is **never** in this list, nor its hash |
 | `PUT /api/members/{id}/status` | normal | `core.members.manage` |
@@ -1455,6 +1455,14 @@ essentials:
     — without it a member holding `core.scope.manage` in mode `assigned` could raise themselves to `all` with one
     command. The row offers no action for one's own membership, and the address typed directly answers with its
     own message rather than letting the database refuse into an empty form.
+
+  - **A manager with assigned clients is said, never refused** (item 36, OPEN_ITEMS 115). When one of the
+    member's roles carries `core.members.manage` or `core.scope.manage` and their mode is `assigned`, one
+    `role="status"` line says so — **whenever the state holds, on load too**, so the page answers "why does this
+    admin see two clients" a week later. The invite form says the same at selection, and sends either way. The
+    rule is one function (`scopeWarning.ts`), decided by permission from `GET /roles`, never by a role's name, so
+    every vertical's roles are covered; a read-only role with `all` is the ordinary auditor's case and is not
+    warned about. The roles screen does not warn: a member manager alone cannot see the mode (OPEN_ITEMS 116).
 
   Two more things it states rather than leaves to be guessed. `GET /subscriptions/clients` is itself under the
   second axis, so **a manager whose own mode is `assigned` is offered only their own clients** — correct, since

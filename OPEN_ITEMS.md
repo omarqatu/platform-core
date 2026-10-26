@@ -1534,6 +1534,33 @@ Closed by the navigate-after-await PR:
   that case and sends the member to a page that will stay silent.
 - **Not built:** changing an address is a new write path no document describes.
 
+### 115. A role that manages members or scope, with assigned clients, is now said — never refused
+
+- **Origin:** the project owner's list, item 36: he invited an Admin with scope `assigned`, deliberately. It is
+  structurally correct — permission and scope are independent axes, and that independence is the design — but it
+  reads as a mistake: someone who manages members and roles yet sees two clients out of four.
+- **Closed by this group (PR 3).** A warning, never a block, decided by the project owner on 2026-10-26:
+  - **the rule:** one of the roles carries `core.members.manage` or `core.scope.manage`, and the scope is
+    `assigned` (`web/src/screens/members/scopeWarning.ts`). By permission, never by a role's name. Viewer + `all`
+    was considered and removed: a read-only role seeing everything is the ordinary auditor's case, and warning on a
+    deliberate common choice teaches people to dismiss warnings;
+  - **the invite form:** one line at selection; the invitation is sent either way;
+  - **the scope screen:** one line whenever the state holds, on load too;
+  - **`GET /roles`** carries each role's `permissions`. Who may call it is unchanged (`core.members.manage` or
+    `core.scope.manage`), and nothing new is disclosed — measured as Rami on PostgreSQL 18.6.
+- **Not covered here:** the roles screen — item 116.
+
+### 116. The roles screen cannot warn about a managing role given to an `assigned` member
+
+- **Origin:** group (ج) PR 3, building item 36 (item 115).
+- **The gap:** giving an `assigned` member a role that carries `core.members.manage` or `core.scope.manage` is the
+  same combination item 115 warns about, reached from the other axis. The roles screen needs only
+  `core.members.manage`, and a member manager who does not also manage scope cannot read a colleague's mode:
+  `membership_scope_read` admits a colleague's row only under `can_manage_scope` (§4.8, 1.8), and
+  `GET /api/members` answers `scope_mode: null` for them. With no mode, the screen has nothing to warn with.
+- **Open, not built:** a warning there would need the mode exposed to a members-only manager, which §4.8/1.8
+  deliberately withholds — a decision for the project owner, not an interface change.
+
 ## For the next version of the document — not for the code
 
 ### 12. Test 17-a's wording: restate it as Test 23 was restated in 1.12

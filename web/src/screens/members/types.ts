@@ -8,6 +8,14 @@ export interface RoleItem {
 }
 
 /**
+ * A role as GET /roles returns it: the role, and the codes of the permissions it carries (item 36). Only the
+ * catalogue carries them; a member's roles in GET /members do not.
+ */
+export interface CatalogueRole extends RoleItem {
+  permissions: string[];
+}
+
+/**
  * A membership, from GET /members. `scope_mode` is null where the caller does not hold `core.scope.manage`:
  * `membership_scope_read` admits no colleague's row to them (PLATFORM_CORE §4.8, 1.8), so the server returns the
  * absence rather than a value. The screen renders no column at all from that — never an empty one.

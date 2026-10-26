@@ -27,7 +27,7 @@ function api(onInvite: () => Response) {
       const method = init?.method ?? 'GET';
       calls.push({ method, path });
       if (path === '/roles')
-        return json(200, { items: [{ id: 'r1', code: 'viewer', name_ar: 'مشاهد', name_en: 'Viewer', is_system: true }] });
+        return json(200, { items: [{ id: 'r1', code: 'viewer', name_ar: 'مشاهد', name_en: 'Viewer', is_system: true, permissions: [] }] });
       if (path === '/me/scope')
         return json(200, { scope_mode: 'all', can_manage_scope: true, assignments: [], permissions: ['core.members.manage'] });
       return onInvite();
